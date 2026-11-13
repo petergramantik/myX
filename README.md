@@ -8,4 +8,4 @@ Mobilní webová aplikace (PWA) – logbook ponorů s X-CCR a počítačem Shear
 - Upozornění na scrubber, baterii a vysoké CO₂
 - Synchronizace přes Cloudflare Worker (`proxy/worker.js`)
 
-Web: https://petergramantik.github.io/myx/
+Web: https://petergramantik.github.io/myX/
