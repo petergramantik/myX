@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { alerts, scrubberInfo } from "../core/analysis";
 import { createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
-import { CellTiles } from "./Cells";
+import { CellTiles, useCells } from "./Cells";
 import type { Meta } from "../app/model";
 import { BatteryTiles, useBatteries } from "./Batteries";
 
@@ -25,15 +25,37 @@ export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }
   );
 }
 
+/** Úroveň dlaždice scrubberu: čas pod polovinou nebo starý sorbent = oranžová, poslední čtvrtina = červená. */
+function scrubLevel(sc: NonNullable<ReturnType<typeof scrubberInfo>>, scrubDays: number) {
+  const old = sc.days != null && sc.days >= scrubDays;
+  const timeLvl = sc.pct <= 25 ? "bad" : sc.pct <= 50 || old ? "warn" : "ok";
+  return { old, timeLvl, ageLvl: old ? "warn" : "ok", lvl: timeLvl === "bad" ? "bad" : timeLvl === "warn" || old ? "warn" : "ok" };
+}
+
+/** Hláška nad scrubberem podle oranžových/červených stavů O₂ čidel, baterií a scrubberu (CO₂ se nepočítá). */
+function Motto() {
+  const st = useStore();
+  const c = useCells();
+  const b = useBatteries();
+  if (st.lb.settings.motto === false || !st.metas.length) return null;
+  const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), st.lb.settings.th, st.lb.settings.manualFill);
+  const lv: string[] = [];
+  if (sc) lv.push(scrubLevel(sc, st.lb.settings.th.scrubDays).lvl);
+  if (c.ccr.length) c.status.forEach((s) => lv.push(s.level));
+  b.petrelAlerts.forEach((a) => lv.push(a.level));
+  b.head.forEach((x) => x.reasons.length && lv.push("warn"));
+  const worst = lv.includes("bad") ? "bad" : lv.includes("warn") ? "warn" : "ok";
+  return worst === "ok"
+    ? <div className="motto ok">Všecko v cajku, jdeme na to!</div>
+    : <div className={"motto " + worst} onClick={() => go({ t: "warn" })}>Mám warningy, nevysereme se dnes na to?!</div>;
+}
+
 function ScrubberTile() {
   const st = useStore();
   const lb = st.lb;
   const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), lb.settings.th, lb.settings.manualFill);
   if (!sc) return null;
-  const old = sc.days != null && sc.days >= lb.settings.th.scrubDays;
-  const timeLvl = sc.pct <= 25 ? "bad" : sc.pct <= 50 || old ? "warn" : "ok";
-  const ageLvl = old ? "warn" : "ok";
-  const lvl = timeLvl === "bad" ? "bad" : timeLvl === "warn" || ageLvl === "warn" ? "warn" : "ok";
+  const { timeLvl, ageLvl, lvl } = scrubLevel(sc, lb.settings.th.scrubDays);
   return (
     <section className={"card scrub " + lvl}>
       <h2>Scrubber</h2>
@@ -83,6 +105,7 @@ export function OverviewScreen() {
   const longest = st.metas.reduce((b, m) => (m.h.diveTimeS > b.h.diveTimeS ? m : b), st.metas[0]);
   return (
     <div className="screen">
+      <Motto />
       <ScrubberTile />
       <CellTiles />
       <BatteryTiles />

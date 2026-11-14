@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.6.1";
+export const APP_VERSION = "1.7";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.7", date: "14. 11. 2026", title: "Detail čidla CO₂ a hláška na přehledu",
+    items: [
+      "Hláška nad scrubberem podle stavu čidel, baterií a scrubberu (vypnutelná v Nastavení)",
+      "Detail čidla CO₂: graf maxima přes ponory, ponory s vysokým CO₂ a alarmy, kalibrace",
+      "Dlaždice čidel bez zalamování, „mV“ hned za hodnotou",
+    ],
+  },
   {
     version: "1.6.1", date: "14. 11. 2026", title: "Listování ponory",
     items: [

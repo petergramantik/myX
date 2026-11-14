@@ -68,6 +68,8 @@ export function checkInstallDate(c: ReturnType<typeof useCells>, pos: number, is
 }
 
 const LV: Record<string, string> = { ok: "V pořádku", info: "Pozor", warn: "Varování", bad: "Vyměnit" };
+/** Krátké stavy pro úzké dlaždice na přehledu (nesmí se zalamovat). */
+const LV_SHORT: Record<string, string> = { ok: "OK", info: "Pozor", warn: "Pozor", bad: "Vyměnit" };
 const ORDER = ["ok", "info", "warn", "bad"];
 const K_OPEN = "myx.cellpanel";
 
@@ -84,16 +86,14 @@ export function CellTiles() {
             <div key={pos} className="celltile o2t info" onClick={() => go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className="dot info" /></div>
               <div className="ct-v">–</div>
-              <div className="ct-u">pozice prázdná</div>
-              <div className="ct-l info">Vlož čidlo</div>
+              <div className="ct-l info">Vložit</div>
             </div>
           );
           return (
             <div key={pos} className={"celltile o2t " + s.level} onClick={() => go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className={"dot " + s.level} /></div>
-              <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"} <small>mV</small></div>
-              <div className="ct-u">na vzduchu</div>
-              <div className={"ct-l " + s.level}>{LV[s.level]}</div>
+              <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"}<small>mV</small></div>
+              <div className={"ct-l " + s.level}>{LV_SHORT[s.level]}</div>
             </div>
           );
         })}
@@ -122,16 +122,16 @@ function Co2Tile() {
   const x = useCo2();
   if (!x.last) return null;
   return (
-    <div className={"celltile co2t " + (x.on ? x.level : "off")} onClick={() => x.on && go({ t: "dive", id: x.last!.id })}>
+    <div className={"celltile co2t " + (x.on ? x.level : "off")} onClick={() => go({ t: "co2" })}>
       <div className="ct-h"><b>CO₂</b><span className={"dot " + (x.on ? x.level : "none")} /></div>
       {x.on ? <>
         <div className="ct-v">{num(x.last.sum.co2Max!, 1)}</div>
         <div className="ct-u">mbar max</div>
-        <div className={"ct-l " + x.level}>{x.level === "bad" ? "Vysoké" : x.level === "warn" ? "Zvýšené" : "V pořádku"}</div>
+        <div className={"ct-l " + x.level}>{x.level === "bad" ? "Vysoké" : x.level === "warn" ? "Pozor" : "OK"}</div>
       </> : <>
         <div className="ct-v">–</div>
-        <div className="ct-u">čidlo</div>
-        <div className="ct-l none">Deaktivováno</div>
+        <div className="ct-u">mbar max</div>
+        <div className="ct-l none">Vypnuto</div>
       </>}
     </div>
   );
@@ -171,6 +171,35 @@ function Co2Panel() {
           {x.on && <button className="btn" onClick={() => go({ t: "dive", id: x.last!.id })}>Graf posledního ponoru</button>}
         </div>
       )}
+    </div>
+  );
+}
+
+export function Co2Screen() {
+  const st = useStore();
+  const x = useCo2();
+  const ms = st.metas;
+  const list = ms.map((m, i) => ({ m, no: i + 1 })).filter(({ m }) => (m.sum.co2Max != null && m.sum.co2Max >= x.limit) || m.sum.co2AlarmN > 0).reverse();
+  return (
+    <div className="screen">
+      <Co2Panel />
+      <Card title="Maximum ppCO₂ v ponorech">
+        <LineChart t={ms.map((_, i) => i + 1)} height={180} xFmt={(v) => String(Math.round(v))}
+          xTitle={(v) => `Ponor ${v} (${fmtDate(ms[v - 1].start)})`}
+          series={[{ label: "Max. ppCO₂", color: "#d7c8a0", values: ms.map((m) => m.sum.co2Max), unit: "mbar", width: 2 },
+            { label: "Limit", color: "#ef5350", values: ms.map(() => x.limit), unit: "mbar", dash: "4 3" }]} />
+        <p className="note">Mezery v grafu = ponory, kdy čidlo neměřilo (vypnuté nebo celou dobu 0).</p>
+      </Card>
+      <Card title="Ponory s vysokým CO₂ nebo alarmem">
+        {list.length ? list.map(({ m, no }) => (
+          <div key={m.id} className="kvline link" onClick={() => go({ t: "dive", id: m.id })}>
+            <span>č. {no} · {fmtDate(m.start)}</span>
+            <b>{m.sum.co2Max != null ? `${num(m.sum.co2Max, 1)} mbar` : "–"}</b>
+            {m.sum.co2AlarmN > 0 && <span className="c-bad">alarm {m.sum.co2AlarmN}×</span>}
+            <span className="muted">›</span>
+          </div>
+        )) : <p className="muted">Žádný ponor nepřekročil limit {num(x.limit, 1)} mbar.</p>}
+      </Card>
     </div>
   );
 }

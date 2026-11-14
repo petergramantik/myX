@@ -11,6 +11,7 @@ import { CellsScreen } from "./ui/Cells";
 import { BatteriesScreen } from "./ui/Batteries";
 import { createDraft } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
+import { Co2Screen } from "./ui/Cells";
 import { APP_VERSION } from "./app/version";
 import "./ui/app.css";
 
@@ -37,6 +38,7 @@ function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
     case "cells": return "O₂ čidla";
     case "bats": return "Baterie";
     case "warn": return "Varování";
+    case "co2": return "Čidlo CO₂";
   }
 }
 
@@ -55,6 +57,7 @@ function Body({ s }: { s: Screen }) {
     case "cells": return <CellsScreen pos={s.pos} install={s.install} />;
     case "bats": return <BatteriesScreen pos={s.pos} />;
     case "warn": return <WarningsScreen />;
+    case "co2": return <Co2Screen />;
   }
 }
 
