@@ -9,8 +9,6 @@
 //   PUT  /sync            ← { lb, ver }  → { ver }  (409 + aktuální stav, když mezitím zapsal někdo jiný)
 //   GET  /dive/<id>       → surová data ponoru (binárně)
 //   PUT  /dive/<id>       ← surová data, hlavičky X-Num, X-Start
-//   GET  /img/<id>        → fotka (JPEG)
-//   PUT  /img/<id>        ← fotka (JPEG, max. 3 MB)
 //   GET  /sp/lok/<id>     → stránka lokality ze stranypotapecske.cz (původní bajty)
 //   GET  /sp/list         → přehled lokalit ze stranypotapecske.cz (původní bajty)
 
@@ -79,17 +77,6 @@ export default {
       const buf = await request.arrayBuffer();
       if (buf.byteLength > 2_000_000) return json({ error: "Příliš velké" }, 413);
       await env.MYX_KV.put("d:" + m[1], buf, { metadata: { num: +(request.headers.get("X-Num") || 0), start: +(request.headers.get("X-Start") || 0) } });
-      return json({ ok: true });
-    }
-    m = /^\/img\/([\w.-]{1,64})$/.exec(p);
-    if (m && request.method === "GET") {
-      const v = await env.MYX_KV.get("i:" + m[1], "arrayBuffer");
-      return v ? new Response(v, { headers: { ...CORS, "Content-Type": "image/jpeg", "Cache-Control": "max-age=31536000" } }) : json({ error: "Nenalezeno" }, 404);
-    }
-    if (m && request.method === "PUT") {
-      const buf = await request.arrayBuffer();
-      if (buf.byteLength > 3_000_000) return json({ error: "Příliš velké" }, 413);
-      await env.MYX_KV.put("i:" + m[1], buf);
       return json({ ok: true });
     }
     return json({ error: "Neznámá adresa" }, 404);

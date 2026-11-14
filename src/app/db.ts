@@ -5,12 +5,13 @@ let dbp: Promise<IDBDatabase> | null = null;
 function open(): Promise<IDBDatabase> {
   if (dbp) return dbp;
   dbp = new Promise((res, rej) => {
-    const r = indexedDB.open(DB, 2);
+    const r = indexedDB.open(DB, 3);
     r.onupgradeneeded = () => {
       const db = r.result;
-      for (const [n, k] of [["raw", "id"], ["meta", "id"], ["kv", null], ["img", "id"]] as const) {
+      for (const [n, k] of [["raw", "id"], ["meta", "id"], ["kv", null]] as const) {
         if (!db.objectStoreNames.contains(n)) db.createObjectStore(n, k ? { keyPath: k } : undefined);
       }
+      if (db.objectStoreNames.contains("img")) db.deleteObjectStore("img"); // fotky čidel už aplikace nepoužívá
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -40,5 +41,5 @@ export async function del(store: string, key: string): Promise<void> {
 }
 export async function clearAll(): Promise<void> {
   const db = await open();
-  for (const s of ["raw", "meta", "kv", "img"]) await req(db.transaction(s, "readwrite").objectStore(s).clear());
+  for (const s of ["raw", "meta", "kv"]) await req(db.transaction(s, "readwrite").objectStore(s).clear());
 }

@@ -16,7 +16,7 @@ export interface DiveNote { siteId?: string; buddyIds: string[]; note: string; r
 /** Ponor založený na lokalitě před stažením logu; po importu se spáruje s ponorem z počítače. */
 export interface Draft extends DiveNote { id: string; created: number; lat?: number; lon?: number; diveId?: string }
 /** Záznam o O₂ čidle v cartridgi. Data ve formátu RRRR-MM-DD. */
-export interface Cell { id: string; pos: 1 | 2 | 3; maker: string; type?: string; sn?: string; made?: string; installed: string; lifeM: number; removed?: string; reason?: string; note?: string; photos?: string[]; updated: number }
+export interface Cell { id: string; pos: 1 | 2 | 3; maker: string; type?: string; sn?: string; made?: string; installed: string; lifeM: number; removed?: string; reason?: string; note?: string; updated: number }
 /** Baterie v hlavě X-CCR (pozice 1 nebo 2). Data ve formátu RRRR-MM-DD. */
 export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string; volt?: string; installed: string; removed?: string; note?: string; updated: number }
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto

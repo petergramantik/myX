@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cellStatus, detectCellEvents, type CellStatus } from "../core/cells";
-import { addPhoto, answerCellPrompt, deleteCell, localNow, photoUrl, saveCell, toast } from "../app/store";
+import { answerCellPrompt, deleteCell, localNow, saveCell } from "../app/store";
 import type { Cell, Meta } from "../app/model";
 import { Card, fmtDate, go, num, useStore } from "./common";
 import { LineChart } from "./Chart";
@@ -130,7 +130,6 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
               <div key={pos} className="pcell">
                 <div className="pcell-h"><b>Čidlo {pos}</b><span className={"pill " + s.level}>{emp ? "Prázdná" : LV[s.level]}</span></div>
                 <div className="pcell-row">
-                  <Photo ids={(cur || emp)?.photos} />
                   <div className="pcell-info">
                     {!emp && <div className="kvline"><span>O₂ 1 bar</span><b>{lastMv(pos) != null ? `${num(lastMv(pos)!, 0)} mV` : "–"}</b><span>na vzduchu</span><b>{lastMv(pos) != null ? `${num(lastMv(pos)! * 0.21, 1)} mV` : "–"}</b></div>}
                     {cur ? <>
@@ -157,20 +156,6 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
         </div>
       )}
     </section>
-  );
-}
-
-function Photo({ ids, big }: { ids?: string[]; big?: boolean }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(false);
-  const id = ids?.[ids.length - 1];
-  useEffect(() => { setUrl(null); if (id) photoUrl(id).then(setUrl); }, [id]);
-  if (!id) return big ? null : <div className="thumb empty">bez fotky</div>;
-  return (
-    <>
-      {url ? <img className={big ? "thumb big" : "thumb"} src={url} alt="Fotka čidla" onClick={(e) => { e.stopPropagation(); setZoom(true); }} /> : <div className="thumb empty">načítám…</div>}
-      {zoom && url && <div className="zoom" onClick={() => setZoom(false)}><img src={url} alt="Fotka čidla" /></div>}
-    </>
   );
 }
 
@@ -234,7 +219,6 @@ function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnTyp
         {cur && <button className="btn" onClick={() => setEdit({ ...cur })}>Upravit</button>}
       </div>
       {edit && <CellForm init={edit} c={c} onDone={() => setEdit(null)} />}
-      {(cur?.photos?.length || 0) > 0 && <div className="row"><Photo ids={cur!.photos} big /></div>}
       {hist.length > 0 && (
         <table className="kv"><thead><tr><th>Čidlo</th><th>Instalace → vyjmutí</th></tr></thead>
           <tbody>{hist.map((h) => (
@@ -253,8 +237,7 @@ const REASONS = ["Konec životnosti", "Nízké mV", "Current limiting", "Rotace"
 
 function CellForm({ init, c, onDone }: { init: Partial<Cell>; c: ReturnType<typeof useCells>; onDone: () => void }) {
   const [f, setF] = useState<Partial<Cell>>(init);
-  const [busy, setBusy] = useState(false);
-  const set = (k: keyof Cell, v: string | number | string[] | undefined) => setF({ ...f, [k]: v });
+  const set = (k: keyof Cell, v: string | number | undefined) => setF({ ...f, [k]: v });
   const chk = f.pos && f.installed ? checkInstallDate(c, f.pos, f.installed) : null;
   return (
     <div className="form">
@@ -271,17 +254,8 @@ function CellForm({ init, c, onDone }: { init: Partial<Cell>; c: ReturnType<type
         </>
       )}
       <label>Poznámka<input value={f.note || ""} onChange={(e) => set("note", e.target.value)} /></label>
-      <label className="btn photo-btn">{busy ? "Zpracovávám fotku…" : `📷 ${f.photos?.length ? "Přidat další fotku" : "Vyfotit / vybrat fotku"}`}
-        <input type="file" accept="image/*" hidden onChange={async (e) => {
-          const file = e.target.files?.[0]; e.target.value = "";
-          if (!file) return;
-          setBusy(true);
-          try { const id = await addPhoto(file); setF((x) => ({ ...x, photos: [...(x.photos || []), id] })); } catch (err) { toast((err as Error).message); } finally { setBusy(false); }
-        }} />
-      </label>
-      {f.photos?.length ? <div className="row"><Photo ids={f.photos} /><small className="muted">{f.photos.length} fot.</small></div> : null}
       <div className="row">
-        <button className="btn primary" disabled={!f.installed || busy} onClick={async () => { await saveCell(f as Cell); onDone(); }}>Uložit</button>
+        <button className="btn primary" disabled={!f.installed} onClick={async () => { await saveCell(f as Cell); onDone(); }}>Uložit</button>
         <button className="btn" onClick={onDone}>Zrušit</button>
         {f.id && <button className="btn danger" onClick={async () => { if (confirm("Smazat záznam o čidle?")) { await deleteCell(f.id!); onDone(); } }}>Smazat</button>}
       </div>
