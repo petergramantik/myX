@@ -2,7 +2,7 @@
 import type { Dive, Header } from "./shearwater";
 
 export interface Summary {
-  avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null;
+  avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number;
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
 }
@@ -29,6 +29,8 @@ export function summarize(d: Dive): Summary {
     tempMin: Math.min(...s.temp), tempMax: Math.max(...s.temp),
     ppo2Min: Math.min(...idx.map((i) => s.ppo2[i])), ppo2Max: Math.max(...idx.map((i) => s.ppo2[i])),
     co2Max: co2.length && Math.max(...co2) > 0 ? round(Math.max(...co2), 2) : null,
+    co2AlarmN: d.alarms.filter((a) => a.kind === "co2").length,
+    co2AlarmS: d.alarms.filter((a) => a.kind === "co2").reduce((x, a) => x + a.end - a.start, 0),
     co2Avg: co2.length && Math.max(...co2) > 0 ? round(co2.reduce((a, b) => a + b, 0) / co2.length, 2) : null,
     ceilMax: Math.max(...s.ceil), ttsMax: Math.max(...s.tts), gf99End: gfs.length ? gfs[gfs.length - 1] : null,
     descMax: rates.length ? round(Math.max(...rates), 1) : 0, ascMax: rates.length ? round(-Math.min(...rates), 1) : 0,
@@ -141,6 +143,13 @@ export function alerts(hs: Header[], nowLocal: number, th: Thresholds, manualFil
 export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   const out: Alert[] = [];
   if (sum.co2Max != null && sum.co2Max >= th.co2Mbar) out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${sum.co2Max.toFixed(1)} mbar.` });
+  for (const kind of ["co2", "po2high", "po2low"] as const) {
+    const as = d.alarms.filter((a) => a.kind === kind);
+    if (!as.length) continue;
+    const min = as.reduce((x, a) => x + a.end - a.start, 0) / 60;
+    out.push({ level: kind === "po2low" ? "info" : kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače`,
+      text: `${as.length}× (${as.map((a) => `${Math.round(a.start / 60)}.–${Math.max(Math.round(a.start / 60), Math.round(a.end / 60))}. min`).join(", ")}), celkem ${min < 1 ? "pod 1 min" : Math.round(min) + " min"}.` });
+  }
   const cal = cellCalibration(d);
   const mv = [d.s.mv1, d.s.mv2, d.s.mv3];
   mv.forEach((a, k) => {

@@ -157,7 +157,7 @@ function ChartsTab({ d }: { d: Dive }) {
       <Card title="pO₂ a články" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
         {cellMode === "cal" ? (
-          <LineChart t={s.t} markers={inj.map((x) => x.t)} series={[
+          <LineChart t={s.t} markers={inj.map((x) => x.t)} bands={d.alarms.filter((a) => a.kind !== "co2").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" }))} series={[
             { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: "Článek 1", color: C[1], values: cells[0], unit: "bar" },
             { label: "Článek 2", color: C[2], values: cells[1], unit: "bar" }, { label: "Článek 3", color: C[3], values: cells[2], unit: "bar" }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3" },
           ]} extra={depthExtra} />
@@ -173,7 +173,7 @@ function ChartsTab({ d }: { d: Dive }) {
       </Card>
       <Card title="CO₂ v dýchací smyčce">
         {s.co2.some((v) => v != null && v > 0)
-          ? <LineChart t={s.t} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
+          ? <LineChart t={s.t} bands={d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350" }))} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
           : <p className="muted">V tomto ponoru CO₂ čidlo nic nezaznamenalo.</p>}
       </Card>
       <Card title="Dekomprese">
@@ -232,11 +232,21 @@ function ValuesTab({ d }: { d: Dive }) {
 
 function EventsTab({ d }: { d: Dive }) {
   return (
+    <>
+    <Card title="Alarmy z počítače">
+      {d.alarms.length ? (
+        <table className="kv"><thead><tr><th>Alarm</th><th>Od</th><th>Do</th><th>Délka</th></tr></thead>
+          <tbody>{d.alarms.map((a, i) => <tr key={i}><td>{a.label}</td><td>{Math.round(a.start / 60)}′</td><td>{Math.round(a.end / 60)}′</td><td>{a.end - a.start < 60 ? `${a.end - a.start} s` : `${Math.round((a.end - a.start) / 60)} min`}</td></tr>)}</tbody>
+        </table>
+      ) : <p className="muted">Počítač v tomto ponoru nehlásil alarm CO₂ ani pO₂.</p>}
+      <p className="note">Z událostí 9 (spuštění) a 10 (ukončení). V grafech CO₂ a pO₂ jsou alarmy vyznačené podbarvením.</p>
+    </Card>
     <Card title="Události v záznamu">
-      <p className="note">Bez CO₂ (to je v grafu). Popisy u typů 0, 1, 9, 10 a 0x51 jsou odhad.</p>
+      <p className="note">Bez CO₂ (to je v grafu). Popisy u typů 0, 1 a 0x51 jsou odhad.</p>
       <table className="kv"><thead><tr><th>Čas</th><th>Typ</th><th>Význam / data</th></tr></thead>
         <tbody>{d.events.map((e, i) => <tr key={i}><td>{Math.round(e.t / 60)}′</td><td>{e.kind}</td><td>{e.label}<br /><code>{e.payload}</code></td></tr>)}</tbody>
       </table>
     </Card>
+    </>
   );
 }

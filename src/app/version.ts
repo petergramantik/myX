@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.5.1";
+export const APP_VERSION = "1.6";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.6", date: "14. 11. 2026", title: "Alarmy z počítače a seskupená varování",
+    items: [
+      "Alarmy CO₂ a pO₂ z logu Petrelu: v Událostech, podbarvené v grafech a v upozorněních ponoru",
+      "Okno Varování seskupuje upozornění podle objektu (čidlo, scrubber, baterie…)",
+      "O₂ čidla na přehledu světle modrá, čidlo CO₂ písková",
+    ],
+  },
   {
     version: "1.5.1", date: "14. 11. 2026", title: "Detail ponoru",
     items: [

@@ -81,7 +81,7 @@ export function CellTiles() {
         {[1, 2, 3].map((pos) => {
           const s = c.status[pos - 1], mvb = last.mvBar[pos - 1];
           if (c.empty(pos)) return (
-            <div key={pos} className="celltile info" onClick={() => go({ t: "cells", pos })}>
+            <div key={pos} className="celltile o2t info" onClick={() => go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className="dot info" /></div>
               <div className="ct-v">–</div>
               <div className="ct-u">pozice prázdná</div>
@@ -89,7 +89,7 @@ export function CellTiles() {
             </div>
           );
           return (
-            <div key={pos} className={"celltile " + s.level} onClick={() => go({ t: "cells", pos })}>
+            <div key={pos} className={"celltile o2t " + s.level} onClick={() => go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className={"dot " + s.level} /></div>
               <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"} <small>mV</small></div>
               <div className="ct-u">na vzduchu</div>
@@ -230,10 +230,10 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
   );
 }
 
-export function CellPrompt({ p, onYes }: { p: Prompt; onYes?: () => void }) {
+export function CellPrompt({ p, onYes, bare }: { p: Prompt; onYes?: () => void; bare?: boolean }) {
   return (
-    <div className="alert info">
-      <b>Čidlo {p.pos}: změna citlivosti{p.tentative ? " (zatím nepotvrzená)" : ""}</b>
+    <div className={bare ? "prompt-bare" : "alert info"}>
+      <b>{bare ? "" : `Čidlo ${p.pos}: `}Změna citlivosti{p.tentative ? " (zatím nepotvrzená)" : ""}</b>
       <div>Mezi ponory č. {p.myNo - 1} ({fmtDate(p.prev.start)}) a č. {p.myNo} ({fmtDate(p.meta.start)}) vyskočila citlivost. Vyměnil jsi čidlo?</div>
       <div className="row">
         <button className="btn" onClick={() => (onYes ? onYes() : go({ t: "cells", pos: p.pos, install: isoOf(p.meta.start) }))}>Ano, zadat čidlo</button>

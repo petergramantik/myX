@@ -1,39 +1,52 @@
-// Okno Varování: všechna upozornění na jednom místě (scrubber, čidla, baterie, CO₂, dotazy na výměnu čidla).
+// Okno Varování: všechna upozornění seskupená podle objektu (scrubber, čidla, CO₂, baterie, dotazy na výměnu čidla).
 import { alerts, scrubberInfo } from "../core/analysis";
 import { localNow } from "../app/store";
-import { CellPrompt, useCells } from "./Cells";
+import { CellPrompt, useCells, useCo2 } from "./Cells";
 import { useBatteries } from "./Batteries";
 import { fmtDate, go, num, useStore, type Screen } from "./common";
 
-export interface Warn { level: "bad" | "warn" | "info"; title: string; text: string; to?: Screen }
-const RANK = { bad: 0, warn: 1, info: 2 };
+type Level = "bad" | "warn" | "info";
+export interface WarnGroup { key: string; title: string; level: Level; items: { level: Level; text: string }[]; to?: Screen; prompts: ReturnType<typeof useCells>["prompts"] }
+const RANK: Record<Level, number> = { bad: 0, warn: 1, info: 2 };
 const DAY = 86400;
 
 export function useWarnings() {
   const st = useStore();
   const c = useCells();
   const b = useBatteries();
+  const co2 = useCo2();
   const th = st.lb.settings.th;
-  const out: Warn[] = [];
+  const groups = new Map<string, WarnGroup>();
+  const add = (key: string, title: string, level: Level, text: string, to?: Screen) => {
+    const g = groups.get(key) || { key, title, level, items: [], to, prompts: [] };
+    if (text) g.items.push({ level, text });
+    if (RANK[level] < RANK[g.level]) g.level = level;
+    groups.set(key, g);
+  };
   const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), th, st.lb.settings.manualFill);
-  for (const a of sc?.alerts || []) out.push({ level: a.level, title: a.title, text: a.text });
+  for (const a of sc?.alerts || []) add("scrub", "Scrubber", a.level, `${a.title}: ${a.text}`);
   c.status.forEach((s, k) => s.reasons.forEach((r) => {
-    if (s.level !== "ok") out.push({ level: s.level === "info" ? "info" : s.level, title: `Čidlo ${k + 1}`, text: r, to: { t: "cells", pos: k + 1 } });
+    if (s.level !== "ok") add("cell" + (k + 1), `Čidlo ${k + 1}`, s.level === "info" ? "info" : s.level, r, { t: "cells", pos: k + 1 });
   }));
-  for (const a of b.petrelAlerts) out.push({ level: a.level, title: `Petrel – ${a.title.toLowerCase()}`, text: a.text, to: { t: "bats" } });
-  for (const x of b.head) for (const r of x.reasons) out.push({ level: "warn", title: `Hlava – baterie ${x.pos}`, text: r, to: { t: "bats", pos: x.pos } });
+  for (const p of c.prompts.filter((p) => c.now - p.meta.start < 400 * DAY)) {
+    add("cell" + p.pos, `Čidlo ${p.pos}`, "info", "", { t: "cells", pos: p.pos });
+    groups.get("cell" + p.pos)!.prompts.push(p);
+  }
+  const last = co2.last;
+  if (last?.sum.co2Max != null && last.sum.co2Max >= th.co2Mbar)
+    add("co2", "Čidlo CO₂", "bad", `Vysoké CO₂ v posledním ponoru (${fmtDate(last.start)}): maximum ${num(last.sum.co2Max, 1)} mbar.`, { t: "dive", id: last.id });
+  if (last && last.sum.co2AlarmN > 0)
+    add("co2", "Čidlo CO₂", "bad", `Alarm CO₂ z počítače v posledním ponoru: ${last.sum.co2AlarmN}× (celkem ${last.sum.co2AlarmS < 60 ? "pod 1 min" : Math.round(last.sum.co2AlarmS / 60) + " min"}).`, { t: "dive", id: last.id });
+  for (const a of b.petrelAlerts) add("petrel", "Petrel – baterie", a.level, `${a.title}: ${a.text}`, { t: "bats" });
+  for (const x of b.head) for (const r of x.reasons) add("head" + x.pos, `Hlava – baterie ${x.pos}`, "warn", r, { t: "bats", pos: x.pos });
   // baterie dalších počítačů (jiné sériové číslo než poslední ponor)
   const lastSer = st.metas[st.metas.length - 1]?.h.serial;
   const bySer = new Map<number, typeof st.metas>();
   for (const m of st.metas) if (m.h.serial !== lastSer) bySer.set(m.h.serial, [...(bySer.get(m.h.serial) || []), m]);
   for (const [ser, ms] of bySer) for (const a of alerts(ms.map((m) => m.h), localNow(), th, null).filter((a) => a.kind === "battery"))
-    out.push({ level: a.level, title: `${a.title} (počítač ${ser.toString(16).toUpperCase()})`, text: a.text });
-  const last = st.metas[st.metas.length - 1];
-  if (last?.sum.co2Max != null && last.sum.co2Max >= th.co2Mbar)
-    out.push({ level: "bad", title: "Vysoké CO₂ v posledním ponoru", text: `Maximum ppCO₂ ${num(last.sum.co2Max, 1)} mbar (ponor ${fmtDate(last.start)}).`, to: { t: "dive", id: last.id } });
-  out.sort((x, y) => RANK[x.level] - RANK[y.level]);
-  const prompts = c.prompts.filter((p) => c.now - p.meta.start < 400 * DAY);
-  return { list: out, prompts, count: out.length + prompts.length, worst: out[0]?.level ?? (prompts.length ? "info" : null) };
+    add("pc" + ser, `Počítač ${ser.toString(16).toUpperCase()} – baterie`, a.level, `${a.title}: ${a.text}`);
+  const list = [...groups.values()].sort((x, y) => RANK[x.level] - RANK[y.level]);
+  return { list, count: list.length, worst: list[0]?.level ?? null };
 }
 
 export function WarningsScreen() {
@@ -41,12 +54,15 @@ export function WarningsScreen() {
   return (
     <div className="screen">
       {!w.count && <p className="muted center big">✓ Žádná varování</p>}
-      {w.list.map((x, i) => (
-        <div key={i} className={"alert " + x.level + (x.to ? " link" : "")} onClick={() => x.to && go(x.to)}>
-          <b>{x.title}</b><div>{x.text}</div>{x.to && <small className="muted">Otevřít ›</small>}
+      {w.list.map((g) => (
+        <div key={g.key} className={"alert wgroup " + g.level}>
+          <div className={"wg-h" + (g.to ? " link" : "")} onClick={() => g.to && go(g.to)}>
+            <b>{g.title}</b>{g.to && <small className="muted">Otevřít ›</small>}
+          </div>
+          {g.items.length > 0 && <ul>{g.items.map((it, i) => <li key={i} className={"c-" + it.level}>{it.text}</li>)}</ul>}
+          {g.prompts.map((p) => <CellPrompt key={p.key} p={p} bare />)}
         </div>
       ))}
-      {w.prompts.map((p) => <CellPrompt key={p.key} p={p} />)}
       <p className="note center">Na přehled se vrátíš přejetím prstem doleva nebo šipkou nahoře.</p>
     </div>
   );

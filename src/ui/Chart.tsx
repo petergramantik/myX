@@ -30,8 +30,9 @@ function ticks(lo: number, hi: number, n = 5): number[] {
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
-export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle }: {
+export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands }: {
   t: number[]; series: Series[]; height?: number; invert?: boolean; zero?: boolean; markers?: number[]; rightInvert?: boolean;
+  bands?: { from: number; to: number; color: string }[];
   xFmt?: (v: number) => string; xTitle?: (v: number) => string;
   extra?: { label: string; values: (number | null)[]; unit?: string }[];
 }) {
@@ -100,6 +101,7 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
         {xt.map((v) => <text key={"x" + v} x={X(v * xs)} y={height - 5} textAnchor="middle">{xFmt ? xFmt(v) : Math.round(v) + "′"}</text>)}
         {zero && <line x1={m.l} x2={W - m.r} y1={Y(0)} y2={Y(0)} className="ref" />}
         {markers?.map((mt, i) => <line key={"m" + i} x1={X(mt)} x2={X(mt)} y1={xFmt ? m.t : height - m.b - 7} y2={height - m.b} className="marker" />)}
+        {bands?.map((b, i) => <rect key={"b" + i} x={X(b.from)} width={Math.max(2, X(b.to) - X(b.from))} y={m.t} height={height - m.t - m.b} fill={b.color} opacity={0.2} />)}
         {series.filter((s) => s.fillUp && !s.right).map((s, i) => <path key={"f" + i} d={area(s)} fill={s.color} opacity={0.18} stroke="none" />)}
         {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={s.right ? 0.55 : 1} />)}
         {hover != null && <line x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref" />}

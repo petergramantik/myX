@@ -208,3 +208,12 @@ main.from-left { animation: fromLeft .2s ease-out; } main.from-right { animation
 .celltile.off { opacity: .5; cursor: default; } .ct-l.none { color: var(--muted); } .dot.none { background: var(--muted); }
 /* 1.5.1 – nadpis lokality v detailu ponoru */
 .dive-title { margin: 2px 2px 4px; } .dive-title h2 { margin: 0; font-size: 22px; cursor: pointer; } .dive-title small { color: var(--muted); font-size: 13px; }
+/* 1.6 – barvy čidel, seskupená varování */
+.celltile.o2t { background: #1f3a5c; } .celltile.o2t.bad { background: #1f3a5c; }
+.celltile.co2t { background: #2e2a22; } .celltile.co2t .ct-h b { color: #d7c8a0; }
+.celltile.co2t .ct-u { border-bottom-color: #4a4334; }
+.c-info { color: var(--accent); }
+.wgroup .wg-h { display: flex; justify-content: space-between; align-items: baseline; }
+.wgroup .wg-h.link { cursor: pointer; }
+.wgroup ul { margin: 6px 0 0; padding-left: 18px; } .wgroup li { color: var(--fg); margin: 3px 0; } .wgroup li.c-bad::marker { color: var(--bad); } .wgroup li.c-warn::marker { color: var(--warn); } .wgroup li.c-info::marker { color: var(--accent); }
+.prompt-bare { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }

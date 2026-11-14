@@ -30,7 +30,15 @@ export interface Header {
   onTimeH: number; logVersion: number; rateS: number; serial: number; autoInc: number;
 }
 
-export interface Dive { id: string; h: Header; s: Samples; tissues: Tissue[]; events: DiveEvent[] }
+/** Alarm z počítače: začátek (událost 9) a konec (událost 10), čas v sekundách od začátku ponoru. */
+export interface Alarm { kind: "co2" | "po2low" | "po2high"; label: string; start: number; end: number }
+export interface Dive { id: string; h: Header; s: Samples; tissues: Tissue[]; events: DiveEvent[]; alarms: Alarm[] }
+/** Bity alarmů: událost 9 nese masku spuštěných v bajtech 8–11, událost 10 masku ukončených v bajtech 12–15 (stejné rozložení). */
+const ALARM_BITS: { kind: Alarm["kind"]; label: string; byte: number; bit: number }[] = [
+  { kind: "co2", label: "Alarm CO₂", byte: 2, bit: 0x20 },
+  { kind: "po2low", label: "Nízké pO₂", byte: 3, bit: 0x40 },
+  { kind: "po2high", label: "Vysoké pO₂", byte: 3, bit: 0x80 },
+];
 
 const u16 = (b: Uint8Array, i: number) => (b[i] << 8) | b[i + 1];
 const u24 = (b: Uint8Array, i: number) => (b[i] << 16) | (b[i + 1] << 8) | b[i + 2];
@@ -39,7 +47,7 @@ const PSI2 = 2 / 14.5038;
 export const BAT_TYPES: Record<number, string> = { 1: "Alkalická 1,5 V", 2: "Lithiová 1,5 V", 3: "NiMH 1,2 V" };
 const EVN: Record<number, string> = {
   11: "Začátek ponoru", 46: "ID záznamu", 0: "Změna stavu systému", 1: "Změna stavu systému",
-  9: "Chybový příznak nastaven", 10: "Chybový příznak potvrzen",
+  9: "Alarm spuštěn (maska)", 10: "Alarm ukončen (maska)",
 };
 
 /** Rozbalí gzip. Shearwater ukládá za konec gzipu nulové vyplnění – chyba „junk“ po načtení všech dat se ignoruje. */
@@ -123,6 +131,8 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
   const s: Samples = { t: [], depth: [], ceil: [], stop: [], stopt: [], tts: [], at5: [], ppo2: [], mv1: [], mv2: [], mv3: [], sp: [], temp: [], cns: [], gf99: [], o2: [], he: [], st: [], bv: [], bp: [], dil: [], o2p: [], co2raw: [], co2: [] };
   const tissues: Tissue[] = [];
   const events: DiveEvent[] = [];
+  const alarms: Alarm[] = [];
+  const open: Partial<Record<Alarm["kind"], Alarm>> = {};
   let tb: number[] = [];
   const pressure = (depth: number) => surfP / 1000 + depth * salinity / 1000 * 0.0981;
   for (const r of R) {
@@ -143,7 +153,15 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
       if (r[1] === 29) {
         const i = Math.max(n - 1, 0);
         if (n) { const v = u32(r, 8); s.co2raw[i] = v; s.co2[i] = Math.round(v * pressure(s.depth[i]) / 10) / 1000; }
-      } else events.push({ t: ts, kind: String(r[1]), label: EVN[r[1]] ?? `Událost typu ${r[1]}`, payload: hex(r.subarray(8, 16)) });
+      } else {
+        events.push({ t: ts, kind: String(r[1]), label: EVN[r[1]] ?? `Událost typu ${r[1]}`, payload: hex(r.subarray(8, 16)) });
+        if (r[1] === 9 || r[1] === 10) for (const b of ALARM_BITS) {
+          const on = r[1] === 9 ? r[8 + b.byte] & b.bit : 0, off = r[1] === 10 ? r[12 + b.byte] & b.bit : 0;
+          const tt = Math.max(0, ts);
+          if (on && !open[b.kind]) { const a: Alarm = { kind: b.kind, label: b.label, start: tt, end: tt }; open[b.kind] = a; alarms.push(a); }
+          if (off && open[b.kind]) { open[b.kind]!.end = tt; delete open[b.kind]; }
+        }
+      }
     } else if (t === 0x51) {
       for (const k of [1, 8]) {
         const sub = r.subarray(k, k + 7);
@@ -157,7 +175,8 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
       if (t === 0x75 && tb.length >= 32) tissues.push({ t: Math.round(Math.max(n - 1, 0) * rateS), n2: tb.slice(0, 16), he: tb.slice(16, 32) });
     }
   }
-  return { id: raw.id, h, s, tissues, events };
+  for (const a of Object.values(open)) a!.end = Math.max(a!.start, h.diveTimeS);
+  return { id: raw.id, h, s, tissues, events, alarms };
 }
 
 /** Rychlé přečtení hlavičky bez celého dekódování (číslo, začátek). */
