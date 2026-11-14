@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.3.2";
+export const APP_VERSION = "1.4";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.4", date: "14. 11. 2026", title: "Okno Varování a kompaktní scrubber",
+    items: [
+      "Všechna varování na jednom místě: ikona ⚠ v záhlaví nebo přejetí prstem doprava na přehledu",
+      "Scrubber kompaktně: zbývající čas a stáří vedle sebe, barvy podle zbytku a stáří, datum výměny",
+      "Čidlo za životností, které dává funkční hodnoty, je oranžové, ne červené",
+    ],
+  },
   { version: "1.3.2", date: "14. 11. 2026", title: "Bez fotek čidel", items: ["Odstraněny fotky čidel"] },
   {
     version: "1.3.1", date: "14. 11. 2026", title: "Přehlednější dlaždice, skutečný čas deko",

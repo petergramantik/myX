@@ -29,17 +29,19 @@ function ScrubberTile() {
   const lb = st.lb;
   const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), lb.settings.th, lb.settings.manualFill);
   if (!sc) return null;
-  const lvl = sc.alerts.some((a) => a.level === "bad") ? "bad" : sc.alerts.length ? "warn" : "ok";
-  const used = sc.total - sc.left;
+  const old = sc.days != null && sc.days >= lb.settings.th.scrubDays;
+  const timeLvl = sc.pct <= 25 ? "bad" : sc.pct <= 50 || old ? "warn" : "ok";
+  const ageLvl = old ? "warn" : "ok";
+  const lvl = timeLvl === "bad" ? "bad" : timeLvl === "warn" || ageLvl === "warn" ? "warn" : "ok";
   return (
-    <section className={"card scrub " + lvl} onClick={() => go({ t: "settings" })}>
-      <div className="sc-h"><h2>Scrubber</h2><span>zbývá {sc.pct} %</span></div>
-      <div className="sc-v">{hm(sc.left)} <small>zbývá</small></div>
-      <div className="sc-u">použito {hm(used)} ze {hm(sc.total)}</div>
-      <div className="sc-bar"><i style={{ width: `${sc.pct}%` }} /><b style={{ left: `${lb.settings.th.scrubPct}%` }} /></div>
-      <div className="sc-lg"><span>◼ zbývá</span><span>◻ použito</span></div>
-      <div className="sc-s">{sc.fill ? `Náplň od ${fmtDate(sc.fill)} · ${sc.days} dní` : "Datum náplně neznámé"}</div>
-      {sc.alerts.map((a, i) => <div key={i} className={"sc-a " + a.level}>⚠ {a.title}: {a.text}</div>)}
+    <section className={"card scrub " + lvl}>
+      <h2>Scrubber</h2>
+      <div className="sc-two">
+        <div><b className={"c-" + timeLvl}>{hm(sc.left)}</b><small>zbývá</small></div>
+        <div className="r"><b className={"c-" + ageLvl}>{sc.days != null ? `${sc.days} dní` : "–"}</b><small>stáří</small></div>
+      </div>
+      <div className={"sc-bar " + timeLvl}><i style={{ width: `${sc.pct}%` }} /></div>
+      <div className="sc-s">{sc.fill ? `výměna ${fmtDate(sc.fill)}` : "datum výměny neznámé"} · celkem {hm(sc.total)}</div>
     </section>
   );
 }
@@ -68,7 +70,6 @@ export function OverviewScreen() {
       <ScrubberTile />
       <CellTiles />
       <BatteryTiles />
-      {batAl.map((a, i) => <AlertBox key={i} a={a} />)}
 
 
       {drafts.length > 0 && (

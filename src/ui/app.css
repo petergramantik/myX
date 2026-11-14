@@ -176,3 +176,20 @@ ul.small { font-size: 13px; color: var(--muted); }
 .kvline { display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: 13px; align-items: baseline; }
 .kvline span { color: var(--muted); font-size: 12px; } .kvline b { margin-right: 8px; font-weight: 600; }
 .pcell .ct-bar { max-width: 200px; }
+/* 1.4 – scrubber kompaktně, varování */
+.scrub h2 { font-size: 15px; margin: 0 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.sc-two { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+.sc-two div { display: flex; flex-direction: column; } .sc-two .r { align-items: flex-end; }
+.sc-two b { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.sc-two small { font-size: 12px; color: var(--muted); }
+.c-ok { color: var(--ok); } .c-warn { color: var(--warn); } .c-bad { color: #ff6e66; }
+.sc-bar.ok i { background: var(--ok); } .sc-bar.warn i { background: var(--warn); } .sc-bar.bad i { background: var(--bad); }
+.warnbtn { position: relative; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 18px; display: grid; place-items: center; }
+.warnbtn.bad { color: #ff6e66; border-color: var(--bad); } .warnbtn.warn { color: var(--warn); border-color: var(--warn); } .warnbtn.info { color: var(--accent); border-color: var(--accent); }
+.warnbtn span { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; padding: 0 4px; }
+.warnbtn.warn span { background: #e08a00; } .warnbtn.info span { background: #0288d1; }
+.alert.link { cursor: pointer; }
+main.from-left { animation: fromLeft .2s ease-out; } main.from-right { animation: fromRight .2s ease-out; }
+@keyframes fromLeft { from { transform: translateX(-30%); opacity: .4; } to { transform: none; opacity: 1; } }
+@keyframes fromRight { from { transform: translateX(30%); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { main.from-left, main.from-right { animation: none; } }

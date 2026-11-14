@@ -102,8 +102,11 @@ export function cellStatus(k: number, recent: CellDive[], th: CellThresholds, ag
   const lin = last?.lin[k];
   if (lin != null && lin < th.cellLinWarn) { up("bad"); reasons.push(`Podezření na current limiting – při vysokém pO₂ ukazuje o ${Math.round((1 - lin) * 100)} % méně`); }
   const lifeM = life || th.cellLifeM;
-  if (ageM != null && ageM >= th.cellMaxM) { up("bad"); reasons.push(`${Math.floor(ageM)} měsíců od instalace (max. ${th.cellMaxM})`); }
-  else if (ageM != null && ageM >= lifeM) { up("warn"); reasons.push(`Překročená životnost ${lifeM} měsíců`); }
-  if (madeM != null && madeM >= th.cellMaxM) { up("bad"); reasons.push(`${Math.floor(madeM)} měsíců od výroby`); }
+  // stáří samo o sobě nikdy není červené – jen oranžové, dokud čidlo dává funkční hodnoty
+  const fine = level === "ok" || level === "info";
+  const tail = fine ? ", hodnoty zatím v pořádku" : "";
+  if (ageM != null && ageM >= th.cellMaxM) { up("warn"); reasons.push(`Za životností: ${Math.floor(ageM)} měsíců od výměny (max. ${th.cellMaxM})${tail}`); }
+  else if (ageM != null && ageM >= lifeM) { up("warn"); reasons.push(`Za životností: ${Math.floor(ageM)} měsíců od výměny (životnost ${lifeM})${tail}`); }
+  if (madeM != null && madeM >= th.cellMaxM) { up("warn"); reasons.push(`Za životností: ${Math.floor(madeM)} měsíců od výroby (max. ${th.cellMaxM})${tail}`); }
   return { level, reasons };
 }

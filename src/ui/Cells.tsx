@@ -109,7 +109,6 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
   const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem(K_OPEN, v ? "1" : "0"); } catch { /* */ } };
   const worst = c.status.reduce((w, s) => (ORDER.indexOf(s.level) > ORDER.indexOf(w) ? s.level : w), "ok" as string);
   const problems = c.status.map((s, k) => ({ s, k })).filter(({ s }) => s.level !== "ok");
-  const recentPrompts = c.prompts.filter((p) => c.now - p.meta.start < 400 * DAY);
   const summary = problems.length === 0 ? "✓ Čidla v pořádku"
     : problems.length === 1 ? `⚠ Čidlo ${problems[0].k + 1}: ${problems[0].s.reasons[0]?.startsWith("Pozice prázdná") ? "prázdná pozice" : LV[problems[0].s.level].toLowerCase()}`
     : `⚠ ${problems.length} čidla s upozorněním`;
@@ -118,7 +117,7 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
   return (
     <section className={"panel " + worst}>
       <button className="panel-h" onClick={toggle}>
-        <span className="ph-main">{summary}{recentPrompts.length ? ` · ${recentPrompts.length} ${recentPrompts.length === 1 ? "dotaz" : "dotazy"} na výměnu` : ""}</span>
+        <span className="ph-main">{summary}</span>
         <span className="ph-sub">{cal}</span>
         <span className="ph-arrow">{open ? "▴" : "▾"}</span>
       </button>
@@ -151,7 +150,6 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
               </div>
             );
           })}
-          {recentPrompts.map((p) => <CellPrompt key={p.key} p={p} onYes={() => setForm({ pos: p.pos as 1 | 2 | 3, installed: isoOf(p.meta.start), lifeM: 12, maker: c.current(p.pos)?.maker || "" })} />)}
           <p className="note">Poslední kalibrace: {c.lastCal ? <>před ponorem č. {c.lastCalNo} ({fmtDate(c.lastCal.start)})</> : "nezjištěno"}. Odvozeno ze změny kalibračních faktorů v logu. <a onClick={() => go({ t: "cells" })}>Historie a grafy čidel ›</a></p>
         </div>
       )}
@@ -159,7 +157,7 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
   );
 }
 
-function CellPrompt({ p, onYes }: { p: Prompt; onYes?: () => void }) {
+export function CellPrompt({ p, onYes }: { p: Prompt; onYes?: () => void }) {
   return (
     <div className="alert info">
       <b>Čidlo {p.pos}: změna citlivosti{p.tentative ? " (zatím nepotvrzená)" : ""}</b>
