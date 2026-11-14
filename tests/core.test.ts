@@ -2,7 +2,7 @@
 import { decodeDive } from "../src/core/shearwater";
 import { summarize, injections, alerts, realStops, gasLabel, pressureUse, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
-import { detectCellEvents, cellStatus, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
+import { detectCellEvents, cellStatus, cellDiveWarnings, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
 
 let fails = 0;
@@ -73,6 +73,14 @@ ok(!mergeLogbooks(lb2, lb3).drafts.z, "spárovaný rozpracovaný ponor se smaže
 }
 
 ok(Array.isArray(d.alarms), "alarmy se dekódují");
+{ // čidla podle vlastní historie: nové citlivější čidlo bez varování, prudký pokles = červená, stárnutí = oranžová
+  const D = 86400, mk = (day: number, mv: number[]) => ({ start: day * D, cells: { mvBar: mv, lin: [null, null, null], early: [null, null, null] } });
+  const ser = [mk(0, [48, 46, 47]), mk(40, [47, 46, 47]), mk(80, [46, 46, 62]), mk(100, [41, 45, 60]), mk(110, [29, 44, 59])];
+  const w4 = cellDiveWarnings(ser, 4, DEFAULT_CELL_TH), w3 = cellDiveWarnings(ser, 3, DEFAULT_CELL_TH), w2 = cellDiveWarnings(ser, 2, DEFAULT_CELL_TH);
+  ok(w4.some((x) => x.level === "bad" && x.title.includes("1")), "prudký pokles čidla = červená");
+  ok(w3.some((x) => x.level === "warn" && x.title.includes("1")), "pozvolný pokles = stárnutí");
+  ok(!w2.some((x) => x.title.includes("3")), "nové citlivější čidlo bez varování");
+}
 { // spotřeba: pokles 150 → 120, ohřátí +5 se odečte, nárůst o 40 (externí) se nepočítá
   const t = [...Array(40).keys()].map((i) => i * 60), dep = t.map(() => 20);
   const p = t.map((_, i) => (i < 10 ? 150 : i < 20 ? 130 : i < 25 ? 135 : i < 30 ? 125 : 165 - (i - 30)));

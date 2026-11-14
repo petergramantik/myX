@@ -1,8 +1,8 @@
-// Odvozené hodnoty: souhrn ponoru, kalibrace článků, odhad vstřiků solenoidu, upozornění.
+// Odvozené hodnoty: souhrn ponoru, kalibrace čidel, odhad vstřiků solenoidu, upozornění.
 import type { Dive, Header } from "./shearwater";
 
 export interface Summary {
-  avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[]; dilUse: GasUse; o2Use: GasUse;
+  avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[]; dilUse: GasUse; o2Use: GasUse; pn2Max: number;
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
 }
@@ -57,6 +57,21 @@ export function pressureUse(t: number[], p: (number | null)[], depth: number[], 
   return { ok: true, start: firstV, end: lastV, bar: Math.round(net), ext: ext.map(([a, b]) => [Math.round(a), Math.round(b)]), noisy: rise + wiggle > Math.max(60, net * 4) };
 }
 
+/** Max. parciální tlak dusíku: (okolní tlak − pO₂) × podíl N₂ v inertní části plynu. */
+export function pn2Max(d: Dive): number {
+  let mx = 0;
+  d.s.t.forEach((t, i) => {
+    if (t > d.h.diveTimeS) return;
+    const amb = (d.h.surfP || 1013) / 1000 + d.s.depth[i] * (d.h.salinity || 1000) / 1000 * 0.0981;
+    const o2 = d.s.o2[i] / 100, he = d.s.he[i] / 100, n2 = Math.max(0, 1 - o2 - he);
+    const inert = n2 + he;
+    const ppo2 = d.s.ppo2[i] > 0 ? Math.min(d.s.ppo2[i], amb) : amb * o2;
+    const v = inert > 0 ? Math.max(0, amb - ppo2) * (n2 / inert) : 0;
+    if (v > mx) mx = v;
+  });
+  return Math.round(mx * 100) / 100;
+}
+
 /** Použité plyny („O₂/He“) v pořadí prvního použití a čas na každém v sekundách. */
 export function gasUse(d: Dive): { mix: string; s: number }[] {
   const out = new Map<string, number>();
@@ -105,6 +120,7 @@ export function summarize(d: Dive): Summary {
     ppo2Min: Math.min(...idx.map((i) => s.ppo2[i])), ppo2Max: Math.max(...idx.map((i) => s.ppo2[i])),
     co2Max: co2.length && Math.max(...co2) > 0 ? round(Math.max(...co2), 2) : null,
     gases: gasUse(d),
+    pn2Max: pn2Max(d),
     dilUse: pressureUse(d.s.t, d.s.dil, d.s.depth, d.h.diveTimeS),
     o2Use: pressureUse(d.s.t, d.s.o2p, d.s.depth, d.h.diveTimeS),
     co2AlarmN: d.alarms.filter((a) => a.kind === "co2").length,
@@ -121,7 +137,7 @@ export function summarize(d: Dive): Summary {
 
 export const round = (v: number, d = 0) => Math.round(v * 10 ** d) / 10 ** d;
 
-/** Kalibrace článků odvozená z průměrného pO₂ (bar/mV): medián poměru přes ponor. */
+/** Kalibrace čidel odvozená z průměrného pO₂ (bar/mV): medián poměru přes ponor. */
 export function cellCalibration(d: Dive): [number | null, number | null, number | null] {
   const s = d.s;
   return ([s.mv1, s.mv2, s.mv3] as number[][]).map((mv) => {
@@ -232,12 +248,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   const mv = [d.s.mv1, d.s.mv2, d.s.mv3];
   mv.forEach((a, k) => {
     const mid = d.s.depth.map((x, i) => (x > 1.5 ? a[i] : null)).filter((x): x is number => x != null);
-    if (mid.length && Math.max(...mid) === 0) out.push({ level: "warn", title: `Článek ${k + 1} na nule`, text: "Článek během ponoru ukazoval 0 mV – vadný nebo vypnutý." });
+    if (mid.length && Math.max(...mid) === 0) out.push({ level: "warn", title: `Čidlo ${k + 1} na nule`, text: "Čidlo během ponoru ukazovalo 0 mV – vadné nebo odpojené." });
   });
-  const ok = cal.filter((c): c is number => c != null);
-  if (ok.length === 3) {
-    const avg = ok.reduce((a, b) => a + b, 0) / 3;
-    cal.forEach((c, k) => { if (c && Math.abs(c - avg) / avg > 0.35) out.push({ level: "info", title: `Článek ${k + 1} se liší`, text: `Jeho mV odpovídají jiné kalibraci než ostatní (o ${Math.round(((c - avg) / avg) * 100)} %).` }); });
-  }
   return out;
 }

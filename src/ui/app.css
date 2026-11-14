@@ -254,3 +254,8 @@ label.check { display: flex; gap: 8px; align-items: center; }
 .ext-row { display: grid; grid-template-columns: 64px 46px 12px 1fr 1fr 32px; gap: 4px; align-items: center; margin: 4px 0; }
 .ext-row input, .ext-row select { min-width: 0; padding: 6px; }
 label.inline { display: flex; align-items: center; gap: 6px; font-size: 13px; } label.inline input { width: 70px; }
+/* 1.10 – V kostce ve 2 sloupcích, EXT, zvýraznění */
+.tiles.two { grid-template-columns: repeat(2, 1fr); }
+.tile { position: relative; }
+.tile.hot { border: 1px solid var(--warn); } .tile.hot .v { color: var(--warn); }
+.extflag { position: absolute; top: 6px; right: 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--warn); border: 1px solid var(--warn); border-radius: 5px; padding: 0 5px; }

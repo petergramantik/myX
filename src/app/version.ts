@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.9";
+export const APP_VERSION = "1.10";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.10", date: "14. 11. 2026", title: "Čidla podle vlastní historie, pN₂, EXT",
+    items: [
+      "Upozornění na čidla podle poklesu citlivosti proti vlastní historii (stárnutí / problém), všude „čidlo“ místo „článek“",
+      "V kostce ve dvou sloupcích, nová dlaždice Max. pN₂ (zvýraznění nad 3,5 bar), Max. pO₂ zvýrazněné nad 1,6 bar",
+      "Štítek EXT u diluentu a O₂ při externím plynu, předvyplněná lahev S80/S40",
+    ],
+  },
   {
     version: "1.9", date: "14. 11. 2026", title: "Spotřeba plynu",
     items: [

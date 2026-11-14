@@ -110,3 +110,50 @@ export function cellStatus(k: number, recent: CellDive[], th: CellThresholds, ag
   if (madeM != null && madeM >= th.cellMaxM) { up("warn"); reasons.push(`Za životností: ${Math.floor(madeM)} měsíců od výroby (max. ${th.cellMaxM})${tail}`); }
   return { level, reasons };
 }
+
+/**
+ * Upozornění na čidla v konkrétním ponoru podle vývoje citlivosti proti vlastní historii.
+ * Nové čidlo je vždy citlivější než stará, proto samotný rozdíl proti ostatním není problém.
+ *  – červená: pokles ≥ 25 % proti ponorům před 1–4 měsíci, na vzduchu < cellAirBad nebo current limiting
+ *  – oranžová (stárnutí): pokles 10–25 % nebo na vzduchu < cellAirWarn
+ *  – modrá: čidlo o > 20 % slabší než ostatní, ale proti své historii skoro nekleslo
+ */
+export function cellDiveWarnings(series: { start: number; cells: CellDive }[], i: number, th: CellThresholds): { level: "bad" | "warn" | "info"; title: string; text: string }[] {
+  const out: { level: "bad" | "warn" | "info"; title: string; text: string }[] = [];
+  const cur = series[i]?.cells;
+  if (!cur) return out;
+  const DAYS = 86400;
+  const now = series[i].start;
+  for (let k = 0; k < 3; k++) {
+    const v = cur.mvBar[k];
+    if (v == null) continue;
+    // pokles proti vlastní historii, očištěný o společný posun všech čidel (kalibrace, teplota)
+    const dropOf = (j: number) => {
+      const x = cur.mvBar[j];
+      if (x == null) return null;
+      let ref = series.filter((s) => s.start <= now - 30 * DAYS && s.start >= now - 120 * DAYS).map((s) => s.cells.mvBar[j]).filter((y): y is number => y != null);
+      if (!ref.length) ref = series.slice(Math.max(0, i - 3), i).map((s) => s.cells.mvBar[j]).filter((y): y is number => y != null);
+      return ref.length ? (med(ref) - x) / med(ref) : null;
+    };
+    const own = dropOf(k) ?? 0;
+    const od = [0, 1, 2].filter((j) => j !== k).map(dropOf).filter((x): x is number => x != null);
+    const common = od.length ? Math.max(0, Math.min(...od, own)) : 0;
+    const drop = own - common;
+    const air = v * 0.21;
+    const others = cur.mvBar.filter((x, j): x is number => j !== k && x != null);
+    const dev = others.length ? (v - others.reduce((a, b) => a + b, 0) / others.length) / (others.reduce((a, b) => a + b, 0) / others.length) : 0;
+    const lin = cur.lin[k];
+    const airTxt = air.toLocaleString("cs-CZ", { maximumFractionDigits: 1 });
+    if (drop >= 0.25 || air < th.cellAirBad || (lin != null && lin < th.cellLinWarn))
+      out.push({ level: "bad", title: `Problém s čidlem ${k + 1}`, text: [
+        drop >= 0.25 ? `Citlivost prudce klesla o ${Math.round(drop * 100)} %` : "",
+        air < th.cellAirBad ? `na vzduchu jen ${airTxt} mV` : "",
+        lin != null && lin < th.cellLinWarn ? `při vysokém pO₂ ukazuje o ${Math.round((1 - lin) * 100)} % méně (current limiting)` : "",
+      ].filter(Boolean).join(", ") + ". Vyměň čidlo." });
+    else if (drop >= 0.1 || air < th.cellAirWarn)
+      out.push({ level: "warn", title: `Možný problém s čidlem ${k + 1}`, text: (drop >= 0.1 ? `Citlivost klesla o ${Math.round(drop * 100)} % proti ponorům před 1–4 měsíci (stárnutí)` : `Na vzduchu jen ${airTxt} mV (stárnutí)`) + ". Plánuj výměnu." });
+    else if (dev <= -0.2)
+      out.push({ level: "info", title: `Možný problém s čidlem ${k + 1}`, text: `Dává o ${Math.round(-dev * 100)} % méně mV než ostatní čidla (${Math.round(v)} vs. ${Math.round(others.reduce((a, b) => a + b, 0) / others.length)} mV při 1 bar O₂). Sleduj vývoj.` });
+  }
+  return out;
+}

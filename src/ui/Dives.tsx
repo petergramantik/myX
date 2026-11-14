@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, injections, realStops, summarize } from "../core/analysis";
 import { loadDive, myNum, setNote } from "../app/store";
+import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
@@ -126,15 +127,24 @@ function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol
   return { u, manual, ext, extL, ownL, total: manual ?? (ownL != null || extL ? (ownL || 0) + extL : null), min, metab: [0.8 * min, 1.5 * min] as const };
 }
 
-function UseTile({ gas, meta, note }: { gas: "dil" | "o2"; meta: Meta; note?: DiveNote }) {
+/** Externí plyn: snímač ukazuje mezitlak, tlak během ponoru výrazně vzrostl, nebo je zadaná externí lahev. */
+const extDetected = (u: Meta["sum"]["dilUse"]) => !u.ok || u.ext.length > 0;
+
+function UseTile(props: { gas: "dil" | "o2"; meta: Meta; note?: DiveNote }) {
+  const g0 = gasUseOf(props.gas, props.meta, props.note, 3);
+  const ext = extDetected(g0.u) || g0.ext.length > 0;
+  return <>{ext && <span className="extflag">EXT</span>}<UseVal {...props} /></>;
+}
+
+function UseVal({ gas, meta, note }: { gas: "dil" | "o2"; meta: Meta; note?: DiveNote }) {
   const vol = useStore().lb.settings.cyl?.[gas] ?? 3;
   const g = gasUseOf(gas, meta, note, vol);
   if (g.manual != null) return <span className="use">{fmtL(g.manual)}<small>zadáno ručně</small></span>;
   if (g.total != null) return (
     <span className="use">{fmtL(g.total)}<small>{g.u.ok && !g.u.noisy ? `${g.u.bar} bar · ` : ""}{num(g.total / g.min, 1)} l/min{g.extL ? ` · ext. ${fmtL(g.extL)}` : ""}</small></span>
   );
-  if (gas === "o2") return <span className="use">~{Math.round(g.metab[0])}–{Math.round(g.metab[1])} l<small>{g.u.noisy ? "tlak nespolehlivý · " : "jen mezitlak · "}odhad z doby</small></span>;
-  return <span className="use">–<small>{g.u.noisy ? "tlak nespolehlivý" : "jen mezitlak – externí?"}</small></span>;
+  if (gas === "o2") return <span className="use">~{Math.round(g.metab[0])}–{Math.round(g.metab[1])} l<small>{g.u.noisy ? "tlak nespolehlivý · " : ""}odhad z doby</small></span>;
+  return <span className="use">–<small>{g.u.noisy ? "tlak nespolehlivý" : "zadej tlak externí lahve"}</small></span>;
 }
 
 function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNote }) {
@@ -142,7 +152,7 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
   const cyl = st.lb.settings.cyl || { dil: 3, o2: 3 };
   const ext = note?.ext || [];
   const save = (p: Partial<DiveNote>) => setNote(id, p);
-  const setExt = (eid: string, p: Partial<ExtGas>) => save({ ext: ext.map((e) => (e.id === eid ? { ...e, ...p } : e)) });
+  const setExt = (eid: string, p: Partial<ExtGas>, virt?: ExtGas) => save({ ext: virt && !ext.some((e) => e.id === eid) ? [...ext, { ...virt, ...p, id: uid() }] : ext.map((e) => (e.id === eid ? { ...e, ...p } : e)) });
   const n = (v: string) => { const x = parseFloat(v.replace(",", ".")); return Number.isNaN(x) ? undefined : x; };
   const row = (gas: "dil" | "o2", name: string) => {
     const g = gasUseOf(gas, meta, note, cyl[gas]);
@@ -151,16 +161,21 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
       <div className="pcell ptile">
         <div className="pcell-h"><b>{name}</b><span className="muted">vlastní lahev {num(cyl[gas], 1)} l</span></div>
         <small>{u.ok ? <>Tlak {num(u.start ?? 0, 0)} → {num(u.end ?? 0, 0)} bar · spotřeba {u.noisy ? "nespolehlivá (rozkmitaný tlak)" : `${u.bar} bar = ${fmtL(u.bar * cyl[gas])}`}</>
-          : <>Snímač ukazuje jen mezitlak (lahev zavřená nebo plyn z externí lahve) – spotřebu z tlaku nelze spočítat.{gas === "o2" ? ` Metabolický odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l, odhadnuto ${meta.inj} vstřiků.` : ""}</>}</small>
+          : <>Plyn z externí lahve ({gas === "o2" ? "S40" : "S80"}) – snímač ukazuje jen mezitlak. Zadej tlak start/end externí lahve.{gas === "o2" ? ` Do té doby metabolický odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (odhadnuto ${meta.inj} vstřiků).` : ""}</>}</small>
         {u.ext.length > 0 && <small className="c-warn">Externí plyn nebo zavřená lahev nejspíš: {u.ext.map(([a, b]) => (a === b ? `${a}. min` : `${a}.–${b}. min`)).join(", ")}</small>}
-        {ext.filter((e) => e.gas === gas).map((e) => (
+        {(() => {
+          const mine = ext.filter((e) => e.gas === gas);
+          const kind = gas === "dil" ? "S80" : "S40";
+          const virt: ExtGas | null = !mine.length && extDetected(u) ? { id: "auto-" + gas, gas, kind, vol: EXT_KINDS[kind] } : null;
+          return virt ? [virt] : mine;
+        })().map((e) => (
           <div key={e.id} className="ext-row">
-            <select value={e.kind} onChange={(ev) => setExt(e.id, { kind: ev.target.value, vol: EXT_KINDS[ev.target.value] ?? e.vol })}>
+            <select value={e.kind} onChange={(ev) => setExt(e.id, { kind: ev.target.value, vol: EXT_KINDS[ev.target.value] ?? e.vol }, e)}>
               {["S80", "S40", "jiná"].map((k) => <option key={k}>{k}</option>)}
             </select>
-            <input inputMode="decimal" defaultValue={e.vol} title="Objem (l)" onBlur={(ev) => setExt(e.id, { vol: n(ev.target.value) ?? e.vol })} /><span>l</span>
-            <input inputMode="decimal" defaultValue={e.start ?? ""} placeholder="start bar" onBlur={(ev) => setExt(e.id, { start: n(ev.target.value) })} />
-            <input inputMode="decimal" defaultValue={e.end ?? ""} placeholder="end bar" onBlur={(ev) => setExt(e.id, { end: n(ev.target.value) })} />
+            <input inputMode="decimal" defaultValue={e.vol} title="Objem (l)" onBlur={(ev) => n(ev.target.value) !== e.vol && setExt(e.id, { vol: n(ev.target.value) ?? e.vol }, e)} /><span>l</span>
+            <input inputMode="decimal" defaultValue={e.start ?? ""} placeholder="start bar" onBlur={(ev) => n(ev.target.value) !== e.start && setExt(e.id, { start: n(ev.target.value) }, e)} />
+            <input inputMode="decimal" defaultValue={e.end ?? ""} placeholder="end bar" onBlur={(ev) => n(ev.target.value) !== e.end && setExt(e.id, { end: n(ev.target.value) }, e)} />
             <button className="btn small" onClick={() => save({ ext: ext.filter((x) => x.id !== e.id) })}>✕</button>
           </div>
         ))}
@@ -202,21 +217,24 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const lb = st.lb;
   const meta = st.metas.find((m) => m.id === id)!;
   const note = lb.notes[id] || { buddyIds: [], note: "", updated: 0 };
-  const warns = d ? diveWarnings(d, summarize(d), lb.settings.th) : [];
+  const idx = st.metas.indexOf(meta);
+  const warns = [...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)];
   return (
     <>
       {warns.map((a, i) => <AlertBox key={i} a={a} />)}
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
-        <Tiles items={[
+        <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > 1.6 ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > 3.5 ? "hot" : "" }} items={[
           ["Hloubka", <Pair l={`${num(meta.h.maxDepth)} m`} ll="max" r={`${num(meta.sum.avgDepth)} m`} rl="průměr" />],
           ["Doba", <Pair l={`${Math.round(meta.h.diveTimeS / 60)} min`} ll="ponor" r={meta.sum.decoMin ? `${meta.sum.decoMin} min` : "–"} rl="deko" />],
-          ["GF / CNS", <Pair l={`${meta.h.gfLo}/${meta.h.gfHi}`} ll="GF" r={`${meta.h.cnsEnd} %`} rl="CNS" />],
-          ["Teplota", <Pair l={`${meta.sum.tempMin} °C`} ll="min" r={`${meta.sum.tempMax} °C`} rl="max" />],
-          ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
           ["Plyny", <span className="gas-list">{meta.sum.gases.map((g) => <span key={g.mix}><b>{gasLabel(g.mix).label}</b><small>{Math.round(g.s / 60)} min</small></span>)}</span>],
-          ["Max. pO₂", `${num(meta.sum.ppo2Max, 2)} bar`], ["Max. CO₂", meta.sum.co2Max != null ? `${num(meta.sum.co2Max, 2)} mbar` : "–"],
+          ["Teplota", <Pair l={`${meta.sum.tempMin} °C`} ll="min" r={`${meta.sum.tempMax} °C`} rl="max" />],
+          ["Max. pO₂", `${num(meta.sum.ppo2Max, 2)} bar`],
+          ["Max. pN₂", `${num(meta.sum.pn2Max, 2)} bar`],
+          ["Max. CO₂", meta.sum.co2Max != null ? `${num(meta.sum.co2Max, 2)} mbar` : "–"],
+          ["GF / CNS", <Pair l={`${meta.h.gfLo}/${meta.h.gfHi}`} ll="GF" r={`${meta.h.cnsEnd} %`} rl="CNS" />],
           ["Diluent", <UseTile gas="dil" meta={meta} note={note} />], ["O₂", <UseTile gas="o2" meta={meta} note={note} />],
-          ["Vstřiky O₂ (odhad)", meta.inj], ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)],
+          ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
+          ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)],
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
@@ -262,20 +280,20 @@ function ChartsTab({ d }: { d: Dive }) {
   return (
     <>
       <ProfileCard d={d} />
-      <Card title="pO₂ a články" right={
+      <Card title="pO₂ a čidla" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
         {cellMode === "cal" ? (
           <LineChart t={s.t} markers={inj.map((x) => x.t)} bands={d.alarms.filter((a) => a.kind !== "co2").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" }))} series={[
-            { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: "Článek 1", color: C[1], values: cells[0], unit: "bar" },
-            { label: "Článek 2", color: C[2], values: cells[1], unit: "bar" }, { label: "Článek 3", color: C[3], values: cells[2], unit: "bar" }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3" },
+            { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: "Čidlo 1", color: C[1], values: cells[0], unit: "bar" },
+            { label: "Čidlo 2", color: C[2], values: cells[1], unit: "bar" }, { label: "Čidlo 3", color: C[3], values: cells[2], unit: "bar" }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3" },
           ]} extra={depthExtra} />
         ) : (
           <LineChart t={s.t} series={[
-            { label: "Článek 1", color: C[1], values: cells[0], unit: "mV" }, { label: "Článek 2", color: C[2], values: cells[1], unit: "mV" }, { label: "Článek 3", color: C[3], values: cells[2], unit: "mV" },
+            { label: "Čidlo 1", color: C[1], values: cells[0], unit: "mV" }, { label: "Čidlo 2", color: C[2], values: cells[1], unit: "mV" }, { label: "Čidlo 3", color: C[3], values: cells[2], unit: "mV" },
           ]} extra={[{ label: "Průměr pO₂", values: s.ppo2, unit: "bar" }, ...depthExtra]} />
         )}
         <p className="note">
-          {cellMode === "cal" ? <>Články přepočtené kalibrací odvozenou z průměrného pO₂ tohoto ponoru: {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty článků v mV. "}
+          {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
           Čárky dole = odhadnuté vstřiky O₂ ({inj.length}×), podle rychlého nárůstu průměrného pO₂.
         </p>
       </Card>
@@ -323,7 +341,7 @@ function ValuesTab({ d }: { d: Dive }) {
         ["Max. klesání / výstup", `${sm.descMax} / ${sm.ascMax} m/min`, "J"],
         ["Setpointy", `${h.spLo} / ${h.spHi} bar`, "P"], ["OC plyny", h.ocGases.join(", ") || "–", "J"], ["Diluenty", h.ccGases.join(", ") || "–", "P"],
         ["pO₂ min / max", `${sm.ppo2Min} / ${sm.ppo2Max} bar`, "J"],
-        ["Kalibrace článků (odvozená)", cal.map((c) => (c ? (c * 1000).toFixed(1) : "–")).join(" / ") + " mbar/mV", "P"],
+        ["Citlivost čidel (odvozená)", cal.map((c) => (c ? (c * 1000).toFixed(1) : "–")).join(" / ") + " mbar/mV", "P"],
         ["Max. ppCO₂", sm.co2Max != null ? `${sm.co2Max} mbar` : "–", "P"],
         ["Teplota min / max", `${sm.tempMin} / ${sm.tempMax} °C`, "J"],
         ["Atmosférický tlak", `${h.surfP} → ${h.surfPEnd} mbar`, "J"], ["Salinita", `${h.salinity} kg/m³`, "J"],
