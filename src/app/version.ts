@@ -1,9 +1,20 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.2.2";
+export const APP_VERSION = "1.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.3", date: "14. 11. 2026", title: "Panely čidel a baterií, fotky čidel",
+    items: [
+      "Pod dlaždicemi čidel rozbalovací panel: stav, poslední kalibrace, upozornění ke každému čidlu, dotazy na výměnu",
+      "Výměnu i vyjmutí čidla zadáš přímo v panelu, se sériovým číslem a fotkou štítku",
+      "Kontrola data výměny proti logu s nabídkou opravy",
+      "Prázdná pozice po vyjmutí čidla",
+      "Rozbalovací panel baterií s procenty v hlavičce",
+      "Nové pořadí dlaždic posledního ponoru (diluent a O₂ za sebou)",
+    ],
+  },
   {
     version: "1.2.2", date: "14. 11. 2026", title: "Poslední ponor přehledněji",
     items: [

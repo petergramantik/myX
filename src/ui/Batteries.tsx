@@ -1,5 +1,6 @@
 // Baterie: Petrel (z logu) a dvě baterie v hlavě X-CCR (ruční evidence).
 import { useState } from "react";
+import type { Header } from "../core/shearwater";
 import { alerts } from "../core/analysis";
 import { deleteBattery, localNow, saveBattery } from "../app/store";
 import type { Battery } from "../app/model";
@@ -30,6 +31,15 @@ export function useBatteries() {
     return { pos, all, cur, dives: since.length, minutes, months, reasons };
   });
   return { petrel, petrelAlerts, head, last, th };
+}
+
+/** Procenta baterie Petrelu: u NiMH je v logu vždy 100 %, proto odhad z napětí mezi kritickým prahem a plnou baterií. */
+export function petrelPct(h: Header): { pct: number; est: boolean } {
+  if (h.batTypeCode === 3) {
+    const full = 1.4, lo = h.batCrit || 1.15;
+    return { pct: Math.round(Math.max(0, Math.min(1, (h.batVEnd - lo) / (full - lo))) * 100), est: true };
+  }
+  return { pct: h.batPctEnd, est: false };
 }
 
 export function BatteryTiles() {
@@ -70,13 +80,47 @@ export function BatteryTiles() {
           );
         })}
       </div>
-      {(b.petrelAlerts.length > 0 || b.head.some((x) => x.reasons.length)) && (
-        <div className="cellwarn">
-          {b.petrelAlerts.map((a, i) => <div key={"p" + i} className={a.level}><b>Petrel:</b> {a.text}</div>)}
-          {b.head.map((x) => x.reasons.map((r, i) => <div key={x.pos + "-" + i} className="warn"><b>Hlava {x.pos}:</b> {r}</div>))}
+      <BatPanel b={b} />
+    </>
+  );
+}
+
+const K_OPEN = "myx.batpanel";
+
+function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem(K_OPEN) === "1"; } catch { return false; } });
+  const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem(K_OPEN, v ? "1" : "0"); } catch { /* */ } };
+  const h = b.last!.h;
+  const pp = petrelPct(h);
+  const headTxt = (x: (typeof b.head)[number]) => !x.cur ? "–" : b.th.headBatHours > 0 ? `${Math.max(0, Math.round(100 - (x.minutes / 60 / b.th.headBatHours) * 100))} %` : `${num(x.minutes / 60, 1)} h`;
+  const bad = b.petrelAlerts.some((a) => a.level === "bad");
+  const warn = b.petrelAlerts.length > 0 || b.head.some((x) => x.reasons.length);
+  const lvl = bad ? "bad" : warn ? "warn" : "ok";
+  return (
+    <section className={"panel " + lvl}>
+      <button className="panel-h" onClick={toggle}>
+        <span className="ph-main">{lvl === "ok" ? "✓" : "⚠"} Petrel {pp.est ? "~" : ""}{pp.pct} % · Hlava 1 {headTxt(b.head[0])} · Hlava 2 {headTxt(b.head[1])}</span>
+        <span className="ph-sub">{lvl === "ok" ? "Baterie v pořádku" : "Baterie – upozornění"}</span>
+        <span className="ph-arrow">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className="panel-b">
+          <div className="pcell">
+            <div className="pcell-h"><b>Petrel</b><span className={"pill " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{bad ? "Vyměnit" : b.petrelAlerts.length ? "Varování" : "V pořádku"}</span></div>
+            <small>{h.batType} · {h.batVStart.toFixed(2).replace(".", ",")} → {h.batVEnd.toFixed(2).replace(".", ",")} V v posledním ponoru · {pp.est ? `odhad z napětí ${pp.pct} % (NiMH procenta Petrel neukládá)` : `${pp.pct} % podle Petrelu`}</small>
+            {b.petrelAlerts.length ? b.petrelAlerts.map((a, i) => <div key={i} className={"reason " + a.level}>{a.text}</div>) : <div className="reason ok">✓ v pořádku</div>}
+          </div>
+          {b.head.map((x) => (
+            <div key={x.pos} className="pcell">
+              <div className="pcell-h"><b>Hlava – baterie {x.pos}</b><span className={"pill " + (x.reasons.length ? "warn" : x.cur ? "ok" : "")}>{x.reasons.length ? "Vyměnit" : x.cur ? "V pořádku" : "Nezadaná"}</span></div>
+              {x.cur ? <small>{x.cur.maker || "Baterie"}{x.cur.model ? ` ${x.cur.model}` : ""}{x.cur.volt ? ` (${x.cur.volt})` : ""} · výměna {fmtIso(x.cur.installed)} · {x.dives} ponorů · {hm(x.minutes)} pod vodou{b.th.headBatHours > 0 ? ` z limitu ${b.th.headBatHours} h` : ""}</small> : <small>Výměna zatím nezadaná.</small>}
+              {x.reasons.length ? x.reasons.map((r, i) => <div key={i} className="reason warn">{r}</div>) : x.cur ? <div className="reason ok">✓ v pořádku</div> : null}
+            </div>
+          ))}
+          <p className="note"><a onClick={() => go({ t: "bats" })}>Zadat výměnu, historie a graf napětí ›</a>{b.th.headBatHours > 0 ? "" : " · Procenta baterií v hlavě se ukážou po nastavení limitu hodin v Nastavení."}</p>
         </div>
       )}
-    </>
+    </section>
   );
 }
 

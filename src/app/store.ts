@@ -189,6 +189,49 @@ export async function deleteBattery(id: string) {
   await saveLb(lb);
 }
 
+// ---------- fotky (čidla): zmenšené JPEG v telefonu, synchronizace přes Worker zvlášť od logbooku
+interface Img { id: string; blob: Blob; synced: boolean }
+const imgUrls = new Map<string, string>();
+
+export async function addPhoto(file: File): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 1000 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+  const blob: Blob = await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Fotku se nepodařilo zpracovat"))), "image/jpeg", 0.82));
+  const id = "img" + uid();
+  await db.put("img", { id, blob, synced: false } as Img);
+  scheduleSync();
+  return id;
+}
+
+/** Adresa fotky pro <img>: z telefonu, jinak stáhne z Workeru. */
+export async function photoUrl(id: string): Promise<string | null> {
+  const c = imgUrls.get(id);
+  if (c) return c;
+  let im = await db.get<Img>("img", id);
+  if (!im && workerUrl() && syncKey()) {
+    try {
+      const r = await api(`/img/${encodeURIComponent(id)}`);
+      if (r.ok) { im = { id, blob: await r.blob(), synced: true }; await db.put("img", im); }
+    } catch { /* bez připojení */ }
+  }
+  if (!im) return null;
+  const u = URL.createObjectURL(im.blob);
+  imgUrls.set(id, u);
+  return u;
+}
+
+async function uploadPhotos() {
+  for (const im of await db.getAll<Img>("img")) {
+    if (im.synced) continue;
+    const r = await api(`/img/${encodeURIComponent(im.id)}`, { method: "PUT", body: im.blob, headers: { "Content-Type": "image/jpeg" } });
+    if (r.ok) await db.put("img", { ...im, synced: true });
+    else if (r.status === 404) break; // starý Worker bez fotek
+  }
+}
+
 export function answerCellPrompt(key: string, answer: "change" | "cal") {
   const lb = structuredClone(st.lb);
   lb.answered[key] = { answer, updated: Date.now() };
@@ -330,6 +373,7 @@ export async function syncNow(): Promise<void> {
         const u = await api(`/dive/${encodeURIComponent(m.id)}`, { method: "PUT", body: raw.blob as BodyInit, headers: { "X-Num": String(raw.num), "X-Start": String(raw.start) } });
         if (u.ok) pendingUpload.delete(m.id);
       }
+      await uploadPhotos();
       // logbook
       const merged = remote.lb ? mergeLogbooks(st.lb, remote.lb) : st.lb;
       const p = await api("/sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lb: merged, ver: remote.ver }) });

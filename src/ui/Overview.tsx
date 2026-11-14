@@ -88,9 +88,9 @@ export function OverviewScreen() {
           <Tiles items={[
             ["Hloubka", <>{num(last.h.maxDepth)} m<small className="sub">prům. {num(last.sum.avgDepth)} m</small></>],
             ["Doba", <><span className="toggle" onClick={() => setHmDur(!hmDur)}>{hmDur ? hm(last.h.diveTimeS / 60) : `${Math.round(last.h.diveTimeS / 60)} min`}</span><small className="sub">{last.sum.decoMin ? `deko ${last.sum.decoMin} min` : "bez deko"}</small></>],
-            ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"],
-            ["O₂", <><span className="pair">{num(last.sum.o2Start, 0)} → {num(last.sum.o2End, 0)}</span><small className="sub">bar{(last.sum.o2Start ?? 99) < 20 && (last.sum.o2End ?? 99) < 20 ? " · nejspíš mezitlak" : ""}</small></>],
             ["Diluent", <><span className="pair">{num(last.sum.dilStart, 0)} → {num(last.sum.dilEnd, 0)}</span><small className="sub">bar</small></>],
+            ["O₂", <><span className="pair">{num(last.sum.o2Start, 0)} → {num(last.sum.o2End, 0)}</span><small className="sub">bar{(last.sum.o2Start ?? 99) < 20 && (last.sum.o2End ?? 99) < 20 ? " · nejspíš mezitlak" : ""}</small></>],
+            ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"],
             ["Baterie", <BatteryMini />],
           ]} />
         </Card>
