@@ -1,7 +1,7 @@
 // Jednoduché SVG grafy s dotykovým popiskem (bez knihoven).
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-export interface Series { label: string; color: string; values: (number | null)[]; unit?: string; right?: boolean; width?: number; dash?: string }
+export interface Series { label: string; color: string; values: (number | null)[]; unit?: string; right?: boolean; width?: number; dash?: string; fillUp?: boolean }
 
 function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
   const ref = useRef<T>(null);
@@ -65,6 +65,17 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
     });
     return d;
   };
+  /** Plocha od křivky k nule (u obrácené osy hloubky = nahoru k hladině), po souvislých úsecích s hodnotou > 0. */
+  const area = (s: Series) => {
+    let d = "", seg: number[] = [];
+    const flush = () => {
+      if (seg.length > 1) d += "M" + X(t[seg[0]]).toFixed(1) + "," + Y(0).toFixed(1) + seg.map((i) => "L" + X(t[i]).toFixed(1) + "," + Y(s.values[i]!).toFixed(1)).join("") + "L" + X(t[seg[seg.length - 1]]).toFixed(1) + "," + Y(0).toFixed(1) + "Z";
+      seg = [];
+    };
+    s.values.forEach((v, i) => { if (v != null && v > 0) seg.push(i); else flush(); });
+    flush();
+    return d;
+  };
   const xs = xFmt ? 1 : 60;
   const yt = ticks(lo, hi, 4), xt = ticks(x0 / xs, x1 / xs, Math.max(2, Math.floor(W / 70)));
   const onMove = (e: React.PointerEvent) => {
@@ -89,6 +100,7 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
         {xt.map((v) => <text key={"x" + v} x={X(v * xs)} y={height - 5} textAnchor="middle">{xFmt ? xFmt(v) : Math.round(v) + "′"}</text>)}
         {zero && <line x1={m.l} x2={W - m.r} y1={Y(0)} y2={Y(0)} className="ref" />}
         {markers?.map((mt, i) => <line key={"m" + i} x1={X(mt)} x2={X(mt)} y1={xFmt ? m.t : height - m.b - 7} y2={height - m.b} className="marker" />)}
+        {series.filter((s) => s.fillUp && !s.right).map((s, i) => <path key={"f" + i} d={area(s)} fill={s.color} opacity={0.18} stroke="none" />)}
         {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={s.right ? 0.55 : 1} />)}
         {hover != null && <line x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref" />}
       </svg>

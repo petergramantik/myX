@@ -9,6 +9,11 @@ export interface Summary {
 
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
 
+/** Potápěč je na dekompresní zastávce: má povinnost a je nejvýš 3 m pod hloubkou zastávky. */
+export const atStop = (d: Dive, i: number) => d.s.stop[i] > 0 && d.s.depth[i] <= d.s.stop[i] + 3;
+/** Hloubka zastávky jen v úsecích, kdy na ní potápěč skutečně byl (jinak null). */
+export const realStops = (d: Dive) => d.s.stop.map((v, i) => (atStop(d, i) ? v : null));
+
 export function summarize(d: Dive): Summary {
   const s = d.s, n = s.t.length;
   const idx = [...Array(n).keys()].filter((i) => inDive(d, i));
@@ -28,7 +33,7 @@ export function summarize(d: Dive): Summary {
     ceilMax: Math.max(...s.ceil), ttsMax: Math.max(...s.tts), gf99End: gfs.length ? gfs[gfs.length - 1] : null,
     descMax: rates.length ? round(Math.max(...rates), 1) : 0, ascMax: rates.length ? round(-Math.min(...rates), 1) : 0,
     batVMin: Math.min(...s.bv), // deko = čas v dekompresní povinnosti nejvýš 3 m pod hloubkou zastávky (tam už odpočet běží); deko režim = celá doba s povinností
-    decoMin: Math.round(idx.filter((i) => s.stop[i] > 0 && s.depth[i] <= s.stop[i] + 3).length * (d.h.rateS || 5) / 60),
+    decoMin: Math.round(idx.filter((i) => atStop(d, i)).length * (d.h.rateS || 5) / 60),
     decoModeMin: Math.round(idx.filter((i) => s.stop[i] > 0).length * (d.h.rateS || 5) / 60), dilStart: firstNum(s.dil), dilEnd: lastNum(s.dil), o2Start: firstNum(s.o2p), o2End: lastNum(s.o2p),
     dilUsed: [...new Set(s.o2.map((o, i) => `${o}/${s.he[i]}`))].join(", "),
   };

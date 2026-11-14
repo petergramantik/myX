@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { cellCalibration, diveWarnings, injections, summarize } from "../core/analysis";
+import { cellCalibration, diveWarnings, injections, realStops, summarize } from "../core/analysis";
 import { loadDive, myNum, setNote } from "../app/store";
 import { norm } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
@@ -77,12 +77,27 @@ export function DiveScreen({ id }: { id: string }) {
         {([["log", "Logbook"], ["charts", "Grafy"], ["values", "Hodnoty"], ["events", "Události"]] as [Tab, string][]).map(([k, l]) =>
           <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}
       </div>
+      <DiveTitle id={id} />
       {err && <p className="alert bad">{err}</p>}
       {tab === "log" && <LogTab id={id} d={d} />}
       {tab !== "log" && !d && !err && <p className="muted center">Dekóduji…</p>}
       {tab === "charts" && d && <ChartsTab d={d} />}
       {tab === "values" && d && <ValuesTab d={d} />}
       {tab === "events" && d && <EventsTab d={d} />}
+    </div>
+  );
+}
+
+function DiveTitle({ id }: { id: string }) {
+  const lb = useStore().lb;
+  const note = lb.notes[id];
+  const site = note?.siteId ? lb.sites[note.siteId] : null;
+  const buddies = (note?.buddyIds || []).map((b) => lb.buddies[b]?.name).filter(Boolean);
+  if (!site) return null;
+  return (
+    <div className="dive-title">
+      <h2 onClick={() => go({ t: "site", id: site.id })}>{site.name}</h2>
+      {buddies.length > 0 && <small>{buddies.join(", ")}</small>}
     </div>
   );
 }
@@ -96,7 +111,6 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   return (
     <>
       {warns.map((a, i) => <AlertBox key={i} a={a} />)}
-      <NoteEditor note={note} onChange={(p) => setNote(id, p)} />
       <Card title="V kostce">
         <Tiles items={[
           ["Max. hloubka", `${num(meta.h.maxDepth)} m`], ["Doba", `${Math.round(meta.h.diveTimeS / 60)} min`], ["Prům. hloubka", `${num(meta.sum.avgDepth)} m`],
@@ -105,7 +119,23 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Diluent", meta.sum.dilUsed], ["Vstřiky O₂ (odhad)", meta.inj], ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)], ["Baterie konec", `${meta.h.batVEnd.toFixed(2)} V`],
         ]} />
       </Card>
+      {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
+      <NoteEditor note={note} onChange={(p) => setNote(id, p)} />
     </>
+  );
+}
+
+function ProfileCard({ d }: { d: Dive }) {
+  const s = d.s;
+  const stops = useMemo(() => realStops(d), [d]);
+  return (
+    <Card title="Profil a dekompresní strop">
+      <LineChart t={s.t} invert height={220} series={[
+        { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m", fillUp: true },
+        { label: "Zastávka", color: C[1], values: stops, unit: "m", width: 3 },
+      ]} extra={[{ label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
+      <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna.</p>
+    </Card>
   );
 }
 
@@ -123,11 +153,7 @@ function ChartsTab({ d }: { d: Dive }) {
   const depthExtra = [{ label: "Hloubka", values: s.depth, unit: "m" }];
   return (
     <>
-      <Card title="Profil a dekompresní strop">
-        <LineChart t={s.t} invert height={220} series={[
-          { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m" }, { label: "Zastávka", color: C[1], values: s.stop, unit: "m", dash: "4 3" },
-        ]} extra={[{ label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
-      </Card>
+      <ProfileCard d={d} />
       <Card title="pO₂ a články" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
         {cellMode === "cal" ? (

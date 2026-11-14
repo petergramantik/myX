@@ -1,6 +1,6 @@
 // Testy jádra bez soukromých dat: syntetický záznam ponoru a sloučení logbooků.
 import { decodeDive } from "../src/core/shearwater";
-import { summarize, injections, alerts, DEFAULT_THRESHOLDS } from "../src/core/analysis";
+import { summarize, injections, alerts, realStops, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
 import { detectCellEvents, cellStatus, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
@@ -65,6 +65,12 @@ ok(cellStatus(1, ser, DEFAULT_CELL_TH, 20, 30, 12, ser.slice(0, 4)).level === "w
 const lb2 = emptyLogbook(); lb2.drafts.z = { id: "z", created: 1, buddyIds: [], note: "x", updated: 1 };
 const lb3 = emptyLogbook(); lb3.deleted.z = 2;
 ok(!mergeLogbooks(lb2, lb3).drafts.z, "spárovaný rozpracovaný ponor se smaže i na jiném zařízení");
+
+{ // zastávka v grafu jen tam, kde potápěč na zastávce opravdu je
+  const fake: any = { s: { stop: [0, 6, 6, 6, 3], depth: [30, 30, 8, 6, 3] } };
+  const r = realStops(fake);
+  ok(JSON.stringify(r) === JSON.stringify([null, null, 6, 6, 3]), "skutečné zastávky");
+}
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

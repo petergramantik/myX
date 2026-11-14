@@ -206,3 +206,5 @@ main.from-left { animation: fromLeft .2s ease-out; } main.from-right { animation
 .cells.four .co2t { margin-left: 8px; }
 .cells.four .celltile { padding: 8px; } .cells.four .ct-v { font-size: 21px; } .cells.four .ct-h { font-size: 12px; } .cells.four .ct-l { font-size: 10px; }
 .celltile.off { opacity: .5; cursor: default; } .ct-l.none { color: var(--muted); } .dot.none { background: var(--muted); }
+/* 1.5.1 – nadpis lokality v detailu ponoru */
+.dive-title { margin: 2px 2px 4px; } .dive-title h2 { margin: 0; font-size: 22px; cursor: pointer; } .dive-title small { color: var(--muted); font-size: 13px; }
