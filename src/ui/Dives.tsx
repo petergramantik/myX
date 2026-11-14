@@ -3,7 +3,7 @@ import type { Dive } from "../core/shearwater";
 import { cellCalibration, diveWarnings, injections, summarize } from "../core/analysis";
 import { loadDive, myNum, setNote } from "../app/store";
 import { norm } from "../app/model";
-import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, num, useStore } from "./common";
+import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { LineChart, TissueMap } from "./Chart";
 
@@ -102,7 +102,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Max. hloubka", `${num(meta.h.maxDepth)} m`], ["Doba", `${Math.round(meta.h.diveTimeS / 60)} min`], ["Prům. hloubka", `${num(meta.sum.avgDepth)} m`],
           ["Min. teplota", `${meta.sum.tempMin} °C`], ["GF", `${meta.h.gfLo}/${meta.h.gfHi}`], ["CNS konec", `${meta.h.cnsEnd} %`],
           ["Max. pO₂", `${num(meta.sum.ppo2Max, 2)} bar`], ["Max. CO₂", meta.sum.co2Max != null ? `${num(meta.sum.co2Max, 2)} mbar` : "–"],
-          ["Diluent", meta.sum.dilUsed], ["Vstřiky O₂ (odhad)", meta.inj], ["Scrubber zbývá", `${meta.h.scrubLeftEndMin} min`], ["Baterie konec", `${meta.h.batVEnd.toFixed(2)} V`],
+          ["Diluent", meta.sum.dilUsed], ["Vstřiky O₂ (odhad)", meta.inj], ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)], ["Baterie konec", `${meta.h.batVEnd.toFixed(2)} V`],
         ]} />
       </Card>
     </>
@@ -194,7 +194,7 @@ function ValuesTab({ d }: { d: Dive }) {
         ["Atmosférický tlak", `${h.surfP} → ${h.surfPEnd} mbar`, "J"], ["Salinita", `${h.salinity} kg/m³`, "J"],
         ["Baterie", h.batType, "P"], ["Napětí začátek / min / konec", `${h.batVStart.toFixed(2)} / ${sm.batVMin.toFixed(2)} / ${h.batVEnd.toFixed(2)} V`, "P"],
         ["Baterie %", `${h.batPctStart} → ${h.batPctEnd} %`, "P"], ["Prahy varování / kritický", `${h.batWarn} / ${h.batCrit} V`, "H"],
-        ["Scrubber celkem / začátek / konec", `${h.scrubTotalMin} / ${h.scrubLeftStartMin} / ${h.scrubLeftEndMin} min`, "P"],
+        ["Scrubber celkem", hm(h.scrubTotalMin), "P"], ["Scrubber zbývá na začátku / na konci", `${hm(h.scrubLeftStartMin)} / ${hm(h.scrubLeftEndMin)}`, "P"],
         ["Diluent začátek / konec", `${num(sm.dilStart, 0)} / ${num(sm.dilEnd, 0)} bar`, "J"], ["O₂ začátek / konec", `${num(sm.o2Start, 0)} / ${num(sm.o2End, 0)} bar`, "J"],
         ["Doba zapnutí počítače", `${h.onTimeH} h`, "P"], ["Verze logu", h.logVersion, "P"], ["Vzorkování", `${h.rateS} s`, "J"],
         ["Sériové číslo", h.serial.toString(16).toUpperCase(), "J"], ["Vzorků / snímků tkání", `${d.s.t.length} / ${d.tissues.length}`],

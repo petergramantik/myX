@@ -29,11 +29,14 @@ function ScrubberTile() {
   const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), lb.settings.th, lb.settings.manualFill);
   if (!sc) return null;
   const lvl = sc.alerts.some((a) => a.level === "bad") ? "bad" : sc.alerts.length ? "warn" : "ok";
+  const used = sc.total - sc.left;
   return (
     <section className={"card scrub " + lvl} onClick={() => go({ t: "settings" })}>
-      <div className="sc-h"><h2>Scrubber</h2><span>{sc.pct} %</span></div>
-      <div className="sc-v">{hm(sc.left)} <small>z {hm(sc.total)}</small></div>
+      <div className="sc-h"><h2>Scrubber</h2><span>zbývá {sc.pct} %</span></div>
+      <div className="sc-v">{hm(sc.left)} <small>zbývá</small></div>
+      <div className="sc-u">použito {hm(used)} ze {hm(sc.total)}</div>
       <div className="sc-bar"><i style={{ width: `${sc.pct}%` }} /><b style={{ left: `${lb.settings.th.scrubPct}%` }} /></div>
+      <div className="sc-lg"><span>◼ zbývá</span><span>◻ použito</span></div>
       <div className="sc-s">{sc.fill ? `Náplň od ${fmtDate(sc.fill)} · ${sc.days} dní` : "Datum náplně neznámé"}</div>
       {sc.alerts.map((a, i) => <div key={i} className={"sc-a " + a.level}>⚠ {a.title}: {a.text}</div>)}
     </section>
@@ -50,7 +53,7 @@ export function OverviewScreen() {
   for (const m of st.metas) bySerial.set(m.h.serial, [...(bySerial.get(m.h.serial) || []), m]);
   const multi = bySerial.size > 1;
   const batAl = [...bySerial].flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null)
-    .filter((a) => !a.title.startsWith("Scrubber")).map((a) => (multi ? { ...a, title: `${a.title} (počítač ${ser.toString(16).toUpperCase()})` } : a)));
+    .filter((a) => a.kind !== "scrubber").map((a) => (multi ? { ...a, title: `${a.title} (počítač ${ser.toString(16).toUpperCase()})` } : a)));
   const drafts = Object.values(lb.drafts).sort((a, b) => b.created - a.created);
   const last = st.metas[st.metas.length - 1];
   const lastNote = last ? lb.notes[last.id] : undefined;

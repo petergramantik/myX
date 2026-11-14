@@ -8,7 +8,7 @@ export const useStore = (): State => useSyncExternalStore(subscribe, getState);
 export type Screen =
   | { t: "home" } | { t: "dives"; site?: string; buddy?: string } | { t: "dive"; id: string }
   | { t: "sites" } | { t: "site"; id: string } | { t: "buddies" } | { t: "buddy"; id: string }
-  | { t: "settings" } | { t: "about" } | { t: "draft"; id: string } | { t: "cells"; pos?: number };
+  | { t: "settings" } | { t: "about" } | { t: "draft"; id: string } | { t: "cells"; pos?: number; install?: string };
 
 let stack: Screen[] = [{ t: "home" }];
 const navSubs = new Set<() => void>();
@@ -88,7 +88,7 @@ export function RatingPicker({ value, onChange }: { value?: string; onChange: (v
   );
 }
 
-export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
+export { hm } from "../core/analysis";
 
 export function AlertBox({ a }: { a: { level: string; title: string; text: string } }) {
   return <div className={"alert " + a.level}><b>{a.title}</b><div>{a.text}</div></div>;

@@ -1,9 +1,19 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.1";
+export const APP_VERSION = "1.1.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.1.1", date: "14. 11. 2026", title: "Přehlednější scrubber a čidla",
+    items: [
+      "Scrubber: velkým písmem zbývající čas, pod ním použitý čas, popisky u pruhu",
+      "Čas scrubberu všude v hodinách a minutách",
+      "Upozornění „Sorbent příliš starý“ místo „Scrubber dlouho otevřený“",
+      "Dlaždice čidel s popisky: mV na vzduchu, O₂ 1 bar, výměna, stáří",
+      "„Ano, zadat čidlo“ otevře rovnou formulář s předvyplněným datem",
+    ],
+  },
   {
     version: "1.1", date: "14. 11. 2026", title: "Čidla, scrubber a nový ponor",
     items: [

@@ -44,7 +44,7 @@ function Body({ s }: { s: Screen }) {
     case "settings": return <SettingsScreen />;
     case "about": return <AboutScreen />;
     case "draft": return <DraftScreen id={s.id} />;
-    case "cells": return <CellsScreen pos={s.pos} />;
+    case "cells": return <CellsScreen pos={s.pos} install={s.install} />;
   }
 }
 

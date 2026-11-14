@@ -61,9 +61,13 @@ export function CellTiles() {
           return (
             <div key={pos} className={"celltile " + s.level} onClick={() => go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className={"dot " + s.level} /></div>
-              <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"}<small> mV vzd.</small></div>
-              <div className="ct-s">{mvb != null ? `${num(mvb, 0)} mV/bar` : "bez signálu"}</div>
-              <div className="ct-s">{cell ? `od ${fmtIso(cell.installed)}` : "výměna nezadaná"}</div>
+              <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"} <small>mV</small></div>
+              <div className="ct-u">na vzduchu</div>
+              <div className="ct-rows">
+                <div><span>O₂ 1 bar</span><b>{mvb != null ? `${num(mvb, 0)} mV` : "–"}</b></div>
+                <div><span>Výměna</span><b>{cell ? fmtIso(cell.installed) : "nezadaná"}</b></div>
+                {age != null && <div><span>Stáří</span><b>{Math.floor(age)} / {cell?.lifeM || 12} měs.</b></div>}
+              </div>
               {age != null && <div className="ct-bar"><i style={{ width: `${Math.min(100, (age / (cell?.lifeM || 12)) * 100)}%` }} /></div>}
               <div className={"ct-l " + s.level}>{LV[s.level]}</div>
             </div>
@@ -89,20 +93,20 @@ function CellPrompt({ p }: { p: Prompt }) {
       <b>Čidlo {p.pos}: změna citlivosti{p.tentative ? " (zatím nepotvrzená)" : ""}</b>
       <div>Mezi ponory č. {p.myNo - 1} ({fmtDate(p.prev.start)}) a č. {p.myNo} ({fmtDate(p.meta.start)}) vyskočila citlivost. Vyměnil jsi čidlo?</div>
       <div className="row">
-        <button className="btn" onClick={() => go({ t: "cells", pos: p.pos })}>Ano, zadat čidlo</button>
+        <button className="btn" onClick={() => go({ t: "cells", pos: p.pos, install: isoOf(p.meta.start) })}>Ano, zadat čidlo</button>
         <button className="btn" onClick={() => answerCellPrompt(p.key, "cal")}>Ne, jen kalibrace</button>
       </div>
     </div>
   );
 }
 
-export function CellsScreen({ pos }: { pos?: number }) {
+export function CellsScreen({ pos, install }: { pos?: number; install?: string }) {
   const c = useCells();
   const st = useStore();
   return (
     <div className="screen">
       {c.prompts.filter((p) => !pos || p.pos === pos).map((p) => <CellPrompt key={p.key} p={p} />)}
-      {[1, 2, 3].filter((x) => !pos || x === pos).map((p) => <CellPosition key={p} pos={p as 1 | 2 | 3} c={c} metas={st.metas} />)}
+      {[1, 2, 3].filter((x) => !pos || x === pos).map((p) => <CellPosition key={p} pos={p as 1 | 2 | 3} c={c} metas={st.metas} install={p === pos ? install : undefined} />)}
       {pos && <button className="btn" onClick={() => go({ t: "cells" })}>Zobrazit všechny pozice</button>}
       <Card title="Jak se stav čidla počítá">
         <ul className="small">
@@ -117,9 +121,9 @@ export function CellsScreen({ pos }: { pos?: number }) {
   );
 }
 
-function CellPosition({ pos, c, metas }: { pos: 1 | 2 | 3; c: ReturnType<typeof useCells>; metas: Meta[] }) {
-  const [edit, setEdit] = useState<Partial<Cell> | null>(null);
+function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnType<typeof useCells>; metas: Meta[]; install?: string }) {
   const cur = c.current(pos);
+  const [edit, setEdit] = useState<Partial<Cell> | null>(install ? { pos, installed: install, lifeM: 12, maker: cur?.maker || "" } : null);
   const hist = c.cells.filter((x) => x.pos === pos).sort((a, b) => b.installed.localeCompare(a.installed));
   const s = c.status[pos - 1];
   const xs = c.ccr.map(({ i }) => i + 1);

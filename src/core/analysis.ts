@@ -66,7 +66,10 @@ export function injections(d: Dive): Injection[] {
   return out;
 }
 
-export interface Alert { level: "warn" | "bad" | "info"; title: string; text: string }
+export interface Alert { level: "warn" | "bad" | "info"; title: string; text: string; kind?: "scrubber" | "battery" }
+
+/** Minuty jako „4 h 41 min“. */
+export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
 
 export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number }
 export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05 };
@@ -91,7 +94,7 @@ export function scrubberInfo(hs: Header[], nowLocal: number, th: Thresholds, man
   const total = last.scrubTotalMin || 1, left = last.scrubLeftEndMin, pct = Math.round((left / total) * 100);
   const fill = manualFill ?? scrubberFill(sorted)?.start ?? null;
   const days = fill ? Math.floor((nowLocal - fill) / DAY) : null;
-  return { left, total, pct, fill, days, alerts: alerts(sorted, nowLocal, th, manualFill).filter((a) => a.title.startsWith("Scrubber")) };
+  return { left, total, pct, fill, days, alerts: alerts(sorted, nowLocal, th, manualFill).filter((a) => a.kind === "scrubber") };
 }
 
 /** Upozornění na úvodní obrazovce. hs = hlavičky ponorů, nowLocal = aktuální místní čas jako „UTC“ sekundy. */
@@ -104,23 +107,23 @@ export function alerts(hs: Header[], nowLocal: number, th: Thresholds, manualFil
   const total = last.scrubTotalMin || 1;
   const left = last.scrubLeftEndMin;
   const pct = Math.round((left / total) * 100);
-  if (pct <= th.scrubPct) out.push({ level: pct <= 20 ? "bad" : "warn", title: "Scrubber za polovinou", text: `Zbývá ${left} z ${total} min (${pct} %) podle počítadla po ponoru č. ${last.num}.` });
+  if (pct <= th.scrubPct) out.push({ kind: "scrubber", level: pct <= 20 ? "bad" : "warn", title: "Scrubber za polovinou", text: `Zbývá ${hm(left)} ze ${hm(total)} (${pct} %).` });
   const fill = manualFill ?? scrubberFill(sorted)?.start ?? null;
   if (fill && left < total) {
     const days = Math.floor((nowLocal - fill) / DAY);
-    if (days >= th.scrubDays) out.push({ level: "warn", title: "Scrubber dlouho otevřený", text: `Náplň od ${fmtDate(fill)} – už ${days} dní. Zvaž výměnu i přes zbývajících ${left} min.` });
+    if (days >= th.scrubDays) out.push({ kind: "scrubber", level: "warn", title: "Sorbent příliš starý", text: `Náplň od ${fmtDate(fill)} – už ${days} dní. Zvaž výměnu i přes zbývajících ${hm(left)}.` });
   }
   // baterie: podle posledních ponorů se stejným typem baterie
   const same = sorted.filter((h) => h.batTypeCode === last.batTypeCode).slice(-6);
   const vs = same.map((h) => h.batVStart);
   const warn = last.batWarn;
   if (last.batVEnd <= warn || last.batVStart <= warn + th.batMarginV) {
-    out.push({ level: last.batVEnd <= last.batCrit ? "bad" : "warn", title: "Slabá baterie", text: `Napětí na začátku ${last.batVStart.toFixed(2)} V, na konci ${last.batVEnd.toFixed(2)} V, práh varování ${warn.toFixed(2)} V (${last.batType}).` });
+    out.push({ kind: "battery", level: last.batVEnd <= last.batCrit ? "bad" : "warn", title: "Slabá baterie", text: `Napětí na začátku ${last.batVStart.toFixed(2)} V, na konci ${last.batVEnd.toFixed(2)} V, práh varování ${warn.toFixed(2)} V (${last.batType}).` });
   } else if (vs.length >= 3) {
     const slope = (vs[vs.length - 1] - vs[0]) / (vs.length - 1);
     if (slope < 0) {
       const dives = Math.floor((vs[vs.length - 1] - warn) / -slope);
-      if (dives <= 4) out.push({ level: "warn", title: "Baterie slábne", text: `Napětí na začátku ponoru klesá o ${(-slope * 1000).toFixed(0)} mV na ponor (teď ${vs[vs.length - 1].toFixed(2)} V). Práh ${warn.toFixed(2)} V za zhruba ${Math.max(dives, 1)} ponor(y).` });
+      if (dives <= 4) out.push({ kind: "battery", level: "warn", title: "Baterie slábne", text: `Napětí na začátku ponoru klesá o ${(-slope * 1000).toFixed(0)} mV na ponor (teď ${vs[vs.length - 1].toFixed(2)} V). Práh ${warn.toFixed(2)} V za zhruba ${Math.max(dives, 1)} ponor(y).` });
     }
   }
   return out;
