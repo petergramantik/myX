@@ -4,7 +4,7 @@ import { injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
 import * as db from "./db";
-import { emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type WeatherSnap } from "./model";
+import { emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
 export interface Pos { lat: number; lon: number; acc: number; at: number }
@@ -174,6 +174,21 @@ export async function deleteCell(id: string) {
   lb.deleted[id] = Date.now();
   await saveLb(lb);
 }
+export async function saveBattery(b: Partial<Battery> & { pos: 1 | 2; installed: string }): Promise<Battery> {
+  const lb = structuredClone(st.lb);
+  const bat: Battery = { maker: "", ...(b.id ? lb.batteries[b.id] : {}), ...b, id: b.id || uid(), updated: Date.now() } as Battery;
+  if (!b.id) for (const o of Object.values(lb.batteries)) if (o.pos === bat.pos && !o.removed && o.installed <= bat.installed) lb.batteries[o.id] = { ...o, removed: bat.installed, updated: Date.now() };
+  lb.batteries[bat.id] = bat;
+  await saveLb(lb);
+  return bat;
+}
+export async function deleteBattery(id: string) {
+  const lb = structuredClone(st.lb);
+  delete lb.batteries[id];
+  lb.deleted[id] = Date.now();
+  await saveLb(lb);
+}
+
 export function answerCellPrompt(key: string, answer: "change" | "cal") {
   const lb = structuredClone(st.lb);
   lb.answered[key] = { answer, updated: Date.now() };
@@ -270,6 +285,7 @@ export function nearestSite(pos = st.pos): { site: Site; km: number } | null {
 const pendingUpload = new Set<string>();
 let syncTimer: ReturnType<typeof setTimeout> | undefined;
 let syncing = false;
+let lastSyncErr = "";
 export function scheduleSync() {
   if (!workerUrl() || !syncKey()) return;
   clearTimeout(syncTimer);
@@ -321,12 +337,16 @@ export async function syncNow(): Promise<void> {
       if (!p.ok) throw new Error(`Worker: ${p.status}`);
       st = { ...st, lb: mergeLogbooks(merged, st.lb) };
       await db.put("kv", st.lb, "lb");
+      lastSyncErr = "";
       set({ sync: { state: "idle", msg: "Synchronizováno", at: Date.now() } });
       return;
     }
     throw new Error("Konflikt synchronizace, zkus to znovu");
   } catch (e) {
-    set({ sync: { state: "error", msg: (e as Error).message || "Chyba synchronizace", at: Date.now() } });
+    const msg = (e as Error).message || "Chyba synchronizace";
+    if (msg !== lastSyncErr) toast("Synchronizace selhala: " + msg);
+    lastSyncErr = msg;
+    set({ sync: { state: "error", msg, at: Date.now() } });
   } finally {
     syncing = false;
   }

@@ -1,9 +1,19 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.1.1";
+export const APP_VERSION = "1.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.2", date: "14. 11. 2026", title: "Baterie a nové záhlaví",
+    items: [
+      "Dlaždice baterií na přehledu: Petrel z logu (napětí, typ, trend) a dvě baterie v hlavě",
+      "Evidence baterií v hlavě: typ, datum výměny, hodiny a ponory od výměny, historie",
+      "Varování pro baterie v hlavě po nastaveném počtu hodin nebo měsíců",
+      "Tlačítko ＋ v záhlaví pro nový ponor",
+      "Záhlaví ve tvaru „myX – název obrazovky“",
+    ],
+  },
   {
     version: "1.1.1", date: "14. 11. 2026", title: "Přehlednější scrubber a čidla",
     items: [

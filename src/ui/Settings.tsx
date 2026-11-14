@@ -37,6 +37,8 @@ export function SettingsScreen() {
         <label>Čidla – výměna pod (mV na vzduchu)<input inputMode="decimal" defaultValue={th.cellAirBad} onBlur={(e) => setTh("cellAirBad", e.target.value)} /></label>
         <label>Čidla – pokles citlivosti za měsíc (%)<input inputMode="decimal" defaultValue={th.cellDropPct} onBlur={(e) => setTh("cellDropPct", e.target.value)} /></label>
         <label>Čidla – linearita pod (current limiting)<input inputMode="decimal" defaultValue={th.cellLinWarn} onBlur={(e) => setTh("cellLinWarn", e.target.value)} /></label>
+        <label>Baterie v hlavě – varovat po hodinách pod vodou (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatHours} onBlur={(e) => setTh("headBatHours", e.target.value)} /></label>
+        <label>Baterie v hlavě – varovat po měsících od výměny (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatMonths} onBlur={(e) => setTh("headBatMonths", e.target.value)} /></label>
         <label>CO₂ – podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
           <input type="date" value={manual ? new Date(manual * 1000).toISOString().slice(0, 10) : ""} onChange={(e) => saveSettings({ manualFill: e.target.value ? Date.parse(e.target.value + "T12:00:00Z") / 1000 : null })} />

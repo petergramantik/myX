@@ -17,11 +17,15 @@ export interface DiveNote { siteId?: string; buddyIds: string[]; note: string; r
 export interface Draft extends DiveNote { id: string; created: number; lat?: number; lon?: number; diveId?: string }
 /** Záznam o O₂ čidle v cartridgi. Data ve formátu RRRR-MM-DD. */
 export interface Cell { id: string; pos: 1 | 2 | 3; maker: string; type?: string; made?: string; installed: string; lifeM: number; removed?: string; reason?: string; note?: string; updated: number }
-export interface Settings { th: Thresholds & CellThresholds; manualFill: number | null; updated: number }
+/** Baterie v hlavě X-CCR (pozice 1 nebo 2). Data ve formátu RRRR-MM-DD. */
+export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string; volt?: string; installed: string; removed?: string; note?: string; updated: number }
+export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
   cells: Record<string, Cell>;
+  batteries: Record<string, Battery>;
   answered: Record<string, { answer: "change" | "cal"; updated: number }>; // odpovědi na dotaz „vyměnil jsi čidlo?“ (klíč pozice:idPonoru)
   sites: Record<string, Site>;
   buddies: Record<string, Buddy>;
@@ -33,9 +37,9 @@ export interface Logbook {
 export const META_V = 2;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number }
 
-export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH };
+export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };
 export const emptyLogbook = (): Logbook => ({
-  drafts: {}, cells: {}, answered: {}, sites: {}, buddies: {}, notes: {}, deleted: {},
+  drafts: {}, cells: {}, batteries: {}, answered: {}, sites: {}, buddies: {}, notes: {}, deleted: {},
   settings: { th: { ...DEFAULT_ALL_TH }, manualFill: null, updated: 0 },
 });
 
@@ -56,6 +60,7 @@ export function mergeLogbooks(a: Logbook, b: Logbook): Logbook {
   return {
     drafts: mergeMap(a.drafts || {}, b.drafts || {}, deleted),
     cells: mergeMap(a.cells || {}, b.cells || {}, deleted),
+    batteries: mergeMap(a.batteries || {}, b.batteries || {}, deleted),
     answered: mergeMap(a.answered || {}, b.answered || {}, {}),
     sites: mergeMap(a.sites, b.sites || {}, deleted),
     buddies: mergeMap(a.buddies, b.buddies || {}, deleted),

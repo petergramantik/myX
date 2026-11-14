@@ -3,6 +3,7 @@ import { alerts, scrubberInfo } from "../core/analysis";
 import { createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { CellTiles } from "./Cells";
+import { BatteryTiles } from "./Batteries";
 
 export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }: { label?: string }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -52,7 +53,8 @@ export function OverviewScreen() {
   const bySerial = new Map<number, typeof st.metas>();
   for (const m of st.metas) bySerial.set(m.h.serial, [...(bySerial.get(m.h.serial) || []), m]);
   const multi = bySerial.size > 1;
-  const batAl = [...bySerial].flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null)
+  const lastSer = st.metas[st.metas.length - 1]?.h.serial;
+  const batAl = [...bySerial].filter(([ser]) => ser !== lastSer).flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null)
     .filter((a) => a.kind !== "scrubber").map((a) => (multi ? { ...a, title: `${a.title} (počítač ${ser.toString(16).toUpperCase()})` } : a)));
   const drafts = Object.values(lb.drafts).sort((a, b) => b.created - a.created);
   const last = st.metas[st.metas.length - 1];
@@ -64,6 +66,7 @@ export function OverviewScreen() {
     <div className="screen">
       <ScrubberTile />
       <CellTiles />
+      <BatteryTiles />
       {batAl.map((a, i) => <AlertBox key={i} a={a} />)}
 
       <button className="btn primary big" disabled={busy} onClick={async () => { setBusy(true); try { const id = await createDraft(); go({ t: "draft", id }); } finally { setBusy(false); } }}>

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { init, locate, scheduleSync, syncNow } from "./app/store";
 import { back, go, tab, useScreen, useStore, type Screen } from "./ui/common";
@@ -8,6 +8,8 @@ import { BuddiesScreen, BuddyScreen, SiteScreen, SitesScreen } from "./ui/Sites"
 import { AboutScreen, SettingsScreen } from "./ui/Settings";
 import { DraftScreen } from "./ui/Draft";
 import { CellsScreen } from "./ui/Cells";
+import { BatteriesScreen } from "./ui/Batteries";
+import { createDraft } from "./app/store";
 import { APP_VERSION } from "./app/version";
 import "./ui/app.css";
 
@@ -17,10 +19,13 @@ const TABS: [Screen, string, string][] = [
 ];
 
 function title(s: Screen, st: ReturnType<typeof useStore>): string {
+  return "myX – " + screenName(s, st);
+}
+function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
   switch (s.t) {
-    case "home": return "myX";
+    case "home": return "Přehled";
     case "dives": return "Ponory";
-    case "dive": return "Ponor";
+    case "dive": { const n = st.metas.findIndex((m) => m.id === s.id) + 1; return n ? `Ponor ${n}` : "Ponor"; }
     case "sites": return "Lokality";
     case "site": return st.lb.sites[s.id]?.name || "Lokalita";
     case "buddies": return "Parťáci";
@@ -29,6 +34,7 @@ function title(s: Screen, st: ReturnType<typeof useStore>): string {
     case "about": return "Co je nového";
     case "draft": return "Nový ponor";
     case "cells": return "O₂ čidla";
+    case "bats": return "Baterie";
   }
 }
 
@@ -45,6 +51,7 @@ function Body({ s }: { s: Screen }) {
     case "about": return <AboutScreen />;
     case "draft": return <DraftScreen id={s.id} />;
     case "cells": return <CellsScreen pos={s.pos} install={s.install} />;
+    case "bats": return <BatteriesScreen pos={s.pos} />;
   }
 }
 
@@ -54,13 +61,14 @@ function App() {
   const s = useScreen();
   const st = useStore();
   useEffect(() => { init(); }, []);
-  const syncDot = st.sync.state === "busy" ? "busy" : st.sync.state === "error" ? "error" : st.sync.state === "idle" ? "ok" : "off";
+  const [busy, setBusy] = useState(false);
+  const newDive = async () => { if (busy) return; setBusy(true); try { const id = await createDraft(); go({ t: "draft", id }); } finally { setBusy(false); } };
   return (
     <div className="app">
       <header className="top">
         {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo">X</span>}
         <h1>{title(s, st)}</h1>
-        <button className={"syncdot " + syncDot} title={st.sync.msg} onClick={() => go({ t: "settings" })} aria-label="Synchronizace" />
+        <button className={"plus" + (busy ? " busy" : "")} onClick={newDive} aria-label="Nový ponor">＋</button>
       </header>
       <main>{st.ready ? <Body s={s} /> : <p className="muted center">Načítám…</p>}</main>
       <nav className="tabs-bottom">

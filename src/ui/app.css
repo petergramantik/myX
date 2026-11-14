@@ -149,3 +149,7 @@ ul.small { font-size: 13px; color: var(--muted); }
 .ct-rows span { color: var(--muted); }
 .ct-rows b { font-weight: 600; font-size: 12px; }
 .ct-l { margin-top: 6px; text-transform: uppercase; letter-spacing: .03em; }
+/* 1.2 – záhlaví */
+.plus { width: 36px; height: 36px; border-radius: 10px; border: 0; background: #0277bd; color: #fff; font-size: 22px; line-height: 1; display: grid; place-items: center; }
+.plus.busy { opacity: .5; }
+.top h1 { font-size: 17px; }
