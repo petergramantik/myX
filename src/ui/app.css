@@ -153,3 +153,4 @@ ul.small { font-size: 13px; color: var(--muted); }
 .plus { width: 36px; height: 36px; border-radius: 10px; border: 0; background: #0277bd; color: #fff; font-size: 22px; line-height: 1; display: grid; place-items: center; }
 .plus.busy { opacity: .5; }
 .top h1 { font-size: 17px; }
+.toggle { cursor: pointer; border-bottom: 1px dashed var(--muted); }

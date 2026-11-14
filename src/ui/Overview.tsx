@@ -49,6 +49,7 @@ export function OverviewScreen() {
   useEffect(() => { if (!st.pos) locate(); }, []);
   const lb = st.lb;
   const [busy, setBusy] = useState(false);
+  const [hmDur, setHmDur] = useState(false);
   // baterie zvlášť pro každý počítač (sériové číslo)
   const bySerial = new Map<number, typeof st.metas>();
   for (const m of st.metas) bySerial.set(m.h.serial, [...(bySerial.get(m.h.serial) || []), m]);
@@ -69,9 +70,6 @@ export function OverviewScreen() {
       <BatteryTiles />
       {batAl.map((a, i) => <AlertBox key={i} a={a} />)}
 
-      <button className="btn primary big" disabled={busy} onClick={async () => { setBusy(true); try { const id = await createDraft(); go({ t: "draft", id }); } finally { setBusy(false); } }}>
-        {busy ? "Zjišťuji polohu…" : "＋ Nový ponor"}
-      </button>
 
       {drafts.length > 0 && (
         <Card title="Čekají na data z počítače">
@@ -88,7 +86,7 @@ export function OverviewScreen() {
         <Card title="Poslední ponor" right={<a onClick={() => go({ t: "dive", id: last.id })}>Detail ›</a>}>
           <p className="muted">č. {st.metas.length} · {fmtDate(last.start)} · {lastNote?.siteId ? lb.sites[lastNote.siteId]?.name : "lokalita nezadaná"} {lastNote?.rating ? RATING[lastNote.rating].icon : ""}</p>
           <Tiles items={[
-            ["Max. hloubka", `${num(last.h.maxDepth)} m`], ["Doba", `${Math.round(last.h.diveTimeS / 60)} min`],
+            ["Max. hloubka", `${num(last.h.maxDepth)} m`], ["Doba", <span className="toggle" onClick={() => setHmDur(!hmDur)}>{hmDur ? hm(last.h.diveTimeS / 60) : `${Math.round(last.h.diveTimeS / 60)} min`}</span>],
             ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"], ["Baterie", `${last.h.batVEnd.toFixed(2)} V`],
             ["O₂ / dil", `${num(last.sum.o2End, 0)} / ${num(last.sum.dilEnd, 0)} bar`], ["CNS", `${last.h.cnsEnd} %`],
           ]} />
@@ -102,7 +100,7 @@ export function OverviewScreen() {
       {st.metas.length > 0 && (
         <Card title="Celkem">
           <Tiles items={[
-            ["Ponorů", st.metas.length], ["Hodin pod vodou", num(totalMin / 60, 1)],
+            ["Ponorů", st.metas.length], ["Pod vodou", hm(totalMin)],
             ["Lokalit", Object.keys(lb.sites).length], ["Parťáků", Object.keys(lb.buddies).length],
           ]} />
         </Card>
@@ -119,6 +117,9 @@ export function OverviewScreen() {
           )
         ) : <p className="muted">{st.posErr || "Zjišťuji polohu…"} <a onClick={() => locate()}>Zkusit znovu</a></p>}
       </Card>
+      <button className="btn primary big" disabled={busy} onClick={async () => { setBusy(true); try { const id = await createDraft(); go({ t: "draft", id }); } finally { setBusy(false); } }}>
+        {busy ? "Zjišťuji polohu…" : "＋ Nový ponor"}
+      </button>
     </div>
   );
 }
