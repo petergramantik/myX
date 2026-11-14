@@ -217,3 +217,5 @@ main.from-left { animation: fromLeft .2s ease-out; } main.from-right { animation
 .wgroup .wg-h.link { cursor: pointer; }
 .wgroup ul { margin: 6px 0 0; padding-left: 18px; } .wgroup li { color: var(--fg); margin: 3px 0; } .wgroup li.c-bad::marker { color: var(--bad); } .wgroup li.c-warn::marker { color: var(--warn); } .wgroup li.c-info::marker { color: var(--accent); }
 .prompt-bare { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.screen.from-left { animation: fromLeft .2s ease-out; } .screen.from-right { animation: fromRight .2s ease-out; }
+@media (prefers-reduced-motion: reduce) { .screen.from-left, .screen.from-right { animation: none; } }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { cellCalibration, diveWarnings, injections, realStops, summarize } from "../core/analysis";
 import { loadDive, myNum, setNote } from "../app/store";
@@ -61,17 +61,32 @@ export function DiveScreen({ id }: { id: string }) {
   const [d, setD] = useState<Dive | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("log");
+  const [slide, setSlide] = useState("");
+  const touch = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => { setD(null); loadDive(id).then(setD).catch((e) => setErr(e.message)); }, [id]);
   const meta = st.metas.find((m) => m.id === id);
   if (!meta) return <div className="screen"><p>Ponor nenalezen.</p></div>;
   const idx = st.metas.indexOf(meta);
   const prev = st.metas[idx - 1], next = st.metas[idx + 1];
+  const onTouchStart = (e: React.TouchEvent) => {
+    const el = e.target as HTMLElement;
+    // grafy a aktivní prvky mají vlastní gesta – tam přejetí ponor nepřepíná
+    touch.current = el.closest(".chart, .tile.link, .toggle, button, input, textarea, select, a, label, .picker, .heat") ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const t0 = touch.current; touch.current = null;
+    if (!t0) return;
+    const t = e.changedTouches[0], dx = t.clientX - t0.x, dy = t.clientY - t0.y;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+    if (dx < 0 && next) { setSlide("from-right"); go({ t: "dive", id: next.id }); }
+    else if (dx > 0 && prev) { setSlide("from-left"); go({ t: "dive", id: prev.id }); }
+  };
   return (
-    <div className="screen">
+    <div className={"screen " + slide} key={id} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onAnimationEnd={() => setSlide("")}>
       <div className="dive-head">
-        <button className="btn small" disabled={!prev} onClick={() => prev && go({ t: "dive", id: prev.id })}>‹</button>
+        <button className="btn small" disabled={!prev} onClick={() => { if (prev) { setSlide("from-left"); go({ t: "dive", id: prev.id }); } }}>‹</button>
         <div><b>Ponor {myNum(id)}</b><small>{fmtDateTime(meta.start)} · v počítači #{meta.num}</small></div>
-        <button className="btn small" disabled={!next} onClick={() => next && go({ t: "dive", id: next.id })}>›</button>
+        <button className="btn small" disabled={!next} onClick={() => { if (next) { setSlide("from-right"); go({ t: "dive", id: next.id }); } }}>›</button>
       </div>
       <div className="tabs">
         {([["log", "Logbook"], ["charts", "Grafy"], ["values", "Hodnoty"], ["events", "Události"]] as [Tab, string][]).map(([k, l]) =>
@@ -89,7 +104,9 @@ export function DiveScreen({ id }: { id: string }) {
 }
 
 function DiveTitle({ id }: { id: string }) {
-  const lb = useStore().lb;
+  const st = useStore();
+  const lb = st.lb;
+  const meta = st.metas.find((m) => m.id === id);
   const note = lb.notes[id];
   const site = note?.siteId ? lb.sites[note.siteId] : null;
   const buddies = (note?.buddyIds || []).map((b) => lb.buddies[b]?.name).filter(Boolean);
@@ -97,7 +114,7 @@ function DiveTitle({ id }: { id: string }) {
   return (
     <div className="dive-title">
       <h2 onClick={() => go({ t: "site", id: site.id })}>{site.name}</h2>
-      {buddies.length > 0 && <small>{buddies.join(", ")}</small>}
+      <small>{meta ? fmtDate(meta.start) : ""}{buddies.length ? ` · ${buddies.join(", ")}` : ""}</small>
     </div>
   );
 }
@@ -128,12 +145,13 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
 function ProfileCard({ d }: { d: Dive }) {
   const s = d.s;
   const stops = useMemo(() => realStops(d), [d]);
+  const first = stops.findIndex((v) => v != null);
   return (
     <Card title="Profil a dekompresní strop">
       <LineChart t={s.t} invert height={220} series={[
         { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m", fillUp: true },
         { label: "Zastávka", color: C[1], values: stops, unit: "m", width: 3 },
-      ]} extra={[{ label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
+      ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} extra={[{ label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
       <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna.</p>
     </Card>
   );
