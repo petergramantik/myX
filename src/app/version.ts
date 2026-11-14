@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.4";
+export const APP_VERSION = "1.4.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.4.1", date: "14. 11. 2026", title: "Přehlednější panely a klikatelné Celkem",
+    items: [
+      "Čidla a baterie v rozbalovacích panelech mají vlastní dlaždice s nadpisem v barvě stavu",
+      "Dlaždice v Celkem otevírají seznam ponorů, lokalit, buddy a rekordní ponory",
+      "Nejhlubší ponor zvlášť pro TMX (diluent jiný než vzduch) a AIR",
+      "Parťáci přejmenováni na Buddy",
+    ],
+  },
   {
     version: "1.4", date: "14. 11. 2026", title: "Okno Varování a kompaktní scrubber",
     items: [

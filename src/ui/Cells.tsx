@@ -126,8 +126,8 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
           {[1, 2, 3].map((pos) => {
             const s = c.status[pos - 1], cur = c.current(pos), emp = c.empty(pos);
             return (
-              <div key={pos} className="pcell">
-                <div className="pcell-h"><b>Čidlo {pos}</b><span className={"pill " + s.level}>{emp ? "Prázdná" : LV[s.level]}</span></div>
+              <div key={pos} className={"pcell ptile " + (emp ? "warn" : s.level)}>
+                <div className="pcell-h"><b className={"c-" + (emp ? "warn" : s.level)}>Čidlo {pos}</b><span className={"pill " + s.level}>{emp ? "Prázdná" : LV[s.level]}</span></div>
                 <div className="pcell-row">
                   <div className="pcell-info">
                     {!emp && <div className="kvline"><span>O₂ 1 bar</span><b>{lastMv(pos) != null ? `${num(lastMv(pos)!, 0)} mV` : "–"}</b><span>na vzduchu</span><b>{lastMv(pos) != null ? `${num(lastMv(pos)! * 0.21, 1)} mV` : "–"}</b></div>}

@@ -28,7 +28,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   return (
     <div className="screen">
       {(site || buddy) && <p className="muted">Filtr: {site ? lb.sites[site]?.name : lb.buddies[buddy!]?.name} · <a onClick={() => go({ t: "dives" })}>zrušit</a></p>}
-      <input className="search" placeholder="Hledat lokalitu, parťáka, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="search" placeholder="Hledat lokalitu, buddy, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="seg filter">
         {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
       </div>

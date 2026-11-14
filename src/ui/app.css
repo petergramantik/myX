@@ -193,3 +193,11 @@ main.from-left { animation: fromLeft .2s ease-out; } main.from-right { animation
 @keyframes fromLeft { from { transform: translateX(-30%); opacity: .4; } to { transform: none; opacity: 1; } }
 @keyframes fromRight { from { transform: translateX(30%); opacity: .4; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { main.from-left, main.from-right { animation: none; } }
+/* 1.4.1 – dlaždice v panelech, klikatelné Celkem */
+.pcell.ptile { border: 1px solid var(--line); border-left-width: 4px; border-radius: 12px; padding: 10px 12px; background: var(--bg); }
+.pcell.ptile.ok { border-left-color: var(--ok); } .pcell.ptile.warn { border-left-color: var(--warn); } .pcell.ptile.bad { border-left-color: var(--bad); }
+.pcell.ptile .pcell-h b { font-size: 16px; } .c-none { color: var(--muted); }
+.tile.link, .dp.link { cursor: pointer; } .tile.link .k::after { content: " ›"; color: var(--accent); }
+.dp2 { display: flex; justify-content: space-between; gap: 8px; } .dp { display: flex; flex-direction: column; }
+.dp2 .dp:last-child { align-items: flex-end; } .dp .sub { font-size: 11px; color: var(--muted); font-weight: 600; }
+.dp2 .dp { white-space: nowrap; font-size: .82em; }

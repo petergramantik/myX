@@ -97,15 +97,15 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
       </button>
       {open && (
         <div className="panel-b">
-          <div className="pcell">
-            <div className="pcell-h"><b>Petrel</b><span className={"pill " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{bad ? "Vyměnit" : b.petrelAlerts.length ? "Varování" : "V pořádku"}</span></div>
+          <div className={"pcell ptile " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>
+            <div className="pcell-h"><b className={"c-" + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>Petrel</b><span className={"pill " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{bad ? "Vyměnit" : b.petrelAlerts.length ? "Varování" : "V pořádku"}</span></div>
             <div className="kvline"><span>Typ</span><b>{h.batType}</b><span>Trend</span><b>{trend > 0.005 ? "↗" : trend < -0.005 ? "↘" : "→"} {trend >= 0 ? "+" : ""}{Math.round(trend * 1000)} mV</b></div>
             <small>{h.batVStart.toFixed(2).replace(".", ",")} → {h.batVEnd.toFixed(2).replace(".", ",")} V v posledním ponoru · {pp.est ? `odhad z napětí ${pp.pct} % (NiMH procenta Petrel neukládá)` : `${pp.pct} % podle Petrelu`}</small>
             {b.petrelAlerts.length ? b.petrelAlerts.map((a, i) => <div key={i} className={"reason " + a.level}>{a.text}</div>) : <div className="reason ok">✓ v pořádku</div>}
           </div>
           {b.head.map((x) => (
-            <div key={x.pos} className="pcell">
-              <div className="pcell-h"><b>Hlava – baterie {x.pos}</b><span className={"pill " + (x.reasons.length ? "warn" : x.cur ? "ok" : "")}>{x.reasons.length ? "Vyměnit" : x.cur ? "V pořádku" : "Nezadaná"}</span></div>
+            <div key={x.pos} className={"pcell ptile " + (x.reasons.length ? "warn" : x.cur ? "ok" : "none")}>
+              <div className="pcell-h"><b className={"c-" + (x.reasons.length ? "warn" : x.cur ? "ok" : "none")}>Hlava – baterie {x.pos}</b><span className={"pill " + (x.reasons.length ? "warn" : x.cur ? "ok" : "")}>{x.reasons.length ? "Vyměnit" : x.cur ? "V pořádku" : "Nezadaná"}</span></div>
               {x.cur ? <small>{x.cur.maker || "Baterie"}{x.cur.model ? ` ${x.cur.model}` : ""}{x.cur.volt ? ` (${x.cur.volt})` : ""} · výměna {fmtIso(x.cur.installed)} · {x.dives} ponorů · {hm(x.minutes)} pod vodou{b.th.headBatHours > 0 ? ` z limitu ${b.th.headBatHours} h` : ""}</small> : <small>Výměna zatím nezadaná.</small>}
               {x.reasons.length ? x.reasons.map((r, i) => <div key={i} className="reason warn">{r}</div>) : x.cur ? <div className="reason ok">✓ v pořádku</div> : null}
             </div>

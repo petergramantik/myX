@@ -161,9 +161,9 @@ export function BuddiesScreen() {
           <div className="li-main"><b>{b.name}</b><small>{counts[b.id] ? `${counts[b.id].n} ponorů · naposledy ${fmtDate(counts[b.id].last)}` : "bez ponorů"}</small></div>
         </div>
       ))}
-      {!list.length && <p className="muted center">Parťáci vznikají, když je zadáš u ponoru.</p>}
+      {!list.length && <p className="muted center">Buddy vznikají, když je zadáš u ponoru.</p>}
       <div className="row">
-        <input value={name} placeholder="Nový parťák" onChange={(e) => setName(e.target.value)} />
+        <input value={name} placeholder="Nový buddy" onChange={(e) => setName(e.target.value)} />
         <button className="btn" disabled={!name.trim()} onClick={async () => { await upsertBuddy({ name: name.trim() }); setName(""); }}>Přidat</button>
       </div>
     </div>
@@ -175,13 +175,13 @@ export function BuddyScreen({ id }: { id: string }) {
   const b = st.lb.buddies[id];
   const [name, setName] = useState(b?.name || "");
   useEffect(() => setName(b?.name || ""), [id, b?.name]);
-  if (!b) return <div className="screen"><p>Parťák neexistuje.</p></div>;
+  if (!b) return <div className="screen"><p>Buddy neexistuje.</p></div>;
   const dives = st.metas.filter((m) => st.lb.notes[m.id]?.buddyIds.includes(id));
   const sites: Record<string, number> = {};
   for (const m of dives) { const s = st.lb.notes[m.id]?.siteId; if (s) sites[s] = (sites[s] || 0) + 1; }
   return (
     <div className="screen">
-      <Card title="Parťák">
+      <Card title="Buddy">
         <div className="row">
           <input value={name} onChange={(e) => setName(e.target.value)} />
           <button className="btn" disabled={!name.trim() || name === b.name} onClick={() => upsertBuddy({ ...b, name: name.trim() })}>Uložit</button>
@@ -195,7 +195,7 @@ export function BuddyScreen({ id }: { id: string }) {
       </Card>
       <Card title="Úpravy">
         <MergeRow items={Object.values(st.lb.buddies).filter((x) => x.id !== id)} onMerge={async (into) => { await mergeInto("buddy", id, into); back(); toast("Sloučeno"); }} />
-        <button className="btn danger" onClick={async () => { if (confirm(`Smazat parťáka „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
+        <button className="btn danger" onClick={async () => { if (confirm(`Smazat buddy „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
       </Card>
     </div>
   );

@@ -16,7 +16,7 @@ import "./ui/app.css";
 
 const TABS: [Screen, string, string][] = [
   [{ t: "home" }, "Přehled", "◉"], [{ t: "dives" }, "Ponory", "≋"], [{ t: "sites" }, "Lokality", "⌖"],
-  [{ t: "buddies" }, "Parťáci", "☺"], [{ t: "settings" }, "Nastavení", "⚙"],
+  [{ t: "buddies" }, "Buddy", "☺"], [{ t: "settings" }, "Nastavení", "⚙"],
 ];
 
 function title(s: Screen, st: ReturnType<typeof useStore>): string {
@@ -29,8 +29,8 @@ function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
     case "dive": { const n = st.metas.findIndex((m) => m.id === s.id) + 1; return n ? `Ponor ${n}` : "Ponor"; }
     case "sites": return "Lokality";
     case "site": return st.lb.sites[s.id]?.name || "Lokalita";
-    case "buddies": return "Parťáci";
-    case "buddy": return st.lb.buddies[s.id]?.name || "Parťák";
+    case "buddies": return "Buddy";
+    case "buddy": return st.lb.buddies[s.id]?.name || "Buddy";
     case "settings": return "Nastavení";
     case "about": return "Co je nového";
     case "draft": return "Nový ponor";

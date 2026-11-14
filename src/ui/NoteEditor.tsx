@@ -1,4 +1,4 @@
-// Společný editor logbooku (lokalita, parťáci, hodnocení, poznámka, počasí) pro ponor i rozpracovaný ponor.
+// Společný editor logbooku (lokalita, buddy, hodnocení, poznámka, počasí) pro ponor i rozpracovaný ponor.
 import { useEffect, useState } from "react";
 import type { DiveNote } from "../app/model";
 import { findBuddyByName, findSiteByName, upsertBuddy, upsertSite } from "../app/store";
@@ -23,7 +23,7 @@ export function NoteEditor({ note, onChange, pos }: { note: DiveNote; onChange: 
       </Card>
       <Card title="S kým">
         <div className="chips">{note.buddyIds.map((b) => lb.buddies[b] && <Chip key={b} onClick={() => go({ t: "buddy", id: b })} onX={() => onChange({ buddyIds: note.buddyIds.filter((x) => x !== b) })}>{lb.buddies[b].name}</Chip>)}</div>
-        <Picker items={buddyItems} placeholder="Přidat parťáka" onPick={(bid) => onChange({ buddyIds: [...note.buddyIds, bid] })}
+        <Picker items={buddyItems} placeholder="Přidat buddy" onPick={(bid) => onChange({ buddyIds: [...note.buddyIds, bid] })}
           onCreate={async (name) => { const b = findBuddyByName(name) || (await upsertBuddy({ name })); onChange({ buddyIds: [...new Set([...note.buddyIds, b.id])] }); }} />
       </Card>
       <Card title="Hodnocení">

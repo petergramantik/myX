@@ -34,8 +34,8 @@ export function Card({ title, children, right, id }: { title?: string; children:
   );
 }
 
-export function Tiles({ items }: { items: [string, React.ReactNode][] }) {
-  return <div className="tiles">{items.map(([k, v]) => <div className="tile" key={k}><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>;
+export function Tiles({ items }: { items: [string, React.ReactNode, (() => void)?][] }) {
+  return <div className="tiles">{items.map(([k, v, on]) => <div className={"tile" + (on ? " link" : "")} key={k} onClick={on}><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>;
 }
 
 export function KV({ rows }: { rows: [string, React.ReactNode, string?][] }) {

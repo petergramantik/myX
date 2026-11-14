@@ -3,6 +3,7 @@ import { alerts, scrubberInfo } from "../core/analysis";
 import { createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { CellTiles } from "./Cells";
+import type { Meta } from "../app/model";
 import { BatteryTiles, useBatteries } from "./Batteries";
 
 export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }: { label?: string }) {
@@ -46,6 +47,20 @@ function ScrubberTile() {
   );
 }
 
+/** TMX = diluent na začátku ponoru jiný než vzduch (helium nebo O₂ ≠ 21 %), AIR = vzduch. */
+const isAirDil = (m: Meta) => (m.sum.dilUsed.split(",")[0] || "").trim() === "21/0";
+function DeepestTile() {
+  const st = useStore();
+  const pick = (air: boolean) => st.metas.filter((m) => isAirDil(m) === air).reduce<Meta | null>((b, m) => (!b || m.h.maxDepth > b.h.maxDepth ? m : b), null);
+  const tmx = pick(false), air = pick(true);
+  const cell = (lbl: string, m: Meta | null) => (
+    <span className={"dp" + (m ? " link" : "")} onClick={(e) => { e.stopPropagation(); if (m) go({ t: "dive", id: m.id }); }}>
+      {m ? `${num(m.h.maxDepth)} m` : "–"}<small className="sub">{lbl}</small>
+    </span>
+  );
+  return <span className="dp2">{cell("TMX", tmx)}{cell("AIR", air)}</span>;
+}
+
 export function OverviewScreen() {
   const st = useStore();
   useEffect(() => { if (!st.pos) locate(); }, []);
@@ -65,6 +80,7 @@ export function OverviewScreen() {
   const near = nearestSite();
   const here = near && near.km <= 2 ? near.site : null;
   const totalMin = st.metas.reduce((a, m) => a + m.h.diveTimeS, 0) / 60;
+  const longest = st.metas.reduce((b, m) => (m.h.diveTimeS > b.h.diveTimeS ? m : b), st.metas[0]);
   return (
     <div className="screen">
       <ScrubberTile />
@@ -104,10 +120,10 @@ export function OverviewScreen() {
       {st.metas.length > 0 && (
         <Card title="Celkem">
           <Tiles items={[
-            ["Ponorů", st.metas.length], ["Pod vodou", hm(totalMin)],
-            ["Lokalit", Object.keys(lb.sites).length], ["Parťáků", Object.keys(lb.buddies).length],
-            ["Nejhlubší", `${num(Math.max(...st.metas.map((m) => m.h.maxDepth)))} m`],
-            ["Nejdelší", hm(Math.max(...st.metas.map((m) => m.h.diveTimeS)) / 60)],
+            ["Ponorů", st.metas.length, () => go({ t: "dives" })], ["Pod vodou", hm(totalMin)],
+            ["Lokalit", Object.keys(lb.sites).length, () => go({ t: "sites" })], ["Buddy", Object.keys(lb.buddies).length, () => go({ t: "buddies" })],
+            ["Nejhlubší", <DeepestTile />],
+            ["Nejdelší", hm(longest.h.diveTimeS / 60), () => go({ t: "dive", id: longest.id })],
           ]} />
         </Card>
       )}
