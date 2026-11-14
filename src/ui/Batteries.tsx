@@ -46,8 +46,6 @@ export function BatteryTiles() {
   const b = useBatteries();
   if (!b.last) return null;
   const h = b.last.h;
-  const prev = b.petrel.filter((m) => m.h.batTypeCode === h.batTypeCode).slice(-4, -1);
-  const trend = prev.length ? h.batVStart - prev[0].h.batVStart : 0;
   const pLvl = b.petrelAlerts.some((a) => a.level === "bad") ? "bad" : b.petrelAlerts.length ? "warn" : "ok";
   return (
     <>
@@ -56,10 +54,6 @@ export function BatteryTiles() {
           <div className="ct-h"><b>Petrel</b><span className={"dot " + pLvl} /></div>
           <div className="ct-v">{h.batVStart.toFixed(2).replace(".", ",")} <small>V</small></div>
           <div className="ct-u">na začátku ponoru</div>
-          <div className="ct-rows">
-            <div><span>Typ</span><b>{h.batType}</b></div>
-            <div><span>Trend</span><b>{trend > 0.005 ? "↗" : trend < -0.005 ? "↘" : "→"} {trend >= 0 ? "+" : ""}{Math.round(trend * 1000)} mV</b></div>
-          </div>
           <div className={"ct-l " + pLvl}>{pLvl === "ok" ? "V pořádku" : pLvl === "warn" ? "Varování" : "Vyměnit"}</div>
         </div>
         {b.head.map((x) => {
@@ -70,10 +64,6 @@ export function BatteryTiles() {
               {x.cur ? <>
                 <div className="ct-v">{num(x.minutes / 60, 1)} <small>h</small></div>
                 <div className="ct-u">pod vodou od výměny</div>
-                <div className="ct-rows">
-                  <div><span>Výměna</span><b>{fmtIso(x.cur.installed)}</b></div>
-                  <div><span>Ponorů</span><b>{x.dives}</b></div>
-                </div>
               </> : <><div className="ct-v">–</div><div className="ct-u">výměna nezadaná</div></>}
               <div className={"ct-l " + lvl}>{lvl === "ok" ? "V pořádku" : lvl === "warn" ? "Vyměnit" : "Zadat"}</div>
             </div>
@@ -92,6 +82,8 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
   const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem(K_OPEN, v ? "1" : "0"); } catch { /* */ } };
   const h = b.last!.h;
   const pp = petrelPct(h);
+  const prev = b.petrel.filter((m) => m.h.batTypeCode === h.batTypeCode).slice(-4, -1);
+  const trend = prev.length ? h.batVStart - prev[0].h.batVStart : 0;
   const headTxt = (x: (typeof b.head)[number]) => !x.cur ? "–" : b.th.headBatHours > 0 ? `${Math.max(0, Math.round(100 - (x.minutes / 60 / b.th.headBatHours) * 100))} %` : `${num(x.minutes / 60, 1)} h`;
   const bad = b.petrelAlerts.some((a) => a.level === "bad");
   const warn = b.petrelAlerts.length > 0 || b.head.some((x) => x.reasons.length);
@@ -107,7 +99,8 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
         <div className="panel-b">
           <div className="pcell">
             <div className="pcell-h"><b>Petrel</b><span className={"pill " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{bad ? "Vyměnit" : b.petrelAlerts.length ? "Varování" : "V pořádku"}</span></div>
-            <small>{h.batType} · {h.batVStart.toFixed(2).replace(".", ",")} → {h.batVEnd.toFixed(2).replace(".", ",")} V v posledním ponoru · {pp.est ? `odhad z napětí ${pp.pct} % (NiMH procenta Petrel neukládá)` : `${pp.pct} % podle Petrelu`}</small>
+            <div className="kvline"><span>Typ</span><b>{h.batType}</b><span>Trend</span><b>{trend > 0.005 ? "↗" : trend < -0.005 ? "↘" : "→"} {trend >= 0 ? "+" : ""}{Math.round(trend * 1000)} mV</b></div>
+            <small>{h.batVStart.toFixed(2).replace(".", ",")} → {h.batVEnd.toFixed(2).replace(".", ",")} V v posledním ponoru · {pp.est ? `odhad z napětí ${pp.pct} % (NiMH procenta Petrel neukládá)` : `${pp.pct} % podle Petrelu`}</small>
             {b.petrelAlerts.length ? b.petrelAlerts.map((a, i) => <div key={i} className={"reason " + a.level}>{a.text}</div>) : <div className="reason ok">✓ v pořádku</div>}
           </div>
           {b.head.map((x) => (

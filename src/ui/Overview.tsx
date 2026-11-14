@@ -105,6 +105,8 @@ export function OverviewScreen() {
           <Tiles items={[
             ["Ponorů", st.metas.length], ["Pod vodou", hm(totalMin)],
             ["Lokalit", Object.keys(lb.sites).length], ["Parťáků", Object.keys(lb.buddies).length],
+            ["Nejhlubší", `${num(Math.max(...st.metas.map((m) => m.h.maxDepth)))} m`],
+            ["Nejdelší", hm(Math.max(...st.metas.map((m) => m.h.diveTimeS)) / 60)],
           ]} />
         </Card>
       )}

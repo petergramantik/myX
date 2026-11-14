@@ -79,14 +79,12 @@ export function CellTiles() {
     <>
       <div className="cells">
         {[1, 2, 3].map((pos) => {
-          const cell = c.current(pos), s = c.status[pos - 1], mvb = last.mvBar[pos - 1];
-          const age = monthsSince(cell?.installed, c.now);
+          const s = c.status[pos - 1], mvb = last.mvBar[pos - 1];
           if (c.empty(pos)) return (
             <div key={pos} className="celltile info" onClick={() => go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className="dot info" /></div>
               <div className="ct-v">–</div>
               <div className="ct-u">pozice prázdná</div>
-              <div className="ct-rows"><div><span>Vyjmuto</span><b>{fmtIso(c.empty(pos)!.removed)}</b></div></div>
               <div className="ct-l info">Vlož čidlo</div>
             </div>
           );
@@ -95,12 +93,6 @@ export function CellTiles() {
               <div className="ct-h"><b>Čidlo {pos}</b><span className={"dot " + s.level} /></div>
               <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"} <small>mV</small></div>
               <div className="ct-u">na vzduchu</div>
-              <div className="ct-rows">
-                <div><span>O₂ 1 bar</span><b>{mvb != null ? `${num(mvb, 0)} mV` : "–"}</b></div>
-                <div><span>Výměna</span><b>{cell ? fmtIso(cell.installed) : "nezadaná"}</b></div>
-                {age != null && <div><span>Stáří</span><b>{Math.floor(age)} / {cell?.lifeM || 12} měs.</b></div>}
-              </div>
-              {age != null && <div className="ct-bar"><i style={{ width: `${Math.min(100, (age / (cell?.lifeM || 12)) * 100)}%` }} /></div>}
               <div className={"ct-l " + s.level}>{LV[s.level]}</div>
             </div>
           );
@@ -121,6 +113,7 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
   const summary = problems.length === 0 ? "✓ Čidla v pořádku"
     : problems.length === 1 ? `⚠ Čidlo ${problems[0].k + 1}: ${problems[0].s.reasons[0]?.startsWith("Pozice prázdná") ? "prázdná pozice" : LV[problems[0].s.level].toLowerCase()}`
     : `⚠ ${problems.length} čidla s upozorněním`;
+  const lastMv = (pos: number) => c.series[c.series.length - 1]?.mvBar[pos - 1] ?? null;
   const cal = c.lastCal ? `kalibrace ${fmtDate(c.lastCal.start)} (před ${Math.floor((c.now - c.lastCal.start) / DAY)} dny)` : "kalibrace nezjištěna";
   return (
     <section className={"panel " + worst}>
@@ -139,9 +132,12 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
                 <div className="pcell-row">
                   <Photo ids={(cur || emp)?.photos} />
                   <div className="pcell-info">
+                    {!emp && <div className="kvline"><span>O₂ 1 bar</span><b>{lastMv(pos) != null ? `${num(lastMv(pos)!, 0)} mV` : "–"}</b><span>na vzduchu</span><b>{lastMv(pos) != null ? `${num(lastMv(pos)! * 0.21, 1)} mV` : "–"}</b></div>}
                     {cur ? <>
                       <div>{cur.maker || "Čidlo"}{cur.type ? ` ${cur.type}` : ""}{cur.sn ? ` · S/N ${cur.sn}` : ""}</div>
-                      <small>výměna {fmtIso(cur.installed)}{cur.made ? ` · výroba ${fmtIso(cur.made)}` : ""} · životnost {cur.lifeM} měs.</small>
+                      <div className="kvline"><span>Výměna</span><b>{fmtIso(cur.installed)}</b>{cur.made && <><span>Výroba</span><b>{fmtIso(cur.made)}</b></>}</div>
+                      <div className="kvline"><span>Stáří</span><b>{Math.floor(monthsSince(cur.installed, c.now) || 0)} / {cur.lifeM} měs.</b></div>
+                      <div className="ct-bar"><i style={{ width: `${Math.min(100, ((monthsSince(cur.installed, c.now) || 0) / (cur.lifeM || 12)) * 100)}%` }} /></div>
                     </> : emp ? <small>Vyjmuto {fmtIso(emp.removed)} ({emp.maker || "čidlo"}{emp.sn ? ` S/N ${emp.sn}` : ""}). Nové čidlo zadej při vložení.</small>
                       : <small>Čidlo na této pozici zatím není zadané.</small>}
                     {s.level === "ok" ? <div className="reason ok">✓ v pořádku</div> : s.reasons.filter((r) => !r.startsWith("Pozice prázdná")).map((r, i) => <div key={i} className={"reason " + s.level}>{r}</div>)}

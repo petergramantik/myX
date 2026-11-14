@@ -89,8 +89,8 @@ export function cellStatus(k: number, recent: CellDive[], th: CellThresholds, ag
   const mvb = last?.mvBar[k] ?? null;
   if (mvb != null) {
     const air = mvb * 0.21;
-    if (air < th.cellAirBad) { up("bad"); reasons.push(`Jen ${air.toFixed(1)} mV na vzduchu (hranice ${th.cellAirBad} mV)`); }
-    else if (air < th.cellAirWarn) { up("warn"); reasons.push(`${air.toFixed(1)} mV na vzduchu – pod ${th.cellAirWarn} mV`); }
+    if (air < th.cellAirBad) { up("bad"); reasons.push(`Jen ${air.toFixed(1).replace(".", ",")} mV na vzduchu (hranice ${th.cellAirBad} mV)`); }
+    else if (air < th.cellAirWarn) { up("warn"); reasons.push(`${air.toFixed(1).replace(".", ",")} mV na vzduchu – pod ${th.cellAirWarn} mV`); }
     const refV = ref.map((r) => r.mvBar[k]).filter((x): x is number => x != null);
     const curV = recent.slice(-2).map((r) => r.mvBar[k]).filter((x): x is number => x != null);
     if (refV.length && curV.length) {

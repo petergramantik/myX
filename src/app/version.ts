@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.3";
+export const APP_VERSION = "1.3.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.3.1", date: "14. 11. 2026", title: "Přehlednější dlaždice, skutečný čas deko",
+    items: [
+      "Dlaždice čidel a baterií ukazují jen hlavní hodnotu a stav, podrobnosti jsou v rozbalovacím panelu",
+      "Deko = čas skutečně strávený na zastávkách (nejvýš 3 m pod hloubkou zastávky); deko režim je v detailu ponoru",
+      "V kartě Celkem jsou zpět Nejhlubší a Nejdelší ponor",
+    ],
+  },
   {
     version: "1.3", date: "14. 11. 2026", title: "Panely čidel a baterií, fotky čidel",
     items: [
