@@ -116,19 +116,40 @@ export function GasChips({ mixes }: { mixes: string[] }) {
 const EXT_KINDS: Record<string, number> = { S80: 11.1, S40: 5.7 };
 const fmtL = (l: number) => `${Math.round(l)} l`;
 
+/** Osobní rychlost spotřeby O₂ (l/min) z ponorů se známou spotřebou: měřený tlak vlastní lahve nebo zadaná externí lahev. */
+export function personalO2Rate(metas: Meta[], notes: Record<string, DiveNote>, cylO2: number): { lo: number; hi: number; n: number } | null {
+  const rates: number[] = [];
+  for (const m of metas) {
+    const min = m.h.diveTimeS / 60;
+    if (min < 15) continue;
+    const n = notes[m.id];
+    if (n?.useManual?.o2 != null) { rates.push(n.useManual.o2 / min); continue; }
+    const own = m.sum.o2Use.ok && !m.sum.o2Use.noisy ? m.sum.o2Use.bar * cylO2 : 0;
+    const ext = (n?.ext || []).filter((e) => e.gas === "o2" && e.start != null && e.end != null).reduce((a, e) => a + Math.max(0, e.start! - e.end!) * e.vol, 0);
+    // vlastní lahev musí být měřená celý ponor (bez externího plynu), nebo musí být zadaná externí lahev
+    if ((own && !m.sum.o2Use.ext.length) || ext) rates.push((own + ext) / min);
+  }
+  const ok = rates.filter((r) => r > 0.4 && r < 3);
+  if (ok.length < 2) return null;
+  return { lo: Math.min(...ok) * 0.95, hi: Math.max(...ok) * 1.05, n: ok.length };
+}
+
 /** Spotřeba plynu ponoru: vlastní lahev (z průběhu tlaku) + externí lahve, nebo ruční údaj. */
-function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol: number) {
+function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol: number, rate?: { lo: number; hi: number; n: number } | null) {
   const u = gas === "dil" ? meta.sum.dilUse : meta.sum.o2Use;
   const manual = note?.useManual?.[gas];
   const ext = (note?.ext || []).filter((e) => e.gas === gas);
   const extL = ext.reduce((a, e) => a + (e.start != null && e.end != null ? Math.max(0, e.start - e.end) * e.vol : 0), 0);
   const ownL = u.ok && !u.noisy ? u.bar * vol : null;
   const min = meta.h.diveTimeS / 60;
-  return { u, manual, ext, extL, ownL, total: manual ?? (ownL != null || extL ? (ownL || 0) + extL : null), min, metab: [0.8 * min, 1.5 * min] as const };
+  const metab = rate ? [rate.lo * min, rate.hi * min] as const : [0.8 * min, 1.5 * min] as const;
+  return { u, manual, ext, extL, ownL, total: manual ?? (ownL != null || extL ? (ownL || 0) + extL : null), min, metab, personal: !!rate };
 }
 
 /** Externí plyn: snímač ukazuje mezitlak, tlak během ponoru výrazně vzrostl, nebo je zadaná externí lahev. */
 const extDetected = (u: Meta["sum"]["dilUse"]) => !u.ok || u.ext.length > 0;
+export const hasExt = (meta: Meta, note: DiveNote | undefined, gas: "dil" | "o2") =>
+  extDetected(gas === "dil" ? meta.sum.dilUse : meta.sum.o2Use) || (note?.ext || []).some((e) => e.gas === gas);
 
 function UseTile(props: { gas: "dil" | "o2"; meta: Meta; note?: DiveNote }) {
   const g0 = gasUseOf(props.gas, props.meta, props.note, 3);
@@ -137,13 +158,15 @@ function UseTile(props: { gas: "dil" | "o2"; meta: Meta; note?: DiveNote }) {
 }
 
 function UseVal({ gas, meta, note }: { gas: "dil" | "o2"; meta: Meta; note?: DiveNote }) {
-  const vol = useStore().lb.settings.cyl?.[gas] ?? 3;
-  const g = gasUseOf(gas, meta, note, vol);
+  const st = useStore();
+  const vol = st.lb.settings.cyl?.[gas] ?? 3;
+  const rate = gas === "o2" ? personalO2Rate(st.metas, st.lb.notes, st.lb.settings.cyl?.o2 ?? 3) : null;
+  const g = gasUseOf(gas, meta, note, vol, rate);
   if (g.manual != null) return <span className="use">{fmtL(g.manual)}<small>zadáno ručně</small></span>;
   if (g.total != null) return (
     <span className="use">{fmtL(g.total)}<small>{g.u.ok && !g.u.noisy ? `${g.u.bar} bar · ` : ""}{num(g.total / g.min, 1)} l/min{g.extL ? ` · ext. ${fmtL(g.extL)}` : ""}</small></span>
   );
-  if (gas === "o2") return <span className="use">~{Math.round(g.metab[0])}–{Math.round(g.metab[1])} l<small>{g.u.noisy ? "tlak nespolehlivý · " : ""}odhad z doby</small></span>;
+  if (gas === "o2") return <span className="use">~{Math.round(g.metab[0])}–{Math.round(g.metab[1])} l<small>{g.u.noisy ? "tlak nespolehlivý · " : ""}{g.personal ? "osobní odhad" : "odhad z doby"}</small></span>;
   return <span className="use">–<small>{g.u.noisy ? "tlak nespolehlivý" : "zadej tlak externí lahve"}</small></span>;
 }
 
@@ -154,14 +177,17 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
   const save = (p: Partial<DiveNote>) => setNote(id, p);
   const setExt = (eid: string, p: Partial<ExtGas>, virt?: ExtGas) => save({ ext: virt && !ext.some((e) => e.id === eid) ? [...ext, { ...virt, ...p, id: uid() }] : ext.map((e) => (e.id === eid ? { ...e, ...p } : e)) });
   const n = (v: string) => { const x = parseFloat(v.replace(",", ".")); return Number.isNaN(x) ? undefined : x; };
+  const rate = personalO2Rate(st.metas, st.lb.notes, cyl.o2);
   const row = (gas: "dil" | "o2", name: string) => {
-    const g = gasUseOf(gas, meta, note, cyl[gas]);
+    const g = gasUseOf(gas, meta, note, cyl[gas], gas === "o2" ? rate : null);
     const u = g.u;
     return (
       <div className="pcell ptile">
         <div className="pcell-h"><b>{name}</b><span className="muted">vlastní lahev {num(cyl[gas], 1)} l</span></div>
         <small>{u.ok ? <>Tlak {num(u.start ?? 0, 0)} → {num(u.end ?? 0, 0)} bar · spotřeba {u.noisy ? "nespolehlivá (rozkmitaný tlak)" : `${u.bar} bar = ${fmtL(u.bar * cyl[gas])}`}</>
-          : <>Plyn z externí lahve ({gas === "o2" ? "S40" : "S80"}) – snímač ukazuje jen mezitlak. Zadej tlak start/end externí lahve.{gas === "o2" ? ` Do té doby metabolický odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (odhadnuto ${meta.inj} vstřiků).` : ""}</>}</small>
+          : <>Plyn z externí lahve ({gas === "o2" ? "S40" : "S80"}) – snímač ukazuje jen mezitlak. Zadej tlak start/end externí lahve.{gas === "o2" ? (rate
+            ? ` Do té doby osobní odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (tvoje spotřeba ${num(rate.lo, 2)}–${num(rate.hi, 2)} l/min z ${rate.n} ponorů se známou spotřebou).`
+            : ` Do té doby obecný metabolický odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (0,8–1,5 l/min; osobní odhad bude po 2 ponorech se známou spotřebou O₂).`) : ""}</>}</small>
         {u.ext.length > 0 && <small className="c-warn">Externí plyn nebo zavřená lahev nejspíš: {u.ext.map(([a, b]) => (a === b ? `${a}. min` : `${a}.–${b}. min`)).join(", ")}</small>}
         {(() => {
           const mine = ext.filter((e) => e.gas === gas);

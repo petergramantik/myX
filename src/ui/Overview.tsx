@@ -3,6 +3,7 @@ import { alerts, scrubberInfo } from "../core/analysis";
 import { createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { CellTiles, useCells } from "./Cells";
+import { hasExt } from "./Dives";
 import type { Meta } from "../app/model";
 import { BatteryTiles, useBatteries } from "./Batteries";
 
@@ -127,12 +128,15 @@ export function OverviewScreen() {
 
       {last ? (
         <Card title="Poslední ponor" right={<a onClick={() => go({ t: "dive", id: last.id })}>Detail ›</a>}>
-          <p className="muted">č. {st.metas.length} · {fmtDate(last.start)} · {lastNote?.siteId ? lb.sites[lastNote.siteId]?.name : "lokalita nezadaná"} {lastNote?.rating ? RATING[lastNote.rating].icon : ""}</p>
+          <p className="muted last-date">č. {st.metas.length} · {fmtDate(last.start)} {lastNote?.rating ? RATING[lastNote.rating].icon : ""}</p>
+          {lastNote?.siteId && lb.sites[lastNote.siteId]
+            ? <p className="last-site link" onClick={() => go({ t: "site", id: lastNote.siteId! })}>📍 {lb.sites[lastNote.siteId].name}</p>
+            : <p className="last-site muted link" onClick={() => go({ t: "dive", id: last.id })}>lokalita nezadaná ›</p>}
           <Tiles items={[
             ["Hloubka", <>{num(last.h.maxDepth)} m<small className="sub">prům. {num(last.sum.avgDepth)} m</small></>],
             ["Doba", <><span className="toggle" onClick={() => setHmDur(!hmDur)}>{hmDur ? hm(last.h.diveTimeS / 60) : `${Math.round(last.h.diveTimeS / 60)} min`}</span><small className="sub">{last.sum.decoMin ? `deko ${last.sum.decoMin} min` : "bez deko"}</small></>],
-            ["Diluent", <><span className="pair">{num(last.sum.dilStart, 0)} → {num(last.sum.dilEnd, 0)}</span><small className="sub">bar</small></>],
-            ["O₂", <><span className="pair">{num(last.sum.o2Start, 0)} → {num(last.sum.o2End, 0)}</span><small className="sub">bar{(last.sum.o2Start ?? 99) < 20 && (last.sum.o2End ?? 99) < 20 ? " · nejspíš mezitlak" : ""}</small></>],
+            ["Diluent", <>{hasExt(last, lastNote, "dil") && <span className="extflag">EXT</span>}<span className="nw">{num(last.sum.dilStart, 0)} → {num(last.sum.dilEnd, 0)}</span><small className="sub">bar</small></>],
+            ["O₂", <>{hasExt(last, lastNote, "o2") && <span className="extflag">EXT</span>}<span className="nw">{num(last.sum.o2Start, 0)} → {num(last.sum.o2End, 0)}</span><small className="sub">bar{(last.sum.o2Start ?? 99) < 20 && (last.sum.o2End ?? 99) < 20 ? " · nejspíš mezitlak" : ""}</small></>],
             ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"],
             ["Baterie", <BatteryMini />],
           ]} />

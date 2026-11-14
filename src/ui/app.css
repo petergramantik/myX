@@ -259,3 +259,8 @@ label.inline { display: flex; align-items: center; gap: 6px; font-size: 13px; } 
 .tile { position: relative; }
 .tile.hot { border: 1px solid var(--warn); } .tile.hot .v { color: var(--warn); }
 .extflag { position: absolute; top: 6px; right: 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--warn); border: 1px solid var(--warn); border-radius: 5px; padding: 0 5px; }
+/* 1.11 */
+.quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.last-date { margin-bottom: 0; } .last-site { margin: 2px 0 10px; font-size: 17px; font-weight: 700; } .last-site.muted { font-weight: 500; font-size: 14px; }
+.link { cursor: pointer; }
+.nw { white-space: nowrap; }

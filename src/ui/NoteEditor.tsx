@@ -14,17 +14,30 @@ export function NoteEditor({ note, onChange, pos }: { note: DiveNote; onChange: 
   const siteItems = Object.values(lb.sites).map((s) => ({ id: s.id, name: s.name }));
   const buddyItems = Object.values(lb.buddies).filter((b) => !note.buddyIds.includes(b.id)).map((b) => ({ id: b.id, name: b.name }));
   const w = note.weather;
+  // nejčastější lokality a buddy (počet ponorů, při shodě novější použití)
+  const top = (pick: (n: DiveNote) => string[]) => {
+    const cnt = new Map<string, { n: number; last: number }>();
+    for (const n of [...Object.values(lb.notes), ...Object.values(lb.drafts)]) for (const id of pick(n)) {
+      const c = cnt.get(id) || { n: 0, last: 0 };
+      cnt.set(id, { n: c.n + 1, last: Math.max(c.last, n.updated || 0) });
+    }
+    return [...cnt].sort((a, b) => b[1].n - a[1].n || b[1].last - a[1].last).map(([id]) => id);
+  };
+  const topSites = top((n) => (n.siteId ? [n.siteId] : [])).filter((id) => lb.sites[id]).slice(0, 3);
+  const topBuddies = top((n) => n.buddyIds || []).filter((id) => lb.buddies[id] && !note.buddyIds.includes(id)).slice(0, 3);
   return (
     <>
       <Card title="Lokalita">
         {site ? <Chip onClick={() => go({ t: "site", id: site.id })} onX={() => onChange({ siteId: undefined })}>📍 {site.name}</Chip>
           : <Picker items={siteItems} placeholder="Napiš název lokality" onPick={(sid) => onChange({ siteId: sid })}
               onCreate={async (name) => { const s = findSiteByName(name) || (await upsertSite({ name, lat: pos?.lat, lon: pos?.lon })); onChange({ siteId: s.id }); }} />}
+        {!site && topSites.length > 0 && <div className="quick">{topSites.map((id) => <button key={id} className="btn small" onClick={() => onChange({ siteId: id })}>{lb.sites[id].name}</button>)}</div>}
       </Card>
       <Card title="S kým">
         <div className="chips">{note.buddyIds.map((b) => lb.buddies[b] && <Chip key={b} onClick={() => go({ t: "buddy", id: b })} onX={() => onChange({ buddyIds: note.buddyIds.filter((x) => x !== b) })}>{lb.buddies[b].name}</Chip>)}</div>
         <Picker items={buddyItems} placeholder="Přidat buddy" onPick={(bid) => onChange({ buddyIds: [...note.buddyIds, bid] })}
           onCreate={async (name) => { const b = findBuddyByName(name) || (await upsertBuddy({ name })); onChange({ buddyIds: [...new Set([...note.buddyIds, b.id])] }); }} />
+        {topBuddies.length > 0 && <div className="quick">{topBuddies.map((id) => <button key={id} className="btn small" onClick={() => onChange({ buddyIds: [...note.buddyIds, id] })}>＋ {lb.buddies[id].name}</button>)}</div>}
       </Card>
       <Card title="Hodnocení">
         <RatingPicker value={note.rating} onChange={(rating) => onChange({ rating })} />

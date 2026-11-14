@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.10";
+export const APP_VERSION = "1.11";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.11", date: "14. 11. 2026", title: "Rychlá volba a osobní odhad O₂",
+    items: [
+      "Pod polem Lokalita a Buddy tři nejčastější jako tlačítka",
+      "Poslední ponor: lokalita na samostatném řádku, štítek EXT u externího plynu",
+      "Odhad spotřeby O₂ podle tvé změřené spotřeby (l/min) z ponorů se známou spotřebou",
+    ],
+  },
   {
     version: "1.10", date: "14. 11. 2026", title: "Čidla podle vlastní historie, pN₂, EXT",
     items: [
