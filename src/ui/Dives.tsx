@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { cellCalibration, diveWarnings, injections, summarize } from "../core/analysis";
-import { findBuddyByName, findSiteByName, loadDive, myNum, setNote, upsertBuddy, upsertSite } from "../app/store";
+import { loadDive, myNum, setNote } from "../app/store";
 import { norm } from "../app/model";
-import { AlertBox, Card, Chip, KV, Picker, Tiles, fmtDate, fmtDateTime, go, num, useStore } from "./common";
+import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, num, useStore } from "./common";
+import { NoteEditor } from "./NoteEditor";
 import { LineChart, TissueMap } from "./Chart";
 
 const C = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#fff176", "#ef5350"];
@@ -11,30 +12,44 @@ const C = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#fff176", "#ef5350"];
 export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) {
   const st = useStore();
   const [q, setQ] = useState("");
+  const [rate, setRate] = useState<string>("");
   const lb = st.lb;
   const n = norm(q);
-  const rows = st.metas.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse().filter(({ m, note }) => {
+  const match = (note: { siteId?: string; buddyIds: string[]; note: string; rating?: string } | undefined, date: number) => {
     if (site && note?.siteId !== site) return false;
     if (buddy && !note?.buddyIds.includes(buddy)) return false;
+    if (rate && note?.rating !== rate) return false;
     if (!n) return true;
-    const txt = norm([note?.siteId ? lb.sites[note.siteId]?.name : "", ...(note?.buddyIds || []).map((b) => lb.buddies[b]?.name || ""), note?.note || "", fmtDate(m.start)].join(" "));
+    const txt = norm([note?.siteId ? lb.sites[note.siteId]?.name : "", ...(note?.buddyIds || []).map((b) => lb.buddies[b]?.name || ""), note?.note || "", fmtDate(date)].join(" "));
     return n.split(" ").every((w) => txt.includes(w));
-  });
+  };
+  const rows = st.metas.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse().filter(({ m, note }) => match(note, m.start));
+  const drafts = Object.values(lb.drafts).filter((d) => match(d, d.created)).sort((a, b) => b.created - a.created);
   return (
     <div className="screen">
       {(site || buddy) && <p className="muted">Filtr: {site ? lb.sites[site]?.name : lb.buddies[buddy!]?.name} · <a onClick={() => go({ t: "dives" })}>zrušit</a></p>}
       <input className="search" placeholder="Hledat lokalitu, parťáka, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
-      {rows.map(({ m, no, note }) => (
-        <div key={m.id} className="list-item" onClick={() => go({ t: "dive", id: m.id })}>
-          <div className="li-num">{no}</div>
-          <div className="li-main">
-            <b>{note?.siteId ? lb.sites[note.siteId]?.name : <span className="muted">bez lokality</span>}</b>
-            <small>{fmtDate(m.start)} · {num(m.h.maxDepth)} m · {Math.round(m.h.diveTimeS / 60)} min{note?.buddyIds.length ? " · " + note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ") : ""}</small>
-          </div>
-          {m.sum.co2Max != null && m.sum.co2Max >= lb.settings.th.co2Mbar && <span className="badge bad">CO₂</span>}
+      <div className="seg filter">
+        {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
+      </div>
+      {drafts.map((d) => (
+        <div key={d.id} className="dive-row draft" onClick={() => go({ t: "draft", id: d.id })}>
+          <div className="dr-main"><b>{d.siteId ? lb.sites[d.siteId]?.name : "bez lokality"}</b><small>{fmtDate(d.created)} · čeká na data z počítače</small></div>
+          <div className="dr-num muted">⏳</div>
+          <div className="dr-rate">{d.rating ? RATING[d.rating].icon : ""}</div>
         </div>
       ))}
-      {!rows.length && <p className="muted center">Žádné ponory</p>}
+      {rows.map(({ m, no, note }) => (
+        <div key={m.id} className="dive-row" onClick={() => go({ t: "dive", id: m.id })}>
+          <div className="dr-main">
+            <b>{note?.siteId ? lb.sites[note.siteId]?.name : <span className="muted">bez lokality</span>}</b>
+            <small>č. {no} · {fmtDate(m.start)}{note?.buddyIds.length ? " · " + note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ") : ""}</small>
+          </div>
+          <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
+          <div className="dr-rate">{note?.rating ? RATING[note.rating].icon : m.sum.co2Max != null && m.sum.co2Max >= lb.settings.th.co2Mbar ? <span className="badge bad">CO₂</span> : ""}</div>
+        </div>
+      ))}
+      {!rows.length && !drafts.length && <p className="muted center">Žádné ponory</p>}
     </div>
   );
 }
@@ -77,28 +92,11 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const lb = st.lb;
   const meta = st.metas.find((m) => m.id === id)!;
   const note = lb.notes[id] || { buddyIds: [], note: "", updated: 0 };
-  const [text, setText] = useState(note.note);
-  useEffect(() => setText(note.note), [id, note.note]);
-  const site = note.siteId ? lb.sites[note.siteId] : undefined;
   const warns = d ? diveWarnings(d, summarize(d), lb.settings.th) : [];
-  const siteItems = Object.values(lb.sites).map((s) => ({ id: s.id, name: s.name }));
-  const buddyItems = Object.values(lb.buddies).filter((b) => !note.buddyIds.includes(b.id)).map((b) => ({ id: b.id, name: b.name }));
   return (
     <>
       {warns.map((a, i) => <AlertBox key={i} a={a} />)}
-      <Card title="Lokalita">
-        {site ? <Chip onClick={() => go({ t: "site", id: site.id })} onX={() => setNote(id, { siteId: undefined })}>📍 {site.name}</Chip>
-          : <Picker items={siteItems} placeholder="Napiš název lokality" onPick={(sid) => setNote(id, { siteId: sid })}
-              onCreate={async (name) => { const s = findSiteByName(name) || (await upsertSite({ name })); setNote(id, { siteId: s.id }); }} />}
-      </Card>
-      <Card title="S kým">
-        <div className="chips">{note.buddyIds.map((b) => lb.buddies[b] && <Chip key={b} onClick={() => go({ t: "buddy", id: b })} onX={() => setNote(id, { buddyIds: note.buddyIds.filter((x) => x !== b) })}>{lb.buddies[b].name}</Chip>)}</div>
-        <Picker items={buddyItems} placeholder="Přidat parťáka" onPick={(bid) => setNote(id, { buddyIds: [...note.buddyIds, bid] })}
-          onCreate={async (name) => { const b = findBuddyByName(name) || (await upsertBuddy({ name })); setNote(id, { buddyIds: [...new Set([...note.buddyIds, b.id])] }); }} />
-      </Card>
-      <Card title="Poznámka">
-        <textarea value={text} rows={4} placeholder="Jak se ponor povedl, viditelnost, co jste viděli…" onChange={(e) => setText(e.target.value)} onBlur={() => text !== note.note && setNote(id, { note: text })} />
-      </Card>
+      <NoteEditor note={note} onChange={(p) => setNote(id, p)} />
       <Card title="V kostce">
         <Tiles items={[
           ["Max. hloubka", `${num(meta.h.maxDepth)} m`], ["Doba", `${Math.round(meta.h.diveTimeS / 60)} min`], ["Prům. hloubka", `${num(meta.sum.avgDepth)} m`],

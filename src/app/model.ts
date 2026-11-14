@@ -2,6 +2,7 @@
 import type { Header } from "../core/shearwater";
 import type { Summary, Thresholds } from "../core/analysis";
 import { DEFAULT_THRESHOLDS } from "../core/analysis";
+import { DEFAULT_CELL_TH, type CellDive, type CellThresholds } from "../core/cells";
 
 export interface SpInfo {
   id: number; name?: string; lat?: number; lon?: number; maxDepth?: number; type?: string; region?: string;
@@ -9,10 +10,19 @@ export interface SpInfo {
 }
 export interface Site { id: string; name: string; lat?: number; lon?: number; spId?: number; sp?: SpInfo; note?: string; updated: number }
 export interface Buddy { id: string; name: string; note?: string; updated: number }
-export interface DiveNote { siteId?: string; buddyIds: string[]; note: string; updated: number }
-export interface Settings { th: Thresholds; manualFill: number | null; updated: number }
+export type Rating = "up" | "down" | "problem";
+export interface WeatherSnap { at: number; temp: number; wind: number; gust: number; cloud: number; pressure: number; precip: number; code: number }
+export interface DiveNote { siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap; updated: number }
+/** Ponor založený na lokalitě před stažením logu; po importu se spáruje s ponorem z počítače. */
+export interface Draft extends DiveNote { id: string; created: number; lat?: number; lon?: number; diveId?: string }
+/** Záznam o O₂ čidle v cartridgi. Data ve formátu RRRR-MM-DD. */
+export interface Cell { id: string; pos: 1 | 2 | 3; maker: string; type?: string; made?: string; installed: string; lifeM: number; removed?: string; reason?: string; note?: string; updated: number }
+export interface Settings { th: Thresholds & CellThresholds; manualFill: number | null; updated: number }
 
 export interface Logbook {
+  drafts: Record<string, Draft>;
+  cells: Record<string, Cell>;
+  answered: Record<string, { answer: "change" | "cal"; updated: number }>; // odpovědi na dotaz „vyměnil jsi čidlo?“ (klíč pozice:idPonoru)
   sites: Record<string, Site>;
   buddies: Record<string, Buddy>;
   notes: Record<string, DiveNote>;
@@ -20,11 +30,13 @@ export interface Logbook {
   settings: Settings;
 }
 
-export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number }
+export const META_V = 2;
+export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number }
 
+export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH };
 export const emptyLogbook = (): Logbook => ({
-  sites: {}, buddies: {}, notes: {}, deleted: {},
-  settings: { th: { ...DEFAULT_THRESHOLDS }, manualFill: null, updated: 0 },
+  drafts: {}, cells: {}, answered: {}, sites: {}, buddies: {}, notes: {}, deleted: {},
+  settings: { th: { ...DEFAULT_ALL_TH }, manualFill: null, updated: 0 },
 });
 
 function mergeMap<T extends { updated: number }>(a: Record<string, T>, b: Record<string, T>, deleted: Record<string, number>): Record<string, T> {
@@ -42,11 +54,16 @@ export function mergeLogbooks(a: Logbook, b: Logbook): Logbook {
   const deleted = { ...a.deleted };
   for (const [k, t] of Object.entries(b.deleted || {})) deleted[k] = Math.max(deleted[k] || 0, t);
   return {
+    drafts: mergeMap(a.drafts || {}, b.drafts || {}, deleted),
+    cells: mergeMap(a.cells || {}, b.cells || {}, deleted),
+    answered: mergeMap(a.answered || {}, b.answered || {}, {}),
     sites: mergeMap(a.sites, b.sites || {}, deleted),
     buddies: mergeMap(a.buddies, b.buddies || {}, deleted),
     notes: mergeMap(a.notes, b.notes || {}, {}),
     deleted,
-    settings: (b.settings?.updated || 0) > a.settings.updated ? { ...a.settings, ...b.settings, th: { ...DEFAULT_THRESHOLDS, ...b.settings.th } } : a.settings,
+    settings: (b.settings?.updated || 0) > a.settings.updated
+      ? { ...a.settings, ...b.settings, th: { ...DEFAULT_ALL_TH, ...b.settings.th } }
+      : { ...a.settings, th: { ...DEFAULT_ALL_TH, ...a.settings.th } },
   };
 }
 

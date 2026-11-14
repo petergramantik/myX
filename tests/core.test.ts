@@ -2,6 +2,7 @@
 import { decodeDive } from "../src/core/shearwater";
 import { summarize, injections, alerts, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
+import { detectCellEvents, cellStatus, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
 
 let fails = 0;
@@ -49,6 +50,20 @@ a.sites.x = { id: "x", name: "Šífr", updated: 1 }; b.sites.x = { id: "x", name
 b.buddies.y = { id: "y", name: "Pepa", updated: 5 }; a.deleted.y = 6;
 const m = mergeLogbooks(a, b);
 ok(m.sites.x.name === "Lom Šífr" && !m.buddies.y, "sloučení logbooků");
+
+// čidla: výměna čidla 3 (skok nahoru, potvrzený dalším ponorem), kalibrace, stav slabého čidla
+const cd = (a: number, b: number, c: number, lin1 = 1): CellDive => ({ mvBar: [a, b, c], lin: [lin1, 1, 1], early: [null, null, null] });
+const ser = [cd(48, 47, 48), cd(48, 47, 48), cd(48, 47, 48), cd(48.2, 47, 61), cd(48.3, 47.1, 60.5), cd(50, 48.5, 60.5), cd(29, 48.5, 60.4, 0.6)];
+const ev = detectCellEvents(ser);
+ok(ev.some((e) => e.kind === "change" && e.pos.join() === "3" && e.index === 3), "výměna čidla 3");
+ok(ev.some((e) => e.kind === "cal" && e.index === 5), "kalibrace");
+ok(!ev.some((e) => e.kind === "change" && e.index === 6), "pokles citlivosti není výměna");
+const cs1 = cellStatus(0, ser, DEFAULT_CELL_TH, 3, null, 12, ser.slice(0, 4));
+ok(cs1.level === "bad" && cs1.reasons.length >= 2, "slabé čidlo: mV na vzduchu a current limiting");
+ok(cellStatus(1, ser, DEFAULT_CELL_TH, 13, null, 12, ser.slice(0, 4)).level === "warn", "čidlo po životnosti");
+const lb2 = emptyLogbook(); lb2.drafts.z = { id: "z", created: 1, buddyIds: [], note: "x", updated: 1 };
+const lb3 = emptyLogbook(); lb3.deleted.z = 2;
+ok(!mergeLogbooks(lb2, lb3).drafts.z, "spárovaný rozpracovaný ponor se smaže i na jiném zařízení");
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

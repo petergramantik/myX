@@ -6,6 +6,8 @@ import { OverviewScreen } from "./ui/Overview";
 import { DiveScreen, DivesScreen } from "./ui/Dives";
 import { BuddiesScreen, BuddyScreen, SiteScreen, SitesScreen } from "./ui/Sites";
 import { AboutScreen, SettingsScreen } from "./ui/Settings";
+import { DraftScreen } from "./ui/Draft";
+import { CellsScreen } from "./ui/Cells";
 import { APP_VERSION } from "./app/version";
 import "./ui/app.css";
 
@@ -25,6 +27,8 @@ function title(s: Screen, st: ReturnType<typeof useStore>): string {
     case "buddy": return st.lb.buddies[s.id]?.name || "Parťák";
     case "settings": return "Nastavení";
     case "about": return "Co je nového";
+    case "draft": return "Nový ponor";
+    case "cells": return "O₂ čidla";
   }
 }
 
@@ -39,6 +43,8 @@ function Body({ s }: { s: Screen }) {
     case "buddy": return <BuddyScreen id={s.id} />;
     case "settings": return <SettingsScreen />;
     case "about": return <AboutScreen />;
+    case "draft": return <DraftScreen id={s.id} />;
+    case "cells": return <CellsScreen pos={s.pos} />;
   }
 }
 

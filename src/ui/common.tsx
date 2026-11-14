@@ -8,7 +8,7 @@ export const useStore = (): State => useSyncExternalStore(subscribe, getState);
 export type Screen =
   | { t: "home" } | { t: "dives"; site?: string; buddy?: string } | { t: "dive"; id: string }
   | { t: "sites" } | { t: "site"; id: string } | { t: "buddies" } | { t: "buddy"; id: string }
-  | { t: "settings" } | { t: "about" };
+  | { t: "settings" } | { t: "about" } | { t: "draft"; id: string } | { t: "cells"; pos?: number };
 
 let stack: Screen[] = [{ t: "home" }];
 const navSubs = new Set<() => void>();
@@ -71,6 +71,24 @@ export function Picker({ items, placeholder, onPick, onCreate }: {
 export function Chip({ children, onX, onClick }: { children: React.ReactNode; onX?: () => void; onClick?: () => void }) {
   return <span className="chip" onClick={onClick}>{children}{onX && <button onClick={(e) => { e.stopPropagation(); onX(); }} aria-label="Odebrat">×</button>}</span>;
 }
+
+export const RATING: Record<string, { icon: string; label: string; cls: string }> = {
+  up: { icon: "👍", label: "Dobrý", cls: "ok" }, down: { icon: "👎", label: "Nic moc", cls: "warn" }, problem: { icon: "❗", label: "Problém", cls: "bad" },
+};
+
+export function RatingPicker({ value, onChange }: { value?: string; onChange: (v: "up" | "down" | "problem" | undefined) => void }) {
+  return (
+    <div className="rating">
+      {(["up", "down", "problem"] as const).map((k) => (
+        <button key={k} className={(value === k ? "on " : "") + RATING[k].cls} onClick={() => onChange(value === k ? undefined : k)}>
+          <span>{RATING[k].icon}</span>{RATING[k].label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
 
 export function AlertBox({ a }: { a: { level: string; title: string; text: string } }) {
   return <div className={"alert " + a.level}><b>{a.title}</b><div>{a.text}</div></div>;

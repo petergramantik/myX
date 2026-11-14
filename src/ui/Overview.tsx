@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { alerts } from "../core/analysis";
-import { importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
-import { AlertBox, Card, Tiles, fmtDate, go, num, useStore } from "./common";
-import { WeatherCard } from "./Weather";
+import { alerts, scrubberInfo } from "../core/analysis";
+import { createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
+import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
+import { CellTiles } from "./Cells";
 
 export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }: { label?: string }) {
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   return (
     <>
-      <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : label}</button>
+      <button className="btn" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : label}</button>
       <input ref={ref} type="file" accept=".db,application/octet-stream,application/x-sqlite3,*/*" hidden onChange={async (e) => {
         const f = e.target.files?.[0];
         e.target.value = "";
@@ -23,42 +23,68 @@ export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }
   );
 }
 
+function ScrubberTile() {
+  const st = useStore();
+  const lb = st.lb;
+  const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), lb.settings.th, lb.settings.manualFill);
+  if (!sc) return null;
+  const lvl = sc.alerts.some((a) => a.level === "bad") ? "bad" : sc.alerts.length ? "warn" : "ok";
+  return (
+    <section className={"card scrub " + lvl} onClick={() => go({ t: "settings" })}>
+      <div className="sc-h"><h2>Scrubber</h2><span>{sc.pct} %</span></div>
+      <div className="sc-v">{hm(sc.left)} <small>z {hm(sc.total)}</small></div>
+      <div className="sc-bar"><i style={{ width: `${sc.pct}%` }} /><b style={{ left: `${lb.settings.th.scrubPct}%` }} /></div>
+      <div className="sc-s">{sc.fill ? `Náplň od ${fmtDate(sc.fill)} · ${sc.days} dní` : "Datum náplně neznámé"}</div>
+      {sc.alerts.map((a, i) => <div key={i} className={"sc-a " + a.level}>⚠ {a.title}: {a.text}</div>)}
+    </section>
+  );
+}
+
 export function OverviewScreen() {
   const st = useStore();
   useEffect(() => { if (!st.pos) locate(); }, []);
   const lb = st.lb;
-  const al = alerts(st.metas.map((m) => m.h), localNow(), lb.settings.th, lb.settings.manualFill);
-  const near = nearestSite();
+  const [busy, setBusy] = useState(false);
+  // baterie zvlášť pro každý počítač (sériové číslo)
+  const bySerial = new Map<number, typeof st.metas>();
+  for (const m of st.metas) bySerial.set(m.h.serial, [...(bySerial.get(m.h.serial) || []), m]);
+  const multi = bySerial.size > 1;
+  const batAl = [...bySerial].flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null)
+    .filter((a) => !a.title.startsWith("Scrubber")).map((a) => (multi ? { ...a, title: `${a.title} (počítač ${ser.toString(16).toUpperCase()})` } : a)));
+  const drafts = Object.values(lb.drafts).sort((a, b) => b.created - a.created);
   const last = st.metas[st.metas.length - 1];
-  const totalMin = st.metas.reduce((a, m) => a + m.h.diveTimeS, 0) / 60;
   const lastNote = last ? lb.notes[last.id] : undefined;
+  const near = nearestSite();
   const here = near && near.km <= 2 ? near.site : null;
+  const totalMin = st.metas.reduce((a, m) => a + m.h.diveTimeS, 0) / 60;
   return (
     <div className="screen">
-      {al.map((a, i) => <AlertBox key={i} a={a} />)}
+      <ScrubberTile />
+      <CellTiles />
+      {batAl.map((a, i) => <AlertBox key={i} a={a} />)}
 
-      <Card title="Kde jsem">
-        {st.pos ? (
-          here ? (
-            <p className="big">📍 <a onClick={() => go({ t: "site", id: here.id })}>{here.name}</a> <small>({num(near!.km * 1000, 0)} m)</small></p>
-          ) : (
-            <>
-              <p>{near ? <>Nejbližší známá lokalita: <a onClick={() => go({ t: "site", id: near.site.id })}>{near.site.name}</a> ({num(near.km, 1)} km)</> : "Zatím nemáš lokality s polohou."}</p>
-              <NewSiteHere lat={st.pos.lat} lon={st.pos.lon} />
-            </>
-          )
-        ) : <p className="muted">{st.posErr || "Zjišťuji polohu…"} <a onClick={() => locate()}>Zkusit znovu</a></p>}
-      </Card>
+      <button className="btn primary big" disabled={busy} onClick={async () => { setBusy(true); try { const id = await createDraft(); go({ t: "draft", id }); } finally { setBusy(false); } }}>
+        {busy ? "Zjišťuji polohu…" : "＋ Nový ponor"}
+      </button>
 
-      {(here || st.pos) && <WeatherCard lat={here?.lat ?? here?.sp?.lat ?? st.pos!.lat} lon={here?.lon ?? here?.sp?.lon ?? st.pos!.lon} />}
+      {drafts.length > 0 && (
+        <Card title="Čekají na data z počítače">
+          {drafts.map((d) => (
+            <div key={d.id} className="list-item flat" onClick={() => go({ t: "draft", id: d.id })}>
+              <div className="li-main"><b>{d.siteId ? lb.sites[d.siteId]?.name : "bez lokality"}</b><small>{fmtDateTime(d.created)}{d.buddyIds.length ? " · " + d.buddyIds.map((b) => lb.buddies[b]?.name).join(", ") : ""}</small></div>
+              {d.rating && <span className="rate">{RATING[d.rating].icon}</span>}
+            </div>
+          ))}
+        </Card>
+      )}
 
       {last ? (
         <Card title="Poslední ponor" right={<a onClick={() => go({ t: "dive", id: last.id })}>Detail ›</a>}>
-          <p className="muted">č. {st.metas.length} · {fmtDate(last.start)} · {lastNote?.siteId ? lb.sites[lastNote.siteId]?.name : "lokalita nezadaná"}</p>
+          <p className="muted">č. {st.metas.length} · {fmtDate(last.start)} · {lastNote?.siteId ? lb.sites[lastNote.siteId]?.name : "lokalita nezadaná"} {lastNote?.rating ? RATING[lastNote.rating].icon : ""}</p>
           <Tiles items={[
             ["Max. hloubka", `${num(last.h.maxDepth)} m`], ["Doba", `${Math.round(last.h.diveTimeS / 60)} min`],
-            ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"], ["Scrubber zbývá", `${last.h.scrubLeftEndMin} min`],
-            ["Baterie", `${last.h.batVEnd.toFixed(2)} V`], ["O₂ / dil", `${num(last.sum.o2End, 0)} / ${num(last.sum.dilEnd, 0)} bar`],
+            ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"], ["Baterie", `${last.h.batVEnd.toFixed(2)} V`],
+            ["O₂ / dil", `${num(last.sum.o2End, 0)} / ${num(last.sum.dilEnd, 0)} bar`], ["CNS", `${last.h.cnsEnd} %`],
           ]} />
         </Card>
       ) : (
@@ -72,12 +98,21 @@ export function OverviewScreen() {
           <Tiles items={[
             ["Ponorů", st.metas.length], ["Hodin pod vodou", num(totalMin / 60, 1)],
             ["Lokalit", Object.keys(lb.sites).length], ["Parťáků", Object.keys(lb.buddies).length],
-            ["Nejhlubší", `${num(Math.max(...st.metas.map((m) => m.h.maxDepth)))} m`],
-            ["Nejdelší", `${Math.round(Math.max(...st.metas.map((m) => m.h.diveTimeS)) / 60)} min`],
           ]} />
         </Card>
       )}
       <div className="center"><ImportButton /></div>
+
+      <Card title="Kde jsem">
+        {st.pos ? (
+          here ? <p>📍 <a onClick={() => go({ t: "site", id: here.id })}>{here.name}</a> <small className="muted">({num(near!.km * 1000, 0)} m)</small></p> : (
+            <>
+              <p className="muted">{near ? <>Nejbližší známá lokalita: <a onClick={() => go({ t: "site", id: near.site.id })}>{near.site.name}</a> ({num(near.km, 1)} km)</> : "Zatím nemáš lokality s polohou."}</p>
+              <NewSiteHere lat={st.pos.lat} lon={st.pos.lon} />
+            </>
+          )
+        ) : <p className="muted">{st.posErr || "Zjišťuji polohu…"} <a onClick={() => locate()}>Zkusit znovu</a></p>}
+      </Card>
     </div>
   );
 }

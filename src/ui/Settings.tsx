@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { DEFAULT_THRESHOLDS, scrubberFill } from "../core/analysis";
+import { scrubberFill } from "../core/analysis";
+import { DEFAULT_ALL_TH } from "../app/model";
 import { exportBackup, importBackup, saveSettings, syncNow, toast, wipeLocal } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
@@ -30,11 +31,17 @@ export function SettingsScreen() {
         <label>Scrubber – upozornit při zbytku (%)<input inputMode="decimal" defaultValue={th.scrubPct} onBlur={(e) => setTh("scrubPct", e.target.value)} /></label>
         <label>Scrubber – upozornit po dnech od náplně<input inputMode="decimal" defaultValue={th.scrubDays} onBlur={(e) => setTh("scrubDays", e.target.value)} /></label>
         <label>Baterie – rezerva nad prahem varování (V)<input inputMode="decimal" defaultValue={th.batMarginV} onBlur={(e) => setTh("batMarginV", e.target.value)} /></label>
+        <label>Čidla – životnost, když u čidla není zadaná (měsíce)<input inputMode="decimal" defaultValue={th.cellLifeM} onBlur={(e) => setTh("cellLifeM", e.target.value)} /></label>
+        <label>Čidla – výměna nejpozději po (měsíce)<input inputMode="decimal" defaultValue={th.cellMaxM} onBlur={(e) => setTh("cellMaxM", e.target.value)} /></label>
+        <label>Čidla – varování pod (mV na vzduchu)<input inputMode="decimal" defaultValue={th.cellAirWarn} onBlur={(e) => setTh("cellAirWarn", e.target.value)} /></label>
+        <label>Čidla – výměna pod (mV na vzduchu)<input inputMode="decimal" defaultValue={th.cellAirBad} onBlur={(e) => setTh("cellAirBad", e.target.value)} /></label>
+        <label>Čidla – pokles citlivosti za měsíc (%)<input inputMode="decimal" defaultValue={th.cellDropPct} onBlur={(e) => setTh("cellDropPct", e.target.value)} /></label>
+        <label>Čidla – linearita pod (current limiting)<input inputMode="decimal" defaultValue={th.cellLinWarn} onBlur={(e) => setTh("cellLinWarn", e.target.value)} /></label>
         <label>CO₂ – podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
           <input type="date" value={manual ? new Date(manual * 1000).toISOString().slice(0, 10) : ""} onChange={(e) => saveSettings({ manualFill: e.target.value ? Date.parse(e.target.value + "T12:00:00Z") / 1000 : null })} />
         </label>
-        <button className="btn" onClick={() => saveSettings({ th: { ...DEFAULT_THRESHOLDS }, manualFill: null })}>Výchozí hodnoty</button>
+        <button className="btn" onClick={() => saveSettings({ th: { ...DEFAULT_ALL_TH }, manualFill: null })}>Výchozí hodnoty</button>
       </Card>
 
       <Card title="Data">

@@ -30,8 +30,9 @@ function ticks(lo: number, hi: number, n = 5): number[] {
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
-export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert }: {
+export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle }: {
   t: number[]; series: Series[]; height?: number; invert?: boolean; zero?: boolean; markers?: number[]; rightInvert?: boolean;
+  xFmt?: (v: number) => string; xTitle?: (v: number) => string;
   extra?: { label: string; values: (number | null)[]; unit?: string }[];
 }) {
   const [ref, W] = useWidth<HTMLDivElement>();
@@ -64,7 +65,8 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
     });
     return d;
   };
-  const yt = ticks(lo, hi, 4), xt = ticks(x0 / 60, x1 / 60, Math.max(2, Math.floor(W / 70)));
+  const xs = xFmt ? 1 : 60;
+  const yt = ticks(lo, hi, 4), xt = ticks(x0 / xs, x1 / xs, Math.max(2, Math.floor(W / 70)));
   const onMove = (e: React.PointerEvent) => {
     const r = (e.currentTarget as SVGElement).getBoundingClientRect();
     const px = ((e.clientX - r.left) / r.width) * W;
@@ -84,15 +86,15 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
           </g>
         ))}
         {right.length > 0 && ticks(rlo, rhi, 4).map((v) => <text key={"r" + v} x={W - m.r + 4} y={Y(v, rlo, rhi, !!rightInvert) + 3}>{fmt(v, 2)}</text>)}
-        {xt.map((v) => <text key={"x" + v} x={X(v * 60)} y={height - 5} textAnchor="middle">{Math.round(v)}′</text>)}
+        {xt.map((v) => <text key={"x" + v} x={X(v * xs)} y={height - 5} textAnchor="middle">{xFmt ? xFmt(v) : Math.round(v) + "′"}</text>)}
         {zero && <line x1={m.l} x2={W - m.r} y1={Y(0)} y2={Y(0)} className="ref" />}
-        {markers?.map((mt, i) => <line key={"m" + i} x1={X(mt)} x2={X(mt)} y1={height - m.b - 7} y2={height - m.b} className="marker" />)}
+        {markers?.map((mt, i) => <line key={"m" + i} x1={X(mt)} x2={X(mt)} y1={xFmt ? m.t : height - m.b - 7} y2={height - m.b} className="marker" />)}
         {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={s.right ? 0.55 : 1} />)}
         {hover != null && <line x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref" />}
       </svg>
       {hover != null && (
         <div className="tip" style={{ left: Math.min(Math.max(0, hx + 10), Math.max(0, W - 170)) }}>
-          <b>Čas {fmtTime(t[hover])}</b>
+          <b>{xTitle ? xTitle(t[hover]) : `Čas ${fmtTime(t[hover])}`}</b>
           {series.map((s, i) => <div key={i}><i style={{ background: s.color }} />{s.label}: {fmt(s.values[hover])} {s.unit || ""}</div>)}
           {extra?.map((s, i) => <div key={"e" + i}>{s.label}: {fmt(s.values[hover])} {s.unit || ""}</div>)}
         </div>

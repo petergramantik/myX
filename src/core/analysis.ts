@@ -81,6 +81,19 @@ export function scrubberFill(hs: Header[]): Header | null {
   return null;
 }
 
+export interface ScrubberInfo { left: number; total: number; pct: number; fill: number | null; days: number | null; alerts: Alert[] }
+
+/** Stav scrubberu podle posledního ponoru a data náplně. */
+export function scrubberInfo(hs: Header[], nowLocal: number, th: Thresholds, manualFill?: number | null): ScrubberInfo | null {
+  if (!hs.length) return null;
+  const sorted = [...hs].sort((a, b) => a.start - b.start);
+  const last = sorted[sorted.length - 1];
+  const total = last.scrubTotalMin || 1, left = last.scrubLeftEndMin, pct = Math.round((left / total) * 100);
+  const fill = manualFill ?? scrubberFill(sorted)?.start ?? null;
+  const days = fill ? Math.floor((nowLocal - fill) / DAY) : null;
+  return { left, total, pct, fill, days, alerts: alerts(sorted, nowLocal, th, manualFill).filter((a) => a.title.startsWith("Scrubber")) };
+}
+
 /** Upozornění na úvodní obrazovce. hs = hlavičky ponorů, nowLocal = aktuální místní čas jako „UTC“ sekundy. */
 export function alerts(hs: Header[], nowLocal: number, th: Thresholds, manualFill?: number | null): Alert[] {
   if (!hs.length) return [];

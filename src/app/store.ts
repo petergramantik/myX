@@ -1,8 +1,10 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
 import { decodeDive, peekHeader, readShearwaterDb, type Dive, type RawDive } from "../core/shearwater";
 import { injections, summarize } from "../core/analysis";
+import { cellsOfDive } from "../core/cells";
+import { loadWeather } from "./weather";
 import * as db from "./db";
-import { emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, type Logbook, type Meta, type Site, type Buddy, type DiveNote } from "./model";
+import { emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
 export interface Pos { lat: number; lon: number; acc: number; at: number }
@@ -47,16 +49,18 @@ export function loadDive(id: string): Promise<Dive> {
 
 async function metaOf(raw: RawDive): Promise<Meta> {
   const d = await decodeDive(raw);
-  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum: summarize(d), inj: injections(d).length };
+  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum: summarize(d), inj: injections(d).length, cells: cellsOfDive(d), v: META_V };
 }
 
 // ---------- start
 export async function init() {
   const [metas, raws, lb] = await Promise.all([db.getAll<Meta>("meta"), db.getAll<RawDive>("raw"), db.get<Logbook>("kv", "lb")]);
-  const have = new Set(metas.map((m) => m.id));
+  const fresh = metas.filter((m) => m.v === META_V);
+  const have = new Set(fresh.map((m) => m.id));
   const missing = raws.filter((r) => !have.has(r.id));
-  for (const r of missing) { const m = await metaOf(r); metas.push(m); await db.put("meta", m); }
-  set({ ready: true, metas: sortMetas(metas), lb: lb ? mergeLogbooks(emptyLogbook(), lb) : emptyLogbook() });
+  for (const r of missing) { const m = await metaOf(r); fresh.push(m); await db.put("meta", m); }
+  set({ ready: true, metas: sortMetas(fresh), lb: lb ? mergeLogbooks(emptyLogbook(), lb) : emptyLogbook() });
+  await autoLinkDrafts();
   if (workerUrl() && syncKey()) syncNow();
   else set({ sync: { state: "off", msg: "Synchronizace není nastavená", at: 0 } });
 }
@@ -84,15 +88,96 @@ export async function importDb(file: File): Promise<number> {
   }
   if (!added.length) return 0;
   set({ metas: sortMetas([...st.metas, ...added]) });
-  // ponory z posledních 24 h: lokalita podle aktuální polohy
-  const near = nearestSite();
-  if (near && near.km <= 2) {
-    const nowLocal = localNow();
-    const lb = structuredClone(st.lb);
-    for (const m of added) if (nowLocal - m.start < 86400 && !lb.notes[m.id]?.siteId) lb.notes[m.id] = Object.assign({ buddyIds: [], note: "" }, lb.notes[m.id], { siteId: near.site.id, updated: Date.now() });
-    await saveLb(lb);
-  } else scheduleSync();
+  await autoLinkDrafts();
+  scheduleSync();
   return added.length;
+}
+
+// ---------- rozpracované ponory (založené na lokalitě) a jejich spárování s logem
+const H = 3600;
+/** Ponory z počítače, které časově odpovídají rozpracovanému ponoru (začátek −3 h až +6 h od založení). */
+export function draftCandidates(dr: Draft): Meta[] {
+  const linked = new Set(Object.values(st.lb.drafts).map((d) => d.diveId).filter(Boolean));
+  return st.metas.filter((m) => !linked.has(m.id) && m.start >= dr.created - 3 * H && m.start <= dr.created + 6 * H)
+    .sort((a, b) => Math.abs(a.start - dr.created) - Math.abs(b.start - dr.created));
+}
+
+async function autoLinkDrafts() {
+  for (const dr of Object.values(st.lb.drafts)) {
+    if (dr.diveId) continue;
+    const c = draftCandidates(dr);
+    if (c.length === 1) await linkDraft(dr.id, c[0].id, true);
+  }
+}
+
+export async function linkDraft(draftId: string, diveId: string, auto = false) {
+  const lb = structuredClone(st.lb);
+  const dr = lb.drafts[draftId];
+  if (!dr) return;
+  const cur = lb.notes[diveId];
+  lb.notes[diveId] = {
+    siteId: cur?.siteId || dr.siteId,
+    buddyIds: [...new Set([...(cur?.buddyIds || []), ...dr.buddyIds])],
+    note: [cur?.note, dr.note].filter(Boolean).join("\n"),
+    rating: dr.rating || cur?.rating,
+    weather: dr.weather || cur?.weather,
+    updated: Date.now(),
+  };
+  delete lb.drafts[draftId];
+  lb.deleted[draftId] = Date.now();
+  await saveLb(lb);
+  if (auto) toast(`Rozpracovaný ponor spárován s ponorem č. ${myNum(diveId)}`);
+}
+
+export async function createDraft(): Promise<string> {
+  const pos = st.pos && Date.now() - st.pos.at < 10 * 60000 ? st.pos : await locate();
+  const near = pos ? nearestSite(pos) : null;
+  const id = uid();
+  const dr: Draft = { id, created: localNow(), lat: pos?.lat, lon: pos?.lon, siteId: near && near.km <= 2 ? near.site.id : undefined, buddyIds: [], note: "", updated: Date.now() };
+  const lb = structuredClone(st.lb);
+  lb.drafts[id] = dr;
+  await saveLb(lb);
+  if (pos) loadWeather(pos.lat, pos.lon).then((w) => {
+    const snap: WeatherSnap = { at: Date.now(), temp: w.now.temp, wind: w.now.wind, gust: w.now.gust, cloud: w.now.cloud, pressure: w.now.pressure, precip: w.now.precip, code: w.now.code };
+    if (st.lb.drafts[id]) updateDraft(id, { weather: snap });
+  }).catch(() => {});
+  return id;
+}
+
+export function updateDraft(id: string, patch: Partial<Draft>) {
+  const lb = structuredClone(st.lb);
+  if (!lb.drafts[id]) return Promise.resolve();
+  lb.drafts[id] = { ...lb.drafts[id], ...patch, updated: Date.now() };
+  return saveLb(lb);
+}
+
+export async function deleteDraft(id: string) {
+  const lb = structuredClone(st.lb);
+  delete lb.drafts[id];
+  lb.deleted[id] = Date.now();
+  await saveLb(lb);
+}
+
+// ---------- O₂ čidla
+export async function saveCell(c: Partial<Cell> & { pos: 1 | 2 | 3; installed: string }): Promise<Cell> {
+  const lb = structuredClone(st.lb);
+  const cell: Cell = { maker: "", lifeM: 12, ...(c.id ? lb.cells[c.id] : {}), ...c, id: c.id || uid(), updated: Date.now() } as Cell;
+  // nové čidlo na pozici uzavře to dosavadní
+  if (!c.id) for (const o of Object.values(lb.cells)) if (o.pos === cell.pos && !o.removed && o.installed <= cell.installed) lb.cells[o.id] = { ...o, removed: cell.installed, reason: o.reason || "Výměna", updated: Date.now() };
+  lb.cells[cell.id] = cell;
+  await saveLb(lb);
+  return cell;
+}
+export async function deleteCell(id: string) {
+  const lb = structuredClone(st.lb);
+  delete lb.cells[id];
+  lb.deleted[id] = Date.now();
+  await saveLb(lb);
+}
+export function answerCellPrompt(key: string, answer: "change" | "cal") {
+  const lb = structuredClone(st.lb);
+  lb.answered[key] = { answer, updated: Date.now() };
+  return saveLb(lb);
 }
 
 export const localNow = () => Math.floor(Date.now() / 1000) - new Date().getTimezoneOffset() * 60;
@@ -221,7 +306,7 @@ export async function syncNow(): Promise<void> {
         await db.put("meta", m);
         got.push(m);
       }
-      if (got.length) set({ metas: sortMetas([...st.metas, ...got]) });
+      if (got.length) { set({ metas: sortMetas([...st.metas, ...got]) }); await autoLinkDrafts(); }
       for (const m of st.metas) {
         if (remoteIds.has(m.id) && !pendingUpload.has(m.id)) continue;
         const raw = await db.get<RawDive>("raw", m.id);

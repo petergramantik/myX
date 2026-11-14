@@ -1,9 +1,22 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.0";
+export const APP_VERSION = "1.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.1", date: "14. 11. 2026", title: "Čidla, scrubber a nový ponor",
+    items: [
+      "Přehled začíná dlaždicí scrubberu (zbývající čas, náplň, varování) a třemi dlaždicemi O₂ čidel",
+      "Stav čidel z logu: citlivost v mV/bar a mV na vzduchu, pokles citlivosti, podezření na current limiting, stáří",
+      "Historie čidel (výrobce, výroba, instalace, životnost, pozice) a dotaz při zjištěné výměně",
+      "Poslední kalibrace odvozená z logu",
+      "Tlačítko Nový ponor: poloha, lokalita a počasí se předvyplní, po importu se ponor spáruje podle času",
+      "Hodnocení ponoru 👍 👎 ❗ a nový přehlednější seznam ponorů s hloubkou a časem",
+      "Upozornění na baterii zvlášť pro každý počítač",
+      "Počasí už není na přehledu, ukládá se k ponoru",
+    ],
+  },
   {
     version: "1.0", date: "13. 11. 2026", title: "První verze",
     items: [
