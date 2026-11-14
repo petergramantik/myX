@@ -161,7 +161,7 @@ export function BuddiesScreen() {
           <div className="li-main"><b>{b.name}</b><small>{counts[b.id] ? `${counts[b.id].n} ponorů · naposledy ${fmtDate(counts[b.id].last)}` : "bez ponorů"}</small></div>
         </div>
       ))}
-      {!list.length && <p className="muted center">Buddy vznikají, když je zadáš u ponoru.</p>}
+      {!list.length && <p className="muted center">Buddy se založí, když ho zadáš u ponoru.</p>}
       <div className="row">
         <input value={name} placeholder="Nový buddy" onChange={(e) => setName(e.target.value)} />
         <button className="btn" disabled={!name.trim()} onClick={async () => { await upsertBuddy({ name: name.trim() }); setName(""); }}>Přidat</button>
@@ -195,7 +195,7 @@ export function BuddyScreen({ id }: { id: string }) {
       </Card>
       <Card title="Úpravy">
         <MergeRow items={Object.values(st.lb.buddies).filter((x) => x.id !== id)} onMerge={async (into) => { await mergeInto("buddy", id, into); back(); toast("Sloučeno"); }} />
-        <button className="btn danger" onClick={async () => { if (confirm(`Smazat buddy „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
+        <button className="btn danger" onClick={async () => { if (confirm(`Smazat buddyho „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
       </Card>
     </div>
   );

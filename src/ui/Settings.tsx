@@ -73,6 +73,8 @@ export function SettingsScreen() {
         </div>
       </Card>
 
+      <ShareCard />
+
       <Card title="O aplikaci">
         <KV rows={[["Verze", <a onClick={() => go({ t: "about" })}>{APP_VERSION} – co je nového ›</a>], ["Ponorů v telefonu", st.metas.length]]} />
       </Card>
@@ -90,5 +92,27 @@ export function AboutScreen() {
         </Card>
       ))}
     </div>
+  );
+}
+
+export const APP_URL = "https://petergramantik.github.io/myX/";
+
+/** Sdílení aplikace: systémové sdílení (nebo zkopírování odkazu) a QR kód. */
+function ShareCard() {
+  const share = async () => {
+    const data = { title: "myX", text: "myX – logbook pro rebreather, import ze Shearwater Cloud", url: APP_URL };
+    try {
+      if (navigator.share) { await navigator.share(data); return; }
+    } catch (e) { if ((e as Error).name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(APP_URL); toast("Odkaz zkopírován do schránky"); }
+    catch { toast(APP_URL); }
+  };
+  return (
+    <Card title="Sdílet aplikaci">
+      <button className="btn primary" onClick={share}>Sdílet aplikaci</button>
+      <img className="qr" src="qr.svg" alt={"QR kód: " + APP_URL} width={180} height={180} />
+      <p className="center small"><a href={APP_URL}>{APP_URL.replace("https://", "")}</a></p>
+      <p className="note">Každý má svá data jen ve svém zařízení. Klíč k synchronizaci nesdílej – s ním by se ponory slily do tvého logbooku.</p>
+    </Card>
   );
 }

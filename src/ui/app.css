@@ -264,3 +264,4 @@ label.inline { display: flex; align-items: center; gap: 6px; font-size: 13px; } 
 .last-date { margin-bottom: 0; } .last-site { margin: 2px 0 10px; font-size: 17px; font-weight: 700; } .last-site.muted { font-weight: 500; font-size: 14px; }
 .link { cursor: pointer; }
 .nw { white-space: nowrap; }
+img.qr { display: block; margin: 12px auto 4px; background: #fff; padding: 8px; border-radius: 10px; image-rendering: pixelated; }
