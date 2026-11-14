@@ -20,7 +20,9 @@ export interface Cell { id: string; pos: 1 | 2 | 3; maker: string; type?: string
 /** Baterie v hlavě X-CCR (pozice 1 nebo 2). Data ve formátu RRRR-MM-DD. */
 export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string; volt?: string; installed: string; removed?: string; note?: string; updated: number }
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; updated: number }
+/** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
+export interface Co2Cal { date: string; gas: string }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
@@ -34,7 +36,7 @@ export interface Logbook {
   settings: Settings;
 }
 
-export const META_V = 4;
+export const META_V = 5;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };

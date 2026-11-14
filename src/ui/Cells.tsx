@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cellStatus, detectCellEvents, type CellStatus } from "../core/cells";
-import { answerCellPrompt, deleteCell, localNow, saveCell } from "../app/store";
+import { answerCellPrompt, deleteCell, localNow, saveCell, saveSettings } from "../app/store";
 import type { Cell, Meta } from "../app/model";
 import { Card, fmtDate, go, num, useStore } from "./common";
 import { LineChart } from "./Chart";
@@ -77,7 +77,7 @@ export function CellTiles() {
   const last = c.series[c.series.length - 1];
   return (
     <>
-      <div className="cells">
+      <div className="cells four">
         {[1, 2, 3].map((pos) => {
           const s = c.status[pos - 1], mvb = last.mvBar[pos - 1];
           if (c.empty(pos)) return (
@@ -97,9 +97,81 @@ export function CellTiles() {
             </div>
           );
         })}
+        <Co2Tile />
       </div>
       <CellPanel c={c} />
     </>
+  );
+}
+
+/** Čidlo CO₂: zapnuté, pokud poslední ponor má nenulové hodnoty ppCO₂ (Petrel stav čidla neukládá). */
+export function useCo2() {
+  const st = useStore();
+  const th = st.lb.settings.th;
+  const ms = st.metas;
+  const last = ms[ms.length - 1];
+  const on = last?.sum.co2Max != null;
+  let since: Meta | null = null;
+  if (on) for (let i = ms.length - 1; i >= 0 && ms[i].sum.co2Max != null; i--) since = ms[i];
+  const high = ms.filter((m) => m.sum.co2Max != null && m.sum.co2Max >= th.co2Mbar);
+  const level = !last ? "none" : !on ? "none" : last.sum.co2Max! >= th.co2Mbar ? "bad" : last.sum.co2Max! >= th.co2Mbar * 0.7 ? "warn" : "ok";
+  return { last, on, since, high, level, limit: th.co2Mbar, cal: st.lb.settings.co2Cal || null };
+}
+
+function Co2Tile() {
+  const x = useCo2();
+  if (!x.last) return null;
+  return (
+    <div className={"celltile co2t " + (x.on ? x.level : "off")} onClick={() => x.on && go({ t: "dive", id: x.last!.id })}>
+      <div className="ct-h"><b>CO₂</b><span className={"dot " + (x.on ? x.level : "none")} /></div>
+      {x.on ? <>
+        <div className="ct-v">{num(x.last.sum.co2Max!, 1)}</div>
+        <div className="ct-u">mbar max</div>
+        <div className={"ct-l " + x.level}>{x.level === "bad" ? "Vysoké" : x.level === "warn" ? "Zvýšené" : "V pořádku"}</div>
+      </> : <>
+        <div className="ct-v">–</div>
+        <div className="ct-u">čidlo</div>
+        <div className="ct-l none">Deaktivováno</div>
+      </>}
+    </div>
+  );
+}
+
+function Co2Panel() {
+  const x = useCo2();
+  const [edit, setEdit] = useState(false);
+  const [date, setDate] = useState(x.cal?.date || isoOf(localNow()));
+  const [gas, setGas] = useState(x.cal?.gas || "vzduch");
+  if (!x.last) return null;
+  const lvl = x.on ? x.level : "none";
+  const GASES = ["vzduch", "O₂", "kalibrační plyn"];
+  return (
+    <div className={"pcell ptile " + lvl}>
+      <div className="pcell-h"><b className={"c-" + lvl}>Čidlo CO₂</b><span className={"pill " + (x.on ? x.level : "")}>{x.on ? (x.level === "bad" ? "Vysoké" : x.level === "warn" ? "Zvýšené" : "V pořádku") : "Deaktivováno"}</span></div>
+      {x.on ? <>
+        <div className="kvline"><span>Max</span><b>{num(x.last.sum.co2Max!, 2)} mbar</b><span>Průměr</span><b>{num(x.last.sum.co2Avg ?? 0, 2)} mbar</b></div>
+        <small>Poslední ponor {fmtDate(x.last.start)} · limit {num(x.limit, 1)} mbar{x.since ? ` · zapnuté od ponoru ${fmtDate(x.since.start)}` : ""}</small>
+      </> : <small>V posledním ponoru ({fmtDate(x.last.start)}) čidlo neměřilo – záznamy chybějí nebo jsou celou dobu nulové.</small>}
+      <small>Ponorů s CO₂ nad limitem: {x.high.length}{x.high.length ? ` (naposledy ${fmtDate(x.high[x.high.length - 1].start)})` : ""}</small>
+      <div className="kvline"><span>Kalibrace</span><b>{x.cal ? `${fmtIso(x.cal.date)} · ${x.cal.gas}` : "nezadaná"}</b></div>
+      {edit ? (
+        <div className="form">
+          <label>Datum kalibrace<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+          <label>Plyn<select value={GASES.includes(gas) ? gas : "jiný"} onChange={(e) => setGas(e.target.value === "jiný" ? "" : e.target.value)}>
+            {GASES.map((g) => <option key={g}>{g}</option>)}<option>jiný</option></select></label>
+          {!GASES.includes(gas) && <label>Vlastní plyn<input value={gas} placeholder="např. 1 % CO₂" onChange={(e) => setGas(e.target.value)} /></label>}
+          <div className="row">
+            <button className="btn primary" onClick={async () => { await saveSettings({ co2Cal: { date, gas: gas || "jiný" } }); setEdit(false); }}>Uložit</button>
+            <button className="btn" onClick={() => setEdit(false)}>Zrušit</button>
+          </div>
+        </div>
+      ) : (
+        <div className="row">
+          <button className="btn" onClick={() => setEdit(true)}>Zadat kalibraci</button>
+          {x.on && <button className="btn" onClick={() => go({ t: "dive", id: x.last!.id })}>Graf posledního ponoru</button>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -150,7 +222,8 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
               </div>
             );
           })}
-          <p className="note">Poslední kalibrace: {c.lastCal ? <>před ponorem č. {c.lastCalNo} ({fmtDate(c.lastCal.start)})</> : "nezjištěno"}. Odvozeno ze změny kalibračních faktorů v logu. <a onClick={() => go({ t: "cells" })}>Historie a grafy čidel ›</a></p>
+          <Co2Panel />
+          <p className="note">Poslední kalibrace O₂ čidel: {c.lastCal ? <>před ponorem č. {c.lastCalNo} ({fmtDate(c.lastCal.start)})</> : "nezjištěno"}. Odvozeno ze změny kalibračních faktorů v logu. <a onClick={() => go({ t: "cells" })}>Historie a grafy čidel ›</a></p>
         </div>
       )}
     </section>
