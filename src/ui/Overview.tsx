@@ -3,7 +3,7 @@ import { alerts, scrubberInfo } from "../core/analysis";
 import { createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { CellTiles } from "./Cells";
-import { BatteryTiles } from "./Batteries";
+import { BatteryTiles, useBatteries } from "./Batteries";
 
 export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }: { label?: string }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -86,9 +86,12 @@ export function OverviewScreen() {
         <Card title="Poslední ponor" right={<a onClick={() => go({ t: "dive", id: last.id })}>Detail ›</a>}>
           <p className="muted">č. {st.metas.length} · {fmtDate(last.start)} · {lastNote?.siteId ? lb.sites[lastNote.siteId]?.name : "lokalita nezadaná"} {lastNote?.rating ? RATING[lastNote.rating].icon : ""}</p>
           <Tiles items={[
-            ["Max. hloubka", `${num(last.h.maxDepth)} m`], ["Doba", <span className="toggle" onClick={() => setHmDur(!hmDur)}>{hmDur ? hm(last.h.diveTimeS / 60) : `${Math.round(last.h.diveTimeS / 60)} min`}</span>],
-            ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"], ["Baterie", `${last.h.batVEnd.toFixed(2)} V`],
-            ["O₂ / dil", `${num(last.sum.o2End, 0)} / ${num(last.sum.dilEnd, 0)} bar`], ["CNS", `${last.h.cnsEnd} %`],
+            ["Hloubka", <>{num(last.h.maxDepth)} m<small className="sub">prům. {num(last.sum.avgDepth)} m</small></>],
+            ["Doba", <><span className="toggle" onClick={() => setHmDur(!hmDur)}>{hmDur ? hm(last.h.diveTimeS / 60) : `${Math.round(last.h.diveTimeS / 60)} min`}</span><small className="sub">{last.sum.decoMin ? `deko ${last.sum.decoMin} min` : "bez deko"}</small></>],
+            ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"],
+            ["O₂", <><span className="pair">{num(last.sum.o2Start, 0)} → {num(last.sum.o2End, 0)}</span><small className="sub">bar{(last.sum.o2Start ?? 99) < 20 && (last.sum.o2End ?? 99) < 20 ? " · nejspíš mezitlak" : ""}</small></>],
+            ["Diluent", <><span className="pair">{num(last.sum.dilStart, 0)} → {num(last.sum.dilEnd, 0)}</span><small className="sub">bar</small></>],
+            ["Baterie", <BatteryMini />],
           ]} />
         </Card>
       ) : (
@@ -120,6 +123,17 @@ export function OverviewScreen() {
       <button className="btn primary big" disabled={busy} onClick={async () => { setBusy(true); try { const id = await createDraft(); go({ t: "draft", id }); } finally { setBusy(false); } }}>
         {busy ? "Zjišťuji polohu…" : "＋ Nový ponor"}
       </button>
+    </div>
+  );
+}
+
+function BatteryMini() {
+  const b = useBatteries();
+  const h = b.last?.h;
+  return (
+    <div className="batmini">
+      <div><span>Petrel</span><br />{h ? `${h.batVStart.toFixed(2).replace(".", ",")} → ${h.batVEnd.toFixed(2).replace(".", ",")} V` : "–"}</div>
+      {b.head.map((x) => <div key={x.pos}><span>Hlava {x.pos}</span>{x.cur ? `${num(x.minutes / 60, 1)} h` : "–"}</div>)}
     </div>
   );
 }
