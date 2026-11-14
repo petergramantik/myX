@@ -33,11 +33,14 @@ function scrubLevel(sc: NonNullable<ReturnType<typeof scrubberInfo>>, scrubDays:
 }
 
 /** Hláška nad scrubberem podle oranžových/červených stavů O₂ čidel, baterií a scrubberu (CO₂ se nepočítá). */
+let mottoHidden = false; // schová se do příštího spuštění aplikace
 function Motto() {
   const st = useStore();
+  const [, force] = useState(0);
   const c = useCells();
   const b = useBatteries();
-  if (st.lb.settings.motto === false || !st.metas.length) return null;
+  if (mottoHidden || st.lb.settings.motto === false || !st.metas.length) return null;
+  const hide = () => { mottoHidden = true; force((x) => x + 1); };
   const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), st.lb.settings.th, st.lb.settings.manualFill);
   const lv: string[] = [];
   if (sc) lv.push(scrubLevel(sc, st.lb.settings.th.scrubDays).lvl);
@@ -46,8 +49,8 @@ function Motto() {
   b.head.forEach((x) => x.reasons.length && lv.push("warn"));
   const worst = lv.includes("bad") ? "bad" : lv.includes("warn") ? "warn" : "ok";
   return worst === "ok"
-    ? <div className="motto ok">Všecko v cajku, jdeme na to!</div>
-    : <div className={"motto " + worst} onClick={() => go({ t: "warn" })}>Mám warningy, nevysereme se dnes na to?!</div>;
+    ? <div className="motto ok" onClick={hide}>Všecko v cajku, jdeme na to!</div>
+    : <div className={"motto " + worst} onClick={hide}>Mám warningy, nevysereme se dnes na to?!</div>;
 }
 
 function ScrubberTile() {

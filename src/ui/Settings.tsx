@@ -31,6 +31,12 @@ export function SettingsScreen() {
         <label className="check"><input type="checkbox" checked={st.lb.settings.motto !== false} onChange={(e) => saveSettings({ motto: e.target.checked })} /> Hláška nad scrubberem („Všecko v cajku…“ / „Mám warningy…“)</label>
       </Card>
 
+      <Card title="Lahve">
+        <label>Diluent – objem vlastní lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
+        <label>O₂ – objem vlastní lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
+        <p className="note">Externí lahve (S80 = 11,1 l, S40 = 5,7 l) se zadávají u ponoru v kartě Spotřeba plynu.</p>
+      </Card>
+
       <Card title="Upozornění">
         <label>Scrubber – upozornit při zbytku (%)<input inputMode="decimal" defaultValue={th.scrubPct} onBlur={(e) => setTh("scrubPct", e.target.value)} /></label>
         <label>Scrubber – upozornit po dnech od náplně<input inputMode="decimal" defaultValue={th.scrubDays} onBlur={(e) => setTh("scrubDays", e.target.value)} /></label>

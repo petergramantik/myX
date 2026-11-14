@@ -2,12 +2,60 @@
 import type { Dive, Header } from "./shearwater";
 
 export interface Summary {
-  avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[];
+  avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[]; dilUse: GasUse; o2Use: GasUse;
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
 }
 
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
+
+/** Spotřeba z vlastní lahve odvozená z průběhu tlaku. */
+export interface GasUse {
+  ok: boolean;            // tlak lahve je k dispozici (ne jen mezitlak)
+  start: number | null; end: number | null;
+  bar: number;            // součet poklesů (bez úseků s externím plynem nebo zavřenou lahví)
+  ext: [number, number][]; // úseky (min), kdy byl nejspíš připojený externí plyn nebo lahev zavřená
+  noisy: boolean;         // průběh je příliš rozkmitaný, spotřeba je jen odhad
+}
+const MIN_BAR = 20, HYST = 2, EXT_RISE = 10;
+/**
+ * Spotřeba = součet poklesů vyhlazeného tlaku (s hysterezí), ne rozdíl start/end.
+ * Hodnoty pod 20 bar jsou mezitlak (lahev zavřená / externí plyn) a nepočítají se.
+ * Nárůst tlaku nebo pád na mezitlak během ponoru = nejspíš externí plyn.
+ */
+export function pressureUse(t: number[], p: (number | null)[], depth: number[], diveS: number): GasUse {
+  const idx = t.map((_, i) => i).filter((i) => t[i] <= diveS && p[i] != null);
+  const raw = idx.map((i) => p[i]!);
+  const valid = raw.filter((v) => v >= MIN_BAR);
+  if (valid.length < Math.max(5, raw.length * 0.2)) return { ok: false, start: raw[0] ?? null, end: raw[raw.length - 1] ?? null, bar: 0, ext: [], noisy: false };
+  // medián z 7 vzorků (~35 s) potlačí šum převodníku
+  const sm = idx.map((_, k) => {
+    if (raw[k] < MIN_BAR) return null;
+    const w = raw.slice(Math.max(0, k - 3), k + 4).filter((v) => v >= MIN_BAR).sort((a, b) => a - b);
+    return w[w.length >> 1];
+  });
+  // malé nárůsty (do 10 bar) = ohřátí lahve, odečtou se; větší nárůst = doplnění z externího zdroje
+  let ref: number | null = null, bar = 0, rise = 0, wiggle = 0;
+  const extIdx: number[] = [];
+  sm.forEach((v, k) => {
+    if (v == null) { extIdx.push(k); return; }
+    if (ref == null) { ref = v; return; }
+    if (v < ref - HYST) { bar += ref - v; wiggle += ref - v; ref = v; }
+    else if (v > ref + HYST) {
+      if (v - ref >= EXT_RISE) { rise += v - ref; extIdx.push(k); } else { bar -= v - ref; wiggle += v - ref; }
+      ref = v;
+    }
+  });
+  const ext: [number, number][] = [];
+  for (const k of extIdx) {
+    const m = t[idx[k]] / 60;
+    const last = ext[ext.length - 1];
+    if (last && m - last[1] <= 2) last[1] = m; else ext.push([m, m]);
+  }
+  const firstV = sm.find((v) => v != null) ?? null, lastV = [...sm].reverse().find((v) => v != null) ?? null;
+  const net = Math.max(0, bar);
+  return { ok: true, start: firstV, end: lastV, bar: Math.round(net), ext: ext.map(([a, b]) => [Math.round(a), Math.round(b)]), noisy: rise + wiggle > Math.max(60, net * 4) };
+}
 
 /** Použité plyny („O₂/He“) v pořadí prvního použití a čas na každém v sekundách. */
 export function gasUse(d: Dive): { mix: string; s: number }[] {
@@ -57,6 +105,8 @@ export function summarize(d: Dive): Summary {
     ppo2Min: Math.min(...idx.map((i) => s.ppo2[i])), ppo2Max: Math.max(...idx.map((i) => s.ppo2[i])),
     co2Max: co2.length && Math.max(...co2) > 0 ? round(Math.max(...co2), 2) : null,
     gases: gasUse(d),
+    dilUse: pressureUse(d.s.t, d.s.dil, d.s.depth, d.h.diveTimeS),
+    o2Use: pressureUse(d.s.t, d.s.o2p, d.s.depth, d.h.diveTimeS),
     co2AlarmN: d.alarms.filter((a) => a.kind === "co2").length,
     co2AlarmS: d.alarms.filter((a) => a.kind === "co2").reduce((x, a) => x + a.end - a.start, 0),
     co2Avg: co2.length && Math.max(...co2) > 0 ? round(co2.reduce((a, b) => a + b, 0) / co2.length, 2) : null,

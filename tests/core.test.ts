@@ -1,6 +1,6 @@
 // Testy jádra bez soukromých dat: syntetický záznam ponoru a sloučení logbooků.
 import { decodeDive } from "../src/core/shearwater";
-import { summarize, injections, alerts, realStops, gasLabel, DEFAULT_THRESHOLDS } from "../src/core/analysis";
+import { summarize, injections, alerts, realStops, gasLabel, pressureUse, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
 import { detectCellEvents, cellStatus, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
@@ -73,6 +73,13 @@ ok(!mergeLogbooks(lb2, lb3).drafts.z, "spárovaný rozpracovaný ponor se smaže
 }
 
 ok(Array.isArray(d.alarms), "alarmy se dekódují");
+{ // spotřeba: pokles 150 → 120, ohřátí +5 se odečte, nárůst o 40 (externí) se nepočítá
+  const t = [...Array(40).keys()].map((i) => i * 60), dep = t.map(() => 20);
+  const p = t.map((_, i) => (i < 10 ? 150 : i < 20 ? 130 : i < 25 ? 135 : i < 30 ? 125 : 165 - (i - 30)));
+  const u = pressureUse(t, p, dep, 99999);
+  ok(u.ok && u.ext.length === 1 && u.bar >= 25 && u.bar <= 36, `spotřeba z průběhu tlaku (${u.bar} bar)`);
+  ok(!pressureUse(t, t.map(() => 9), dep, 99999).ok, "jen mezitlak = nelze spočítat");
+}
 ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" && gasLabel("32/0").label === "NX 32" && gasLabel("100/0").label === "O₂", "štítky plynů");
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }

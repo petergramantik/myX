@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.8";
+export const APP_VERSION = "1.9";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.9", date: "14. 11. 2026", title: "Spotřeba plynu",
+    items: [
+      "Spotřeba diluentu a O₂ z průběhu tlaku (bez úseků s externím plynem), v barech, litrech a l/min",
+      "Externí lahve S80/S40 u ponoru, ruční oprava spotřeby, objemy lahví v Nastavení",
+      "Zastávky v profilu spojené tenkou čarou",
+      "Hláška nad scrubberem se klepnutím schová do příštího spuštění",
+    ],
+  },
   {
     version: "1.8", date: "14. 11. 2026", title: "Plyny a kompaktní V kostce",
     items: [

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, injections, realStops, summarize } from "../core/analysis";
 import { loadDive, myNum, setNote } from "../app/store";
-import { norm } from "../app/model";
+import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { LineChart, TissueMap } from "./Chart";
@@ -112,6 +112,75 @@ export function GasChips({ mixes }: { mixes: string[] }) {
   return <span className="gas-chips">{mixes.map((m) => { const g = gasLabel(m); return <span key={m} className={"gchip " + g.cls}>{g.label}</span>; })}</span>;
 }
 
+const EXT_KINDS: Record<string, number> = { S80: 11.1, S40: 5.7 };
+const fmtL = (l: number) => `${Math.round(l)} l`;
+
+/** Spotřeba plynu ponoru: vlastní lahev (z průběhu tlaku) + externí lahve, nebo ruční údaj. */
+function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol: number) {
+  const u = gas === "dil" ? meta.sum.dilUse : meta.sum.o2Use;
+  const manual = note?.useManual?.[gas];
+  const ext = (note?.ext || []).filter((e) => e.gas === gas);
+  const extL = ext.reduce((a, e) => a + (e.start != null && e.end != null ? Math.max(0, e.start - e.end) * e.vol : 0), 0);
+  const ownL = u.ok && !u.noisy ? u.bar * vol : null;
+  const min = meta.h.diveTimeS / 60;
+  return { u, manual, ext, extL, ownL, total: manual ?? (ownL != null || extL ? (ownL || 0) + extL : null), min, metab: [0.8 * min, 1.5 * min] as const };
+}
+
+function UseTile({ gas, meta, note }: { gas: "dil" | "o2"; meta: Meta; note?: DiveNote }) {
+  const vol = useStore().lb.settings.cyl?.[gas] ?? 3;
+  const g = gasUseOf(gas, meta, note, vol);
+  if (g.manual != null) return <span className="use">{fmtL(g.manual)}<small>zadáno ručně</small></span>;
+  if (g.total != null) return (
+    <span className="use">{fmtL(g.total)}<small>{g.u.ok && !g.u.noisy ? `${g.u.bar} bar · ` : ""}{num(g.total / g.min, 1)} l/min{g.extL ? ` · ext. ${fmtL(g.extL)}` : ""}</small></span>
+  );
+  if (gas === "o2") return <span className="use">~{Math.round(g.metab[0])}–{Math.round(g.metab[1])} l<small>{g.u.noisy ? "tlak nespolehlivý · " : "jen mezitlak · "}odhad z doby</small></span>;
+  return <span className="use">–<small>{g.u.noisy ? "tlak nespolehlivý" : "jen mezitlak – externí?"}</small></span>;
+}
+
+function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNote }) {
+  const st = useStore();
+  const cyl = st.lb.settings.cyl || { dil: 3, o2: 3 };
+  const ext = note?.ext || [];
+  const save = (p: Partial<DiveNote>) => setNote(id, p);
+  const setExt = (eid: string, p: Partial<ExtGas>) => save({ ext: ext.map((e) => (e.id === eid ? { ...e, ...p } : e)) });
+  const n = (v: string) => { const x = parseFloat(v.replace(",", ".")); return Number.isNaN(x) ? undefined : x; };
+  const row = (gas: "dil" | "o2", name: string) => {
+    const g = gasUseOf(gas, meta, note, cyl[gas]);
+    const u = g.u;
+    return (
+      <div className="pcell ptile">
+        <div className="pcell-h"><b>{name}</b><span className="muted">vlastní lahev {num(cyl[gas], 1)} l</span></div>
+        <small>{u.ok ? <>Tlak {num(u.start ?? 0, 0)} → {num(u.end ?? 0, 0)} bar · spotřeba {u.noisy ? "nespolehlivá (rozkmitaný tlak)" : `${u.bar} bar = ${fmtL(u.bar * cyl[gas])}`}</>
+          : <>Snímač ukazuje jen mezitlak (lahev zavřená nebo plyn z externí lahve) – spotřebu z tlaku nelze spočítat.{gas === "o2" ? ` Metabolický odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l, odhadnuto ${meta.inj} vstřiků.` : ""}</>}</small>
+        {u.ext.length > 0 && <small className="c-warn">Externí plyn nebo zavřená lahev nejspíš: {u.ext.map(([a, b]) => (a === b ? `${a}. min` : `${a}.–${b}. min`)).join(", ")}</small>}
+        {ext.filter((e) => e.gas === gas).map((e) => (
+          <div key={e.id} className="ext-row">
+            <select value={e.kind} onChange={(ev) => setExt(e.id, { kind: ev.target.value, vol: EXT_KINDS[ev.target.value] ?? e.vol })}>
+              {["S80", "S40", "jiná"].map((k) => <option key={k}>{k}</option>)}
+            </select>
+            <input inputMode="decimal" defaultValue={e.vol} title="Objem (l)" onBlur={(ev) => setExt(e.id, { vol: n(ev.target.value) ?? e.vol })} /><span>l</span>
+            <input inputMode="decimal" defaultValue={e.start ?? ""} placeholder="start bar" onBlur={(ev) => setExt(e.id, { start: n(ev.target.value) })} />
+            <input inputMode="decimal" defaultValue={e.end ?? ""} placeholder="end bar" onBlur={(ev) => setExt(e.id, { end: n(ev.target.value) })} />
+            <button className="btn small" onClick={() => save({ ext: ext.filter((x) => x.id !== e.id) })}>✕</button>
+          </div>
+        ))}
+        <div className="row">
+          <button className="btn" onClick={() => { const kind = gas === "dil" ? "S80" : "S40"; save({ ext: [...ext, { id: uid(), gas, kind, vol: EXT_KINDS[kind] }] }); }}>+ Externí lahev</button>
+          <label className="inline">Ručně (l)<input inputMode="decimal" defaultValue={note?.useManual?.[gas] ?? ""} placeholder="–"
+            onBlur={(ev) => save({ useManual: { ...note?.useManual, [gas]: n(ev.target.value) } })} /></label>
+        </div>
+      </div>
+    );
+  };
+  return (
+    <Card title="Spotřeba plynu">
+      {row("dil", "Diluent")}
+      {row("o2", "O₂")}
+      <p className="note">Spotřeba z vlastní lahve = součet poklesů tlaku (malé nárůsty z ohřátí se odečtou, větší nárůst nebo mezitlak = externí plyn). Externí lahev Petrel neměří – zadej typ a tlak start/end. Ruční údaj má přednost. Objemy vlastních lahví nastavíš v Nastavení.</p>
+    </Card>
+  );
+}
+
 function DiveTitle({ id }: { id: string }) {
   const st = useStore();
   const lb = st.lb;
@@ -146,11 +215,13 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
           ["Plyny", <span className="gas-list">{meta.sum.gases.map((g) => <span key={g.mix}><b>{gasLabel(g.mix).label}</b><small>{Math.round(g.s / 60)} min</small></span>)}</span>],
           ["Max. pO₂", `${num(meta.sum.ppo2Max, 2)} bar`], ["Max. CO₂", meta.sum.co2Max != null ? `${num(meta.sum.co2Max, 2)} mbar` : "–"],
+          ["Diluent", <UseTile gas="dil" meta={meta} note={note} />], ["O₂", <UseTile gas="o2" meta={meta} note={note} />],
           ["Vstřiky O₂ (odhad)", meta.inj], ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)],
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
       <NoteEditor note={note} onChange={(p) => setNote(id, p)} />
+      <GasUseCard id={id} meta={meta} note={note} />
     </>
   );
 }
@@ -159,12 +230,16 @@ function ProfileCard({ d }: { d: Dive }) {
   const s = d.s;
   const stops = useMemo(() => realStops(d), [d]);
   const first = stops.findIndex((v) => v != null);
+  const lastStop = stops.length - 1 - [...stops].reverse().findIndex((v) => v != null);
+  // tenká spojnice mezi úseky skutečných zastávek (hloubka zastávky podle počítače)
+  const link = useMemo(() => s.stop.map((v, i) => (first >= 0 && i >= first && i <= lastStop && v > 0 ? v : null)), [d]);
   const segs = useMemo(() => gasSegments(d).map((g) => ({ ...g, color: GAS_COLOR[gasLabel(g.mix).cls], label: gasLabel(g.mix).label })), [d]);
   const gasAt = useMemo(() => s.o2.map((o, i) => gasLabel(`${o}/${s.he[i]}`).label), [d]);
   return (
     <Card title="Profil a dekompresní strop">
       <LineChart t={s.t} invert height={220} series={[
         { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m", fillUp: true },
+        { label: "", color: C[1], values: link, width: 1 },
         { label: "Zastávka", color: C[1], values: stops, unit: "m", width: 3 },
       ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} strip={segs} extra={[{ label: "Plyn", values: gasAt }, { label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
       <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna. Barevný pruh dole = použitý plyn, čárkovaná značka = přepnutí plynu.</p>

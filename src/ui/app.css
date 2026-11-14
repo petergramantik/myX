@@ -249,3 +249,8 @@ label.check { display: flex; gap: 8px; align-items: center; }
 .gchip.nx { color: #c5c56a; border-color: #c5c56a; } .gchip.o2 { color: #fff; border-color: #4fc3f7; }
 .strip-l { font-size: 10px; font-weight: 700; }
 .cells.four .o2t .ct-u { border-bottom-color: #36577f; }
+/* 1.9 – spotřeba plynu */
+.use { display: flex; flex-direction: column; } .use small { font-size: 11px; color: var(--muted); font-weight: 500; }
+.ext-row { display: grid; grid-template-columns: 64px 46px 12px 1fr 1fr 32px; gap: 4px; align-items: center; margin: 4px 0; }
+.ext-row input, .ext-row select { min-width: 0; padding: 6px; }
+label.inline { display: flex; align-items: center; gap: 6px; font-size: 13px; } label.inline input { width: 70px; }

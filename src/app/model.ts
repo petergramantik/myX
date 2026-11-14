@@ -12,7 +12,12 @@ export interface Site { id: string; name: string; lat?: number; lon?: number; sp
 export interface Buddy { id: string; name: string; note?: string; updated: number }
 export type Rating = "up" | "down" | "problem";
 export interface WeatherSnap { at: number; temp: number; wind: number; gust: number; cloud: number; pressure: number; precip: number; code: number }
-export interface DiveNote { siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap; updated: number }
+/** Externí lahev připojená během ponoru (Petrel její tlak neměří). */
+export interface ExtGas { id: string; gas: "dil" | "o2"; kind: string; vol: number; start?: number; end?: number }
+export interface DiveNote {
+  siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
+  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; updated: number;
+}
 /** Ponor založený na lokalitě před stažením logu; po importu se spáruje s ponorem z počítače. */
 export interface Draft extends DiveNote { id: string; created: number; lat?: number; lon?: number; diveId?: string }
 /** Záznam o O₂ čidle v cartridgi. Data ve formátu RRRR-MM-DD. */
@@ -22,7 +27,7 @@ export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
 /** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
 export interface Co2Cal { date: string; gas: string }
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; motto?: boolean; updated: number }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; motto?: boolean; cyl?: { dil: number; o2: number }; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
@@ -36,7 +41,7 @@ export interface Logbook {
   settings: Settings;
 }
 
-export const META_V = 7;
+export const META_V = 8;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };

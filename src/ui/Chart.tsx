@@ -121,11 +121,11 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
       {hover != null && (
         <div className="tip" style={{ left: Math.min(Math.max(0, hx + 10), Math.max(0, W - 170)) }}>
           <b>{xTitle ? xTitle(t[hover]) : `Čas ${fmtTime(t[hover])}`}</b>
-          {series.map((s, i) => <div key={i}><i style={{ background: s.color }} />{s.label}: {fmt(s.values[hover])} {s.unit || ""}</div>)}
+          {series.filter((s) => s.label).map((s, i) => <div key={i}><i style={{ background: s.color }} />{s.label}: {fmt(s.values[hover])} {s.unit || ""}</div>)}
           {extra?.map((s, i) => { const v = s.values[hover]; return <div key={"e" + i}>{s.label}: {typeof v === "string" ? v : fmt(v)} {s.unit || ""}</div>; })}
         </div>
       )}
-      <div className="legend">{series.map((s, i) => <span key={i}><i style={{ background: s.color }} />{s.label}</span>)}</div>
+      <div className="legend">{series.filter((s) => s.label).map((s, i) => <span key={i}><i style={{ background: s.color }} />{s.label}</span>)}</div>
     </div>
   );
 }
