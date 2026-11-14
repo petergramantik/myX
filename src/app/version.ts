@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.7";
+export const APP_VERSION = "1.8";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.8", date: "14. 11. 2026", title: "Plyny a kompaktní V kostce",
+    items: [
+      "V kostce: dvojité dlaždice (hloubka, doba, GF / CNS, teplota, baterie start / end) a použité plyny s časem",
+      "Štítky plynů AIR / TMX / NX / O₂ u nadpisu V kostce",
+      "Profil ponoru: pruh použitého plynu, značka přepnutí plynu, plyn v tooltipu",
+      "Dlaždice O₂ čidel znovu s „na vzduchu“",
+    ],
+  },
   {
     version: "1.7", date: "14. 11. 2026", title: "Detail čidla CO₂ a hláška na přehledu",
     items: [

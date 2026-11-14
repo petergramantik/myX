@@ -86,6 +86,7 @@ export function CellTiles() {
             <div key={pos} className="celltile o2t info" onClick={() => go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className="dot info" /></div>
               <div className="ct-v">–</div>
+              <div className="ct-u">prázdná</div>
               <div className="ct-l info">Vložit</div>
             </div>
           );
@@ -93,6 +94,7 @@ export function CellTiles() {
             <div key={pos} className={"celltile o2t " + s.level} onClick={() => go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className={"dot " + s.level} /></div>
               <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"}<small>mV</small></div>
+              <div className="ct-u"><span className="long">na vzduchu</span><span className="short">vzduch</span></div>
               <div className={"ct-l " + s.level}>{LV_SHORT[s.level]}</div>
             </div>
           );

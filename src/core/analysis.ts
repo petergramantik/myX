@@ -2,12 +2,39 @@
 import type { Dive, Header } from "./shearwater";
 
 export interface Summary {
-  avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number;
+  avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[];
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
 }
 
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
+
+/** Použité plyny („O₂/He“) v pořadí prvního použití a čas na každém v sekundách. */
+export function gasUse(d: Dive): { mix: string; s: number }[] {
+  const out = new Map<string, number>();
+  const dt = d.h.rateS || 5;
+  d.s.t.forEach((t, i) => { if (t > d.h.diveTimeS) return; const k = `${d.s.o2[i]}/${d.s.he[i]}`; out.set(k, (out.get(k) || 0) + dt); });
+  return [...out].map(([mix, s]) => ({ mix, s }));
+}
+/** Úseky ponoru podle použitého plynu (od, do v sekundách). */
+export function gasSegments(d: Dive): { mix: string; from: number; to: number }[] {
+  const out: { mix: string; from: number; to: number }[] = [];
+  d.s.t.forEach((t, i) => {
+    const k = `${d.s.o2[i]}/${d.s.he[i]}`, last = out[out.length - 1];
+    if (last) last.to = t;
+    if (!last || last.mix !== k) out.push({ mix: k, from: t, to: t });
+  });
+  return out;
+}
+/** Štítek a barevná třída plynu: AIR, NX 32, TMX 21/35, O₂. */
+export function gasLabel(mix: string): { label: string; cls: "air" | "tmx" | "nx" | "o2" } {
+  const [o2, he] = mix.split("/").map(Number);
+  if (he > 0) return { label: `TMX ${o2}/${he}`, cls: "tmx" };
+  if (o2 >= 99) return { label: "O₂", cls: "o2" };
+  if (o2 === 21) return { label: "AIR", cls: "air" };
+  return { label: o2 > 21 ? `NX ${o2}` : `${o2}/0`, cls: o2 > 21 ? "nx" : "tmx" };
+}
+export const GAS_COLOR = { air: "#cfd8dc", tmx: "#bc8f6f", nx: "#c5c56a", o2: "#ffffff" } as const;
 
 /** Potápěč je na dekompresní zastávce: má povinnost a je nejvýš 3 m pod hloubkou zastávky. */
 export const atStop = (d: Dive, i: number) => d.s.stop[i] > 0 && d.s.depth[i] <= d.s.stop[i] + 3;
@@ -29,6 +56,7 @@ export function summarize(d: Dive): Summary {
     tempMin: Math.min(...s.temp), tempMax: Math.max(...s.temp),
     ppo2Min: Math.min(...idx.map((i) => s.ppo2[i])), ppo2Max: Math.max(...idx.map((i) => s.ppo2[i])),
     co2Max: co2.length && Math.max(...co2) > 0 ? round(Math.max(...co2), 2) : null,
+    gases: gasUse(d),
     co2AlarmN: d.alarms.filter((a) => a.kind === "co2").length,
     co2AlarmS: d.alarms.filter((a) => a.kind === "co2").reduce((x, a) => x + a.end - a.start, 0),
     co2Avg: co2.length && Math.max(...co2) > 0 ? round(co2.reduce((a, b) => a + b, 0) / co2.length, 2) : null,

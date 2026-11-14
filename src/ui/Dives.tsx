@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { cellCalibration, diveWarnings, injections, realStops, summarize } from "../core/analysis";
+import { GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, injections, realStops, summarize } from "../core/analysis";
 import { loadDive, myNum, setNote } from "../app/store";
 import { norm } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
@@ -103,6 +103,15 @@ export function DiveScreen({ id }: { id: string }) {
   );
 }
 
+/** Dvě hodnoty v jedné dlaždici: vlevo a vpravo, každá s malým popiskem. */
+function Pair({ l, ll, r, rl }: { l: React.ReactNode; ll: string; r: React.ReactNode; rl: string }) {
+  return <span className="pair"><span>{l}<small>{ll}</small></span><span className="r">{r}<small>{rl}</small></span></span>;
+}
+
+export function GasChips({ mixes }: { mixes: string[] }) {
+  return <span className="gas-chips">{mixes.map((m) => { const g = gasLabel(m); return <span key={m} className={"gchip " + g.cls}>{g.label}</span>; })}</span>;
+}
+
 function DiveTitle({ id }: { id: string }) {
   const st = useStore();
   const lb = st.lb;
@@ -128,12 +137,16 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   return (
     <>
       {warns.map((a, i) => <AlertBox key={i} a={a} />)}
-      <Card title="V kostce">
+      <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
         <Tiles items={[
-          ["Max. hloubka", `${num(meta.h.maxDepth)} m`], ["Doba", `${Math.round(meta.h.diveTimeS / 60)} min`], ["Prům. hloubka", `${num(meta.sum.avgDepth)} m`],
-          ["Min. teplota", `${meta.sum.tempMin} °C`], ["GF", `${meta.h.gfLo}/${meta.h.gfHi}`], ["CNS konec", `${meta.h.cnsEnd} %`],
+          ["Hloubka", <Pair l={`${num(meta.h.maxDepth)} m`} ll="max" r={`${num(meta.sum.avgDepth)} m`} rl="průměr" />],
+          ["Doba", <Pair l={`${Math.round(meta.h.diveTimeS / 60)} min`} ll="ponor" r={meta.sum.decoMin ? `${meta.sum.decoMin} min` : "–"} rl="deko" />],
+          ["GF / CNS", <Pair l={`${meta.h.gfLo}/${meta.h.gfHi}`} ll="GF" r={`${meta.h.cnsEnd} %`} rl="CNS" />],
+          ["Teplota", <Pair l={`${meta.sum.tempMin} °C`} ll="min" r={`${meta.sum.tempMax} °C`} rl="max" />],
+          ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
+          ["Plyny", <span className="gas-list">{meta.sum.gases.map((g) => <span key={g.mix}><b>{gasLabel(g.mix).label}</b><small>{Math.round(g.s / 60)} min</small></span>)}</span>],
           ["Max. pO₂", `${num(meta.sum.ppo2Max, 2)} bar`], ["Max. CO₂", meta.sum.co2Max != null ? `${num(meta.sum.co2Max, 2)} mbar` : "–"],
-          ["Diluent", meta.sum.dilUsed], ["Vstřiky O₂ (odhad)", meta.inj], ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)], ["Baterie konec", `${meta.h.batVEnd.toFixed(2)} V`],
+          ["Vstřiky O₂ (odhad)", meta.inj], ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)],
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
@@ -146,13 +159,15 @@ function ProfileCard({ d }: { d: Dive }) {
   const s = d.s;
   const stops = useMemo(() => realStops(d), [d]);
   const first = stops.findIndex((v) => v != null);
+  const segs = useMemo(() => gasSegments(d).map((g) => ({ ...g, color: GAS_COLOR[gasLabel(g.mix).cls], label: gasLabel(g.mix).label })), [d]);
+  const gasAt = useMemo(() => s.o2.map((o, i) => gasLabel(`${o}/${s.he[i]}`).label), [d]);
   return (
     <Card title="Profil a dekompresní strop">
       <LineChart t={s.t} invert height={220} series={[
         { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m", fillUp: true },
         { label: "Zastávka", color: C[1], values: stops, unit: "m", width: 3 },
-      ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} extra={[{ label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
-      <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna.</p>
+      ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} strip={segs} extra={[{ label: "Plyn", values: gasAt }, { label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
+      <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna. Barevný pruh dole = použitý plyn, čárkovaná značka = přepnutí plynu.</p>
     </Card>
   );
 }

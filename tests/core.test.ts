@@ -1,6 +1,6 @@
 // Testy jádra bez soukromých dat: syntetický záznam ponoru a sloučení logbooků.
 import { decodeDive } from "../src/core/shearwater";
-import { summarize, injections, alerts, realStops, DEFAULT_THRESHOLDS } from "../src/core/analysis";
+import { summarize, injections, alerts, realStops, gasLabel, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
 import { detectCellEvents, cellStatus, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
@@ -73,6 +73,7 @@ ok(!mergeLogbooks(lb2, lb3).drafts.z, "spárovaný rozpracovaný ponor se smaže
 }
 
 ok(Array.isArray(d.alarms), "alarmy se dekódují");
+ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" && gasLabel("32/0").label === "NX 32" && gasLabel("100/0").label === "O₂", "štítky plynů");
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

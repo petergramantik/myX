@@ -227,7 +227,6 @@ main.from-left { animation: fromLeft .2s ease-out; } main.from-right { animation
 .cells.four .ct-h { font-size: clamp(11px, 3.1vw, 13px); gap: 4px; } .cells.four .ct-h .dot { flex: none; width: 8px; height: 8px; }
 .cells.four .ct-u { font-size: 10px; }
 .cells.four .ct-l { font-size: clamp(9px, 2.6vw, 11px); letter-spacing: .02em; }
-.cells.four .o2t .ct-v { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .celltile.off { cursor: pointer; }
 .motto { text-align: center; font-weight: 700; font-size: 15px; padding: 8px 10px; border-radius: var(--r); margin-bottom: 10px; }
 .motto.ok { color: var(--ok); background: rgba(102,187,106,.12); }
@@ -236,3 +235,17 @@ main.from-left { animation: fromLeft .2s ease-out; } main.from-right { animation
 .kvline.link { cursor: pointer; padding: 6px 0; border-bottom: 1px solid var(--line); }
 label.check { display: flex; gap: 8px; align-items: center; }
 .cells.four .ct-l { margin-top: auto; padding-top: 6px; }
+/* 1.7.1 – na vzduchu, V kostce, plyny */
+.cells.four .ct-u .short { display: none; }
+@media (max-width: 350px) { .cells.four .ct-u .long { display: none; } .cells.four .ct-u .short { display: inline; } }
+.pair { display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; }
+.pair > span { display: flex; flex-direction: column; } .pair .r { align-items: flex-end; }
+.pair small { font-size: 11px; color: var(--muted); font-weight: 500; }
+.tile .v .pair { font-size: .72em; gap: 8px; }
+.gas-list { display: flex; flex-direction: column; gap: 2px; font-size: .72em; line-height: 1.2; } .gas-list > span { display: flex; flex-direction: column; } .gas-list b { white-space: nowrap; } .gas-list small { font-size: 11px; color: var(--muted); font-weight: 500; }
+.gas-chips { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.gchip { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; border: 1px solid; letter-spacing: .03em; white-space: nowrap; }
+.gchip.air { color: #cfd8dc; border-color: #cfd8dc; } .gchip.tmx { color: #bc8f6f; border-color: #bc8f6f; }
+.gchip.nx { color: #c5c56a; border-color: #c5c56a; } .gchip.o2 { color: #fff; border-color: #4fc3f7; }
+.strip-l { font-size: 10px; font-weight: 700; }
+.cells.four .o2t .ct-u { border-bottom-color: #36577f; }

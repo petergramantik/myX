@@ -30,13 +30,15 @@ function ticks(lo: number, hi: number, n = 5): number[] {
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
-export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines }: {
+export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip }: {
   t: number[]; series: Series[]; height?: number; invert?: boolean; zero?: boolean; markers?: number[]; rightInvert?: boolean;
   bands?: { from: number; to: number; color: string }[];
   /** Svislé čáry od horního okraje grafu k hodnotě `to` (levá osa). */
   vlines?: { t: number; to: number; color: string }[];
   xFmt?: (v: number) => string; xTitle?: (v: number) => string;
-  extra?: { label: string; values: (number | null)[]; unit?: string }[];
+  extra?: { label: string; values: (number | string | null)[]; unit?: string }[];
+  /** Tenký barevný pruh dole (např. použitý plyn) se svislými značkami v místě přepnutí. */
+  strip?: { from: number; to: number; color: string; label: string }[];
 }) {
   const [ref, W] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
@@ -107,13 +109,20 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
         {series.filter((s) => s.fillUp && !s.right).map((s, i) => <path key={"f" + i} d={area(s)} fill={s.color} opacity={0.18} stroke="none" />)}
         {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={s.right ? 0.55 : 1} />)}
         {vlines?.map((v, i) => <line key={"v" + i} x1={X(v.t)} x2={X(v.t)} y1={m.t} y2={Y(v.to)} stroke={v.color} strokeWidth={1} />)}
+        {strip?.map((g, i) => <rect key={"s" + i} x={X(g.from)} width={Math.max(1, X(g.to) - X(g.from))} y={height - m.b - 5} height={4} fill={g.color} opacity={0.85} />)}
+        {strip?.slice(1).map((g, i) => (
+          <g key={"sw" + i}>
+            <line x1={X(g.from)} x2={X(g.from)} y1={m.t} y2={height - m.b} stroke={g.color} strokeWidth={1} strokeDasharray="2 3" opacity={0.8} />
+            <text x={X(g.from) + 3} y={m.t + 10} fill={g.color} className="strip-l">{g.label}</text>
+          </g>
+        ))}
         {hover != null && <line x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref" />}
       </svg>
       {hover != null && (
         <div className="tip" style={{ left: Math.min(Math.max(0, hx + 10), Math.max(0, W - 170)) }}>
           <b>{xTitle ? xTitle(t[hover]) : `Čas ${fmtTime(t[hover])}`}</b>
           {series.map((s, i) => <div key={i}><i style={{ background: s.color }} />{s.label}: {fmt(s.values[hover])} {s.unit || ""}</div>)}
-          {extra?.map((s, i) => <div key={"e" + i}>{s.label}: {fmt(s.values[hover])} {s.unit || ""}</div>)}
+          {extra?.map((s, i) => { const v = s.values[hover]; return <div key={"e" + i}>{s.label}: {typeof v === "string" ? v : fmt(v)} {s.unit || ""}</div>; })}
         </div>
       )}
       <div className="legend">{series.map((s, i) => <span key={i}><i style={{ background: s.color }} />{s.label}</span>)}</div>
