@@ -55,6 +55,11 @@ export function SettingsScreen() {
         <label>Čidla – linearita pod (current limiting)<input inputMode="decimal" defaultValue={th.cellLinWarn} onBlur={(e) => setTh("cellLinWarn", e.target.value)} /></label>
         <label>Baterie v hlavě – varovat po hodinách pod vodou (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatHours} onBlur={(e) => setTh("headBatHours", e.target.value)} /></label>
         <label>Baterie v hlavě – varovat po měsících od výměny (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatMonths} onBlur={(e) => setTh("headBatMonths", e.target.value)} /></label>
+        <label>pO₂ při zanoření – nízké pod (bar)<input inputMode="decimal" defaultValue={th.po2Lo ?? 0.4} onBlur={(e) => setTh("po2Lo", e.target.value)} /></label>
+        <label>pO₂ při zanoření – varovat, když minimum pod (bar)<input inputMode="decimal" defaultValue={th.po2LoMin ?? 0.3} onBlur={(e) => setTh("po2LoMin", e.target.value)} /></label>
+        <label>pO₂ při zanoření – varovat po (s pod prahem)<input inputMode="decimal" defaultValue={th.po2LoWarnS ?? 30} onBlur={(e) => setTh("po2LoWarnS", e.target.value)} /></label>
+        <label>Hypoxie? – minimum pod (bar)<input inputMode="decimal" defaultValue={th.po2Hypo ?? 0.21} onBlur={(e) => setTh("po2Hypo", e.target.value)} /></label>
+        <label>Hypoxie? – pod prahem déle než (s)<input inputMode="decimal" defaultValue={th.po2LoBadS ?? 120} onBlur={(e) => setTh("po2LoBadS", e.target.value)} /></label>
         <label>CO₂ – podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
           <input type="date" value={manual ? new Date(manual * 1000).toISOString().slice(0, 10) : ""} onChange={(e) => saveSettings({ manualFill: e.target.value ? Date.parse(e.target.value + "T12:00:00Z") / 1000 : null })} />

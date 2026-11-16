@@ -214,5 +214,24 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(nearestPair([{ id: "y", start: 100000 + 40 * 60 }] as any, { id: "m", start: 100000 } as any).length === 0, "bez profilu jen do ±20 min");
 }
 
+// ---- nízké pO₂ při zanoření: dohánění setpointu vs. podezření na hypoxii
+{
+  const { startPo2 } = await import("../src/core/analysis");
+  const mk = (po2: (t: number) => number, depth: (t: number) => number, o2p: (t: number) => number = () => 150) => {
+    const t = [...Array(120).keys()].map((i) => i * 5);
+    return { h: { rateS: 5, diveTimeS: 600 }, s: { t, ppo2: t.map(po2), depth: t.map(depth), sp: t.map(() => 0.5), o2p: t.map(o2p) } } as any;
+  };
+  const ok1 = startPo2(mk((t) => (t < 15 ? 0.35 : 0.5), (t) => Math.min(2 + t / 10, 15)));
+  ok(ok1.level === "info", `krátce pod 0,4 → jen informace (${ok1.level})`);
+  const w = startPo2(mk((t) => (t < 40 ? 0.27 : 0.5), (t) => Math.min(2 + t / 10, 15)));
+  ok(w.level === "warn", `0,27 bar 40 s → varování (${w.level})`);
+  const flat = startPo2(mk((t) => (t < 150 ? 0.3 : 0.5), (t) => Math.min(1.5 + t / 15, 15)));
+  ok(flat.level === "bad" && flat.reasons.some((r) => r.includes("neroste")), `pO₂ při zanořování neroste → hypoxie (${flat.reasons})`);
+  const hyp = startPo2(mk((t) => (t < 30 ? 0.18 : 0.5), () => 2));
+  ok(hyp.level === "bad", "pO₂ pod 0,21 → hypoxie");
+  const closed = startPo2(mk((t) => (t < 40 ? 0.33 : 0.5), () => 2, (t) => (t < 40 ? 0 : 150)));
+  ok(closed.level === "bad" && closed.reasons.includes("tlak O₂ 0 bar"), `tlak O₂ 0 → hypoxie (${closed.reasons})`);
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

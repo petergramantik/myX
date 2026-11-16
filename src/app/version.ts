@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.24.9";
+export const APP_VERSION = "1.25";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.25", date: "2026-11-16", title: "Nízké pO₂ při zanoření a hypoxie, upozornění jen na problémy", items: [
+    "Nízké pO₂ na začátku ponoru se hodnotí podle průběhu: dohánění setpointu (informace), nízké pO₂ při zanoření (varování), podezření na hypoxii – zkontroluj ventil O₂ (pO₂ pod 0,21, déle než 2 min pod 0,4, tlak O₂ 0, pO₂ při zanořování neroste).",
+    "Tag Hypoxie?; alarm u hladiny a po vynoření jen jako informace; prahy v Nastavení → Upozornění.",
+    "V záhlaví detailu ponoru jen varování; informace jsou v záložce Události.",
+    "Pozdní přepnutí setpointu uvádí i krátké přepnutí a vrácení (do 2 min se nepočítá).",
+  ] },
   { version: "1.24.9", date: "2026-11-16", title: "Párování při posunu hodin, oprava detailu lokality", items: [
     "Oprava: detail lokality padal do prázdné obrazovky.",
     "Při pádu obrazovky se ukáže hláška s tlačítky Zpět / Znovu načíst.",

@@ -5,7 +5,7 @@ import type { Dive, Header } from "./shearwater";
 export interface Summary {
   avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[]; dilUse: GasUse; o2Use: GasUse; pn2Max: number;
   btnN: number; menuN: number; offMainS: number;
-  densMax: number; vents: number; co2Bad: boolean; po2HiN: number; po2LoN: number; spreadMin: number; cellIssue: CellIssue;
+  densMax: number; vents: number; co2Bad: boolean; po2HiN: number; po2LoN: number; startPo2: StartPo2Level; spreadMin: number; cellIssue: CellIssue;
   sp: SpChange[]; dose: { sol: number; man: number; amb: number; dil: number; manPreSw: number };
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
@@ -117,14 +117,22 @@ export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RU
   const fmt = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
   const down = s.t.find((_, i) => s.depth[i] >= 1.5) ?? 0;
   const startHigh = s.sp[Math.max(0, s.t.findIndex((t) => t >= down))] >= 1.0;
-  const ups = sum.sp.filter((c) => c.to >= 1.0 && c.from < 1.0);
+  const allUps = sum.sp.filter((c) => c.to >= 1.0 && c.from < 1.0);
+  // krátké přepnutí nahoru a zpět do 2 min se za přepnutí nepočítá (jen se uvede u následujícího)
+  const heldS = (c: SpChange) => { const nx = sum.sp.find((x) => x.t > c.t && x.to < 1.0); return (nx ? nx.t : d.h.diveTimeS) - c.t; };
+  const ups = allUps.filter((c) => heldS(c) >= 120);
+  const fmin = (t: number) => (Math.round(t / 6) / 10).toLocaleString("cs-CZ", { minimumFractionDigits: 1 });
+  let prevT = -1;
   // pozdní přepnutí: měřeno od dosažení dna (hloubka se pak ≥ stableS nezvýší o víc než osc)
   for (const [k, c] of ups.entries()) {
     const j = s.t.findIndex((t) => t >= c.t);
     if (j < 0) continue;
     const p = plateauStart(d, j, r.osc);
     const delay = (c.t - s.t[p]) / 60;
-    const txt = `Setpoint ${fmt(c.to)} nastaven v ${Math.round(c.t / 60)}. min v ${fmt(c.depth)} m, ${fmt(Math.round(delay * 10) / 10)} min po dosažení dna (${fmt(s.depth[p])} m)${c.manual ? ", ručně v menu Petrelu" : ""}.`;
+    const short = allUps.filter((x) => x.t > prevT && x.t < c.t && heldS(x) < 120)
+      .map((x) => { const back = sum.sp.find((y) => y.t > x.t && y.to < 1.0); return `Krátce: ${fmin(x.t)} min → ${fmt(x.to)} (${fmt(x.depth)} m)${back ? `, po ${Math.round(back.t - x.t)} s zpět na ${fmt(back.to)}` : ""}.`; });
+    prevT = c.t;
+    const txt = [...short, `${fmin(c.t)} min → ${fmt(c.to)} (${fmt(c.depth)} m), ${fmt(Math.round(delay * 10) / 10)} min po dosažení dna (${fmt(s.depth[p])} m)${c.manual ? ", ručně v menu Petrelu" : ""}.`].join(" ");
     if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: "warn", title: "Pozdní přepnutí na vysoký setpoint", text: txt });
     else if (k === 0) out.push({ level: "info", title: "Přepnutí setpointu", text: txt });
   }
@@ -311,7 +319,7 @@ export function summarize(d: Dive): Summary {
     co2Bad: co2Plausibility(d)?.ok === false,
     po2HiN: d.alarms.filter((a) => a.kind === "po2high").length,
     // nízké pO₂ jen pod vodou (ne na hladině) a ne při setpointu 0,19 před výstupem
-    po2LoN: d.alarms.filter((a) => { if (a.kind !== "po2low") return false; const i = d.s.t.findIndex((t) => t >= a.start); return i >= 0 && d.s.depth[i] >= 1.5 && d.s.sp[i] >= 0.3; }).length,
+    po2LoN: lowPo2Phases(d).mid, startPo2: startPo2(d).level,
     spreadMin: cs0?.min ?? 0, cellIssue: cs0?.kind ?? "",
     dilUse: pressureUse(d.s.t, d.s.dil, d.s.depth, d.h.diveTimeS),
     o2Use: pressureUse(d.s.t, d.s.o2p, d.s.depth, d.h.diveTimeS),
@@ -367,8 +375,8 @@ export interface Alert { level: "warn" | "bad" | "info"; title: string; text: st
 /** Minuty jako „4 h 41 min“. */
 export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
 
-export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number; spOsc?: number; spDescM?: number; spBelow?: number; spAbove?: number }
-export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 5, spOsc: 3, spDescM: 6, spBelow: 0.15, spAbove: 0.2 };
+export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number; spOsc?: number; spDescM?: number; spBelow?: number; spAbove?: number; po2Lo?: number; po2LoMin?: number; po2Hypo?: number; po2LoWarnS?: number; po2LoBadS?: number }
+export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 5, spOsc: 3, spDescM: 6, spBelow: 0.15, spAbove: 0.2, po2Lo: 0.4, po2LoMin: 0.3, po2Hypo: 0.21, po2LoWarnS: 30, po2LoBadS: 120 };
 
 const DAY = 86400;
 const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC" });
@@ -426,15 +434,90 @@ export function alerts(hs: Header[], nowLocal: number, th: Thresholds, manualFil
 }
 
 /** Podezřelé hodnoty v jednom ponoru. */
+export type StartPo2Level = "" | "info" | "warn" | "bad";
+/**
+ * Nízké pO₂ na začátku ponoru (do dosažení setpointu, max. 5 min): neškodné dohánění setpointu vs. podezření na hypoxii
+ * (zavřený ventil O₂). Hodnotí minimum, dobu pod prahem, růst pO₂ při zanořování a tlak O₂.
+ */
+export function startPo2(d: Dive, th: Thresholds = DEFAULT_THRESHOLDS) {
+  const s = d.s, lo = th.po2Lo ?? 0.4, dt = d.h.rateS || 5;
+  const empty = { level: "" as StartPo2Level, min: 0, belowS: 0, reachS: 0, reasons: [] as string[], o2From: null as number | null, o2To: null as number | null };
+  if (!s.t.length || !s.ppo2.some((v) => v > 0)) return empty;
+  const end = startEnd(d, lo);
+  const idx = [...Array(end).keys()].filter((i) => s.ppo2[i] > 0);
+  const below = idx.filter((i) => s.ppo2[i] < lo);
+  if (!below.length) return empty;
+  const min = Math.min(...below.map((i) => s.ppo2[i]));
+  const belowS = below.length * dt;
+  const spRef = Math.max(s.sp[Math.min(end, s.t.length - 1)] || 0.5, lo);
+  const reach = s.t.findIndex((_, i) => i > below[0] && s.ppo2[i] >= spRef - 0.05);
+  const reasons: string[] = [];
+  // tlak O₂ během události
+  let o2 = below.map((i) => s.o2p[i]).filter((v): v is number => v != null);
+  if (o2.some((v) => v > 0)) { const k = o2.findIndex((v) => v > 0); o2 = o2.slice(k); } // první vzorky bez údaje vysílače
+  const hasO2 = s.o2p.some((v) => v != null && v > 0);
+  const o2From = o2.length ? o2[0] : null, o2To = o2.length ? o2[o2.length - 1] : null;
+  const o2Zero = hasO2 && o2.length > 0 && o2.filter((v) => v <= 0).length * dt >= 15 && !(o2From === 0 && o2.slice(2).every((v) => v > 0));
+  // pO₂ při zanořování neroste: hloubka +3 m a víc, pO₂ pod prahem a skoro beze změny
+  let flat = false;
+  for (let a = 0; a < below.length && !flat; a++) for (let b = a + 1; b < below.length; b++) {
+    const i = below[a], j = below[b];
+    if (s.t[j] - s.t[i] > 120) break;
+    if (s.depth[j] - s.depth[i] >= 3 && s.ppo2[j] - s.ppo2[i] < 0.05 && s.t[j] - s.t[i] >= 45) { flat = true; break; }
+  }
+  let level: StartPo2Level = "info";
+  if (min < (th.po2Hypo ?? 0.21)) reasons.push(`pO₂ kleslo na ${fmtBar(min)} bar`);
+  if (belowS > (th.po2LoBadS ?? 120)) reasons.push(`pod ${fmtBar(lo)} bar ${Math.round(belowS)} s`);
+  if (o2Zero) reasons.push("tlak O₂ 0 bar");
+  if (flat) reasons.push("pO₂ při zanořování neroste");
+  if (reasons.length) level = "bad";
+  else if (belowS >= (th.po2LoWarnS ?? 30) || min < (th.po2LoMin ?? 0.3)) level = "warn";
+  return { level, min, belowS, reachS: reach >= 0 ? s.t[reach] : -1, reasons, o2From, o2To };
+}
+const fmtBar = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+
+/** Index konce úvodní fáze: pO₂ ≥ práh po dobu ≥ 20 s, nejpozději 5 min. */
+function startEnd(d: Dive, lo = 0.4): number {
+  const s = d.s, dt = d.h.rateS || 5;
+  const e = s.t.findIndex((t, i) => t > 300 || (s.ppo2[i] >= lo && s.ppo2.slice(i, i + Math.ceil(20 / dt)).every((v) => v >= lo)));
+  return e < 0 ? s.t.length : e;
+}
+
+/** Alarmy nízkého pO₂ z počítače podle fáze: úvod (dohánění setpointu), během ponoru, u hladiny (výstup, po vynoření, SP 0,19). */
+export function lowPo2Phases(d: Dive) {
+  const s = d.s, out = { start: 0, mid: 0, surface: 0 }, se = startEnd(d);
+  for (const a of d.alarms.filter((a) => a.kind === "po2low")) {
+    const i = s.t.findIndex((t) => t >= a.start);
+    if (a.start >= d.h.diveTimeS || i < 0) out.surface++;
+    else if (i <= se + 2) out.start++;
+    else if (s.depth[i] < 3 || s.sp[i] < 0.3) out.surface++;
+    else out.mid++;
+  }
+  return out;
+}
+
 export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   const out: Alert[] = [];
   if (sum.co2Max != null && sum.co2Max >= th.co2Mbar) out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${sum.co2Max.toFixed(1)} mbar.` });
+  // nízké pO₂ na začátku ponoru – podle průběhu (zavřený ventil O₂ = hypoxie)
+  const sp0 = startPo2(d, th);
+  if (sp0.level) {
+    const lo = th.po2Lo ?? 0.4;
+    const det = `Minimum ${fmtBar(sp0.min)} bar, pod ${fmtBar(lo)} bar ${Math.round(sp0.belowS)} s${sp0.reachS >= 0 ? `, setpoint dosažen v ${Math.round(sp0.reachS)}. s` : ", setpoint nedosažen"}`
+      + (sp0.o2From != null ? `, tlak O₂ ${sp0.o2From === sp0.o2To ? `${Math.round(sp0.o2From)} bar` : `${Math.round(sp0.o2From)} → ${Math.round(sp0.o2To!)} bar${sp0.o2From > 20 && sp0.o2To! < 20 ? " – přechod na externí lahev?" : ""}`}` : "") + ".";
+    if (sp0.level === "bad") out.push({ level: "bad", title: "Podezření na hypoxii při zanoření – zkontroluj ventil O₂", text: `${sp0.reasons.join(", ")}. ${det}` });
+    else out.push({ level: sp0.level, title: "Nízké pO₂ při zanoření", text: det + (sp0.level === "info" ? " Smyčka ještě dotahovala setpoint." : "") });
+  }
+  const ph = lowPo2Phases(d);
+  if (ph.surface) out.push({ level: "info", title: "Nízké pO₂ u hladiny", text: `Alarm nízkého pO₂ ${ph.surface}× při výstupu k hladině nebo po vynoření – pokles tlaku.` });
   for (const kind of ["co2", "po2high", "po2low"] as const) {
-    const as = d.alarms.filter((a) => a.kind === kind);
+    if (kind === "po2low" && !ph.mid) continue;
+    const se = startEnd(d);
+    const as = d.alarms.filter((a) => { if (a.kind !== kind) return false; if (kind !== "po2low") return true; const i = d.s.t.findIndex((t) => t >= a.start); return a.start < d.h.diveTimeS && i > se + 2 && d.s.depth[i] >= 3 && d.s.sp[i] >= 0.3; });
     if (!as.length) continue;
     const min = as.reduce((x, a) => x + a.end - a.start, 0) / 60;
     const lowSp = kind === "po2low" && as.some((a) => d.s.sp[d.s.t.findIndex((t) => t >= a.start)] < 0.3);
-    out.push({ level: kind === "po2low" ? "info" : kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
+    out.push({ level: kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
       text: `${as.length}× (${as.map((a) => `${Math.round(a.start / 60)}.–${Math.max(Math.round(a.start / 60), Math.round(a.end / 60))}. min`).join(", ")}), celkem ${min < 1 ? "pod 1 min" : Math.round(min) + " min"}.` });
   }
   const cs = cellSpread(d);
