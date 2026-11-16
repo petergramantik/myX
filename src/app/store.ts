@@ -218,6 +218,8 @@ export async function importGuest(file: File): Promise<GuestLog | null> {
   const lb = applyCloud(emptyLogbook(), cloud, new Set(metas.map((m) => m.id)));
   await db.put("kv", { metas, lb }, id, db.GUEST);
   const log: GuestLog = { id, name: `${model}${serial ? " " + serial : ""}`, count: metas.length, added: Date.now(), serial: serial.toUpperCase() || undefined, model };
+  // starší log ze stejného počítače nahradit, ať se nehromadí duplicity
+  for (const old of (await guestLogs()).filter((l) => log.serial && l.serial === log.serial)) await deleteGuest(old);
   await db.put("kv", [log, ...(await guestLogs())], "logs", db.GUEST);
   guestIndex = null;
   const known = log.serial ? ownLb().computers?.[log.serial] : undefined;
@@ -225,6 +227,23 @@ export async function importGuest(file: File): Promise<GuestLog | null> {
   await openGuest(log);
   return log;
 }
+/** Soubor sdílený do aplikace (Web Share Target) – načte se jako cizí log. Vrací log a jeho nejnovější ponor. */
+export async function takeShared(): Promise<{ log: GuestLog; last: Meta | null; mine: Meta | null } | null> {
+  if (!("caches" in self)) return null;
+  const c = await caches.open("myx-share");
+  const r = await c.match("shared.db");
+  if (!r) return null;
+  await c.delete("shared.db");
+  const name = decodeURIComponent(r.headers.get("X-Name") || "sdileny.db");
+  const file = new File([await r.blob()], name);
+  if (st.guest) closeGuest();
+  const log = await importGuest(file);
+  if (!log) return null;
+  const last = [...st.metas].sort((a, b) => b.start - a.start)[0] || null;
+  const mine = last ? ownMetas().find((m) => Math.abs(m.start - last.start) <= 900) || null : null;
+  return { log, last, mine };
+}
+
 export async function openGuest(log: GuestLog) {
   const data = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", log.id, db.GUEST);
   if (!data) { toast("Cizí log se nepodařilo načíst"); return; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { init, locate, scheduleSync, syncNow } from "./app/store";
+import { init, locate, scheduleSync, syncNow, takeShared, toast } from "./app/store";
 import { back, go, tab, useScreen, useStore, type Screen } from "./ui/common";
 import { OverviewScreen } from "./ui/Overview";
 import { DiveScreen, DivesScreen } from "./ui/Dives";
@@ -70,7 +70,17 @@ const isTab = (s: Screen) => s.t !== "warn" && TABS.some(([t]) => t.t === s.t &&
 function App() {
   const s = useScreen();
   const st = useStore();
-  useEffect(() => { init(); }, []);
+  useEffect(() => {
+    init().then(async () => {
+      if (!new URLSearchParams(location.search).has("shared")) return;
+      history.replaceState(null, "", location.pathname);
+      const r = await takeShared().catch(() => null);
+      if (!r) { toast("Sdílený soubor se nepodařilo načíst"); return; }
+      const who = ownerName(r.log) || r.log.name;
+      if (r.mine && r.last) { closeGuest(); go({ t: "cmp", id: r.mine.id, other: r.last.id }); toast(`Načten log: ${who} – porovnání s tvým ponorem`); }
+      else if (r.last) { go({ t: "dive", id: r.last.id }); toast(`Načten log: ${who}. Porovnání nabídnu, až stáhneš svůj ponor.`); }
+    });
+  }, []);
   const [busy, setBusy] = useState(false);
   const w = useWarnings();
   const [anim, setAnim] = useState("");

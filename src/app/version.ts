@@ -1,9 +1,16 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.13";
+export const APP_VERSION = "1.14";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.14", date: "16. 11. 2026", title: "Sdílení logu do myX",
+    items: [
+      "Export Shearwater Cloud sdílený přes Quick Share, WhatsApp apod. → „myX“ se otevře jako cizí log",
+      "Log ze stejného počítače nahradí starší, po načtení se rovnou nabídne porovnání se tvým ponorem",
+    ],
+  },
   {
     version: "1.13", date: "16. 11. 2026", title: "Porovnání ponorů s buddym",
     items: [
