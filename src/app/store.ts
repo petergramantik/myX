@@ -160,10 +160,24 @@ export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[] }
   guestIndex = out;
   return out;
 }
+/** Hodiny počítačů se rozcházejí (i o 10 min) – bere se nejbližší ponor buddyho do ±20 min. */
+export const PAIR_S = 1200;
+export function nearestPair(metas: Meta[], m: Meta): Meta[] {
+  let best: Meta | null = null;
+  for (const g of metas) if (Math.abs(g.start - m.start) <= PAIR_S && (!best || Math.abs(g.start - m.start) < Math.abs(best.start - m.start))) best = g;
+  return best ? [best] : [];
+}
+/** Odhad odchylky hodin počítače buddyho z časů začátku společných ponorů (s, + = jdou napřed). */
+export async function clockDrift(serial: string): Promise<{ at: number; diff: number }[]> {
+  const ix = (await guestIndexLoad()).find((x) => x.log.serial === serial);
+  if (!ix) return [];
+  return ownMetas().flatMap((m) => nearestPair(ix.metas, m).map((g) => ({ at: m.start, diff: g.start - m.start })));
+}
+
 /** Ponory buddyho z cizích logů, které časově odpovídají ponoru (začátek do ±15 min). */
 export async function buddyDivesFor(m: Meta): Promise<{ log: GuestLog; meta: Meta; owner: string | null }[]> {
   const lb = ownLb();
-  return (await guestIndexLoad()).flatMap(({ log, metas }) => metas.filter((g) => Math.abs(g.start - m.start) <= 900).map((g) => {
+  return (await guestIndexLoad()).flatMap(({ log, metas }) => nearestPair(metas, m).map((g) => {
     const c = log.serial ? lb.computers?.[log.serial] : undefined;
     return { log, meta: g, owner: c?.buddyId ? lb.buddies[c.buddyId]?.name ?? null : null };
   }));
@@ -188,7 +202,7 @@ export async function setComputerOwner(log: GuestLog, buddy: { id?: string; name
   if (bid) { // doplnit buddyho k mým ponorům, které se časově shodují s ponory z jeho počítače
     const g = (await guestIndexLoad()).find((x) => x.log.id === log.id)?.metas || [];
     for (const m of ownMetas()) {
-      if (!g.some((x) => Math.abs(x.start - m.start) <= 900)) continue;
+      if (!nearestPair(g, m).length) continue;
       const n = lb.notes[m.id] || { buddyIds: [], note: "", updated: 0 };
       if (!n.buddyIds.includes(bid)) lb.notes[m.id] = { ...n, buddyIds: [...n.buddyIds, bid], updated: Date.now() };
     }
@@ -246,7 +260,7 @@ export async function takeShared(): Promise<{ log: GuestLog; last: Meta | null; 
   const log = await importGuest(file);
   if (!log) return null;
   const last = [...st.metas].sort((a, b) => b.start - a.start)[0] || null;
-  const mine = last ? ownMetas().find((m) => Math.abs(m.start - last.start) <= 900) || null : null;
+  const mine = last ? ownMetas().find((m) => Math.abs(m.start - last.start) <= PAIR_S) || null : null;
   return { log, last, mine };
 }
 

@@ -113,91 +113,176 @@ export function diffRows(a: DiveStats, b: DiveStats): DiffRow[] {
   return multiRows([a, b]).map((r) => ({ key: r.key, label: r.label, a: r.vals[0], b: r.vals[1], weight: r.weight }));
 }
 
-/** Závěr pro 3 a více potápěčů: každý proti průměru skupiny, jen podstatné odchylky. */
-export function groupConclusion(names: string[], st: DiveStats[]): string[] {
-  const n = st.length, avg = (f: (s: DiveStats) => number) => st.reduce((a, s) => a + f(s), 0) / n;
-  const out: string[] = [];
-  const tts = avg((s) => s.ttsMax), amb = avg((s) => s.ambInt), po2 = avg((s) => s.po2Int), dep = avg((s) => s.avgDepth);
-  const ups = st.map((s) => s.spUp?.t ?? null).filter((x): x is number => x != null);
-  const upAvg = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
-  out.push(`Deko ve skupině: max. TTS ${st.map((s, i) => `${names[i]} ${s.ttsMax}`).join(", ")} min (průměr ${f1(tts, 1)}).`);
-  st.forEach((s, i) => {
-    const parts: string[] = [];
-    if (s.ttsMax - tts >= 2) {
-      const dDepth = s.ambInt - amb, dPo2 = po2 - s.po2Int, tot = Math.abs(dDepth) + Math.abs(dPo2) || 1;
-      const why: string[] = [];
-      if (dPo2 > 0 && dPo2 / tot >= 0.3) why.push(s.spUp && upAvg != null && s.spUp.t - upAvg >= 120 ? `pozdější přepnutí na vysoký SP (${Math.round(s.spUp.t / 60)}. min, průměr ${Math.round(upAvg / 60)}.)` : !s.spUp ? "nepřepnutý vysoký SP" : `nižší pO₂ (${f1(s.po2All, 2)} bar)`);
-      if (dDepth > 0 && dDepth / tot >= 0.3) why.push(s.avgDepth > dep + 0.3 ? `držel se níž (průměr ${f1(s.avgDepth)} vs. ${f1(dep)} m)` : `delší pobyt v hloubce (${f1(s.t20, 0)} min pod 20 m)`);
-      parts.push(`nejdelší deko nad průměrem skupiny (TTS ${s.ttsMax} min)${why.length ? " – " + why.join(", ") : ""}`);
-    }
-    if (s.gf !== st[0].gf || st.some((x) => x.gf !== s.gf)) if (st.filter((x) => x.gf === s.gf).length === 1) parts.push(`jiné GF (${s.gf})`);
-    if (s.co2Max != null && st.every((x, j) => j === i || (x.co2Max ?? 0) + 1 <= s.co2Max!)) parts.push(`nejvyšší CO₂ (${f1(s.co2Max)} mbar, alarmy ${s.co2Alarms}×)${s.dens52 > avg((x) => x.dens52) + 3 ? ", déle dýchal hustou směs" : ""}`);
-    if (s.offMin - avg((x) => x.offMin) >= 5) parts.push(`nejdéle mimo setpoint (${f1(s.offMin, 0)} min)`);
-    if (s.vents - avg((x) => x.vents) >= 3) parts.push(`častěji upouštěl smyčku (${s.vents}×)`);
-    if (s.ascRate - avg((x) => x.ascRate) >= 1.5) parts.push(`rychlejší výstup (${f1(s.ascRate)} m/min)`);
-    if (parts.length) out.push(`${names[i]}: ${parts.join("; ")}.`);
-  });
-  if (out.length === 1) out.push("Žádný potápěč se od skupiny výrazně neliší.");
-  return out;
+export interface Section { key: string; title: string; level: 0 | 1 | 2; lines: string[] }
+const SECT: Record<string, string> = { deco: "Dekomprese", po2: "pO₂ a setpoint", co2: "CO₂", breath: "Dýchání a smyčka", profile: "Profil", gas: "Plyny" };
+const sec = (key: string, level: 0 | 1 | 2, lines: string[]): Section => ({ key, title: SECT[key], level, lines });
+const sortSec = (x: Section[]) => x.sort((p, q) => q.level - p.level);
+
+/** Úsek ≥ 6 min, ve kterém byl jeden potápěč nejvíc hlouběji (b proti a, b posunuté o off s). */
+export function deeperWindow(a: Dive, b: Dive, off: number): { from: number; to: number; diff: number } | null {
+  const da: number[] = [], db: number[] = [];
+  const at = (d: Dive, t: number) => { if (t < 0 || t > d.h.diveTimeS) return null; const i = d.s.t.findIndex((x) => x >= t); return i < 0 ? null : d.s.depth[i]; };
+  for (let t = 0; t <= a.h.diveTimeS; t += 30) { const x = at(a, t), y = at(b, t - off); if (x == null || y == null) { da.push(NaN); db.push(NaN); } else { da.push(x); db.push(y); } }
+  const W = 12; let best: { from: number; to: number; diff: number } | null = null;
+  for (let i = 0; i + W <= da.length; i++) {
+    let sum = 0, n = 0; for (let k = i; k < i + W; k++) if (!isNaN(da[k])) { sum += db[k] - da[k]; n++; }
+    if (n < W * 0.8) continue;
+    const diff = sum / n;
+    if (!best || Math.abs(diff) > Math.abs(best.diff)) best = { from: i * 30, to: (i + W) * 30, diff };
+  }
+  return best && Math.abs(best.diff) >= 1.5 ? best : null;
+}
+
+/** Vysvětlení podílu hloubky: jen to, co se skutečně liší (průměrná hloubka, délka ponoru, úsek hlouběji). */
+function depthWhy(x: DiveStats, y: DiveStats, deeper: string | null): string | null {
+  if (Math.abs(x.avgDepth - y.avgDepth) >= 0.3) return `${x.avgDepth > y.avgDepth ? "vyšší" : "nižší"} průměrná hloubka (${f1(x.avgDepth)} vs. ${f1(y.avgDepth)} m)`;
+  if (Math.abs(x.durMin - y.durMin) >= 2) return `${x.durMin > y.durMin ? "delší" : "kratší"} ponor (${f1(x.durMin, 0)} vs. ${f1(y.durMin, 0)} min)`;
+  return deeper;
 }
 
 /**
- * Stručný závěr: hlavně rozklad rozdílu v inertní zátěži (ta určuje dekompresi) na podíl hloubky a podíl pO₂,
- * vliv GF a další odlišnosti (pO₂ během deko, CO₂ a jeho souvislosti, přesnost řízení).
+ * Závěr dvou potápěčů po sekcích (dekomprese, pO₂ a setpoint, CO₂, dýchání, profil, plyny).
+ * Rozdíl v deko se rozkládá na hloubku a pO₂ jen při podstatném rozdílu inertní zátěže (≥ 5 % a ≥ 10 bar·min).
  */
-export function conclusion(A: string, B: string, a: DiveStats, b: DiveStats): string[] {
-  const out: string[] = [];
-  const longer = a.ttsMax > b.ttsMax ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
-  const dTts = Math.abs(a.ttsMax - b.ttsMax), dDeco = Math.abs(a.decoMin - b.decoMin);
-  const dIn = longer.x.inert - longer.y.inert;
-  if (dTts >= 2 || dDeco >= 2) {
-    let s = `U potápěče ${longer.who} byla dekomprese delší (max. TTS ${longer.x.ttsMax} vs. ${longer.y.ttsMax} min, na zastávkách ${f1(longer.x.decoMin, 0)} vs. ${f1(longer.y.decoMin, 0)} min).`;
-    if (longer.x.gf !== longer.y.gf) s += ` Měl jiné GF (${longer.x.gf} vs. ${longer.y.gf}), což samo o sobě mění povinnost i při stejném profilu.`;
-    if (dIn > 1) {
-      const depthPart = longer.x.ambInt - longer.y.ambInt, po2Part = longer.y.po2Int - longer.x.po2Int;
-      const tot = Math.abs(depthPart) + Math.abs(po2Part) || 1;
-      const parts: [number, string][] = [];
-      if (po2Part > 0) {
-        const why = longer.x.spUp && longer.y.spUp && longer.x.spUp.t - longer.y.spUp.t >= 120
-          ? `pozdější přepnutí na vysoký setpoint (${Math.round(longer.x.spUp.t / 60)}. vs. ${Math.round(longer.y.spUp.t / 60)}. min)`
-          : !longer.x.spUp && longer.y.spUp ? "nepřepnutí na vysoký setpoint"
-          : (longer.x.spUpVal ?? 0) < (longer.y.spUpVal ?? 0) ? `nižší vysoký setpoint (${f1(longer.x.spUpVal, 2)} vs. ${f1(longer.y.spUpVal, 2)})`
-          : `nižší průměrné pO₂ (${f1(longer.x.po2All, 2)} vs. ${f1(longer.y.po2All, 2)} bar)`;
-        parts.push([po2Part / tot, why]);
+export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveStats, deeper?: { from: number; to: number; diff: number } | null): Section[] {
+  const out: Section[] = [];
+  // ---- dekomprese
+  {
+    const lines: string[] = [];
+    const L = a.ttsMax > b.ttsMax || (a.ttsMax === b.ttsMax && a.decoMin > b.decoMin) ? { who: A, x: a, y: b, other: B } : { who: B, x: b, y: a, other: A };
+    const dTts = L.x.ttsMax - L.y.ttsMax, dDeco = L.x.decoMin - L.y.decoMin;
+    let level: 0 | 1 | 2 = dTts >= 4 || dDeco >= 4 ? 2 : dTts >= 2 || dDeco >= 2 ? 1 : 0;
+    if (dTts >= 2) lines.push(`${L.who}: delší dekomprese (max. TTS ${L.x.ttsMax} vs. ${L.y.ttsMax} min, na zastávkách ${f1(L.x.decoMin, 0)} vs. ${f1(L.y.decoMin, 0)} min).`);
+    else if (dDeco >= 2) lines.push(`${L.who}: delší čas na zastávkách (${f1(L.x.decoMin, 0)} vs. ${f1(L.y.decoMin, 0)} min), max. TTS podobné (${L.x.ttsMax} vs. ${L.y.ttsMax} min).`);
+    else lines.push(`Dekompresní povinnost podobná (max. TTS ${a.ttsMax} vs. ${b.ttsMax} min, na zastávkách ${f1(a.decoMin, 0)} vs. ${f1(b.decoMin, 0)} min).`);
+    if (a.gf !== b.gf) { lines.push(`Jiné GF (${A} ${a.gf}, ${B} ${b.gf}) – samo o sobě mění povinnost i při stejném profilu.`); level = Math.max(level, 1) as 0 | 1 | 2; }
+    if (level > 0) {
+      const dIn = L.x.inert - L.y.inert, mean = (L.x.inert + L.y.inert) / 2 || 1;
+      if (Math.abs(dIn) < 10 || Math.abs(dIn) / mean < 0.05) {
+        const why: string[] = [];
+        if (L.x.po2Deco != null && L.y.po2Deco != null && L.y.po2Deco - L.x.po2Deco >= 0.03) why.push(`nižší pO₂ během deko (${f1(L.x.po2Deco, 2)} vs. ${f1(L.y.po2Deco, 2)} bar)`);
+        if (L.x.ascRate - L.y.ascRate >= 1) why.push(`rychlejší výstup (${f1(L.x.ascRate)} vs. ${f1(L.y.ascRate)} m/min)`);
+        lines.push(`Inertní zátěž prakticky stejná (rozdíl ${f1(Math.abs(dIn), 0)} bar·min, ${f1(Math.abs(dIn) / mean * 100, 0)} %)` + (why.length ? ` – rozdíl dělá spíš ${why.join(" a ")}.` : "."));
+      } else if (dIn > 0) {
+        const depthPart = L.x.ambInt - L.y.ambInt, po2Part = L.y.po2Int - L.x.po2Int;
+        const tot = Math.abs(depthPart) + Math.abs(po2Part) || 1;
+        const parts: [number, string][] = [];
+        if (po2Part > 0) parts.push([po2Part / tot,
+          L.x.spUp && L.y.spUp && L.x.spUp.t - L.y.spUp.t >= 120 ? `pozdější přepnutí na vysoký setpoint (${Math.round(L.x.spUp.t / 60)}. vs. ${Math.round(L.y.spUp.t / 60)}. min)`
+          : !L.x.spUp && L.y.spUp ? "nepřepnutí na vysoký setpoint"
+          : (L.x.spUpVal ?? 0) < (L.y.spUpVal ?? 0) ? `nižší vysoký setpoint (${f1(L.x.spUpVal, 2)} vs. ${f1(L.y.spUpVal, 2)})`
+          : `nižší průměrné pO₂ (${f1(L.x.po2All, 2)} vs. ${f1(L.y.po2All, 2)} bar)`]);
+        if (depthPart > 0) {
+          const dw = deeper ? (() => { const who = (L.who === B) === (deeper.diff > 0) ? L.who : L.other; return who === L.who ? `v ${Math.round(deeper.from / 60)}.–${Math.round(deeper.to / 60)}. min průměrně o ${f1(Math.abs(deeper.diff))} m hlouběji` : null; })() : null;
+          const why = depthWhy(L.x, L.y, dw);
+          if (why) parts.push([depthPart / tot, why]);
+        }
+        parts.sort((p, q) => q[0] - p[0]);
+        if (parts.length) lines.push(`Inertní zátěž vyšší o ${f1(dIn, 0)} bar·min: ` + parts.map(([w, t], i) => (i === 0 ? `zhruba ${Math.round(w * 100)} % vysvětluje ${t}` : `zbytek ${t}`)).join(", ") + ".");
       }
-      if (depthPart > 0) parts.push([depthPart / tot, longer.x.avgDepth > longer.y.avgDepth + 0.3 ? `vyšší průměrná hloubka – držel se níž (${f1(longer.x.avgDepth)} vs. ${f1(longer.y.avgDepth)} m)` : `delší pobyt v hloubce (${f1(longer.x.t20, 0)} vs. ${f1(longer.y.t20, 0)} min pod 20 m)`]);
-      parts.sort((p, q) => q[0] - p[0]);
-      if (parts.length) s += ` Inertní zátěž měl vyšší o ${f1(dIn, 0)} bar·min: ` + parts.map(([w, t], i) => `${i === 0 ? "" : "zbytek "}${i === 0 ? `zhruba ${Math.round(w * 100)} % vysvětluje ` : ""}${t}`).join(", ") + ".";
     }
-    out.push(s);
-  } else out.push(`Dekompresní povinnost byla podobná (max. TTS ${a.ttsMax} vs. ${b.ttsMax} min).`);
-  if (a.po2Deco != null && b.po2Deco != null && Math.abs(a.po2Deco - b.po2Deco) >= 0.05) {
-    const lo = a.po2Deco < b.po2Deco ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
-    out.push(`${lo.who} měl během deko nižší pO₂ (${f1(lo.x.po2Deco, 2)} vs. ${f1(lo.y.po2Deco, 2)} bar), což zastávky prodlužuje.`);
+    out.push(sec("deco", level, lines));
   }
-  if (a.co2Max != null && b.co2Max != null && (Math.abs(a.co2Max - b.co2Max) >= 1 || a.co2Alarms !== b.co2Alarms)) {
-    const hi = a.co2Max > b.co2Max ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
-    const why: string[] = [];
-    if (hi.x.scrubLeftStart < hi.y.scrubLeftStart - 30) why.push(`méně zbývajícího scrubberu na začátku (${hi.x.scrubLeftStart} vs. ${hi.y.scrubLeftStart} min)`);
-    if (hi.x.vMove > hi.y.vMove * 1.2) why.push(`víc pohybu ve vertikále (${f1(hi.x.vMove)} vs. ${f1(hi.y.vMove)} m/min) – nejspíš vyšší zátěž`);
-    if (hi.x.dens52 > hi.y.dens52 + 3) why.push(`delší dýchání husté směsi nad 5,2 g/l (${f1(hi.x.dens52, 0)} vs. ${f1(hi.y.dens52, 0)} min) – vyšší dechová práce`);
-    if (hi.x.tempMin < hi.y.tempMin - 1) why.push(`nižší teplota (${hi.x.tempMin} vs. ${hi.y.tempMin} °C)`);
-    out.push(`${hi.who} měl vyšší CO₂ (max. ${f1(hi.x.co2Max)} vs. ${f1(hi.y.co2Max)} mbar, alarmy ${hi.x.co2Alarms}× vs. ${hi.y.co2Alarms}×)` + (why.length ? `; souvisí nejspíš s: ${why.join(", ")}.` : "; z profilu ani scrubberu jasná příčina neplyne – zkontroluj sorbent a smyčku."));
+  // ---- pO₂ a setpoint
+  {
+    const lines: string[] = []; let level: 0 | 1 | 2 = 0;
+    if (a.spUp && b.spUp && Math.abs(a.spUp.t - b.spUp.t) >= 120) { const l = a.spUp.t > b.spUp.t ? A : B; lines.push(`${l}: později přepnutý vysoký setpoint (${Math.round(Math.max(a.spUp.t, b.spUp.t) / 60)}. vs. ${Math.round(Math.min(a.spUp.t, b.spUp.t) / 60)}. min).`); level = Math.abs(a.spUp.t - b.spUp.t) >= 300 ? 2 : 1; }
+    else if (!!a.spUp !== !!b.spUp) { lines.push(`${a.spUp ? B : A}: vysoký setpoint nepřepnut.`); level = 2; }
+    if (a.spUpVal != null && b.spUpVal != null && Math.abs(a.spUpVal - b.spUpVal) >= 0.05) { lines.push(`Jiný vysoký setpoint (${A} ${f1(a.spUpVal, 2)}, ${B} ${f1(b.spUpVal, 2)}).`); level = Math.max(level, 1) as 0 | 1 | 2; }
+    if (a.po2Deco != null && b.po2Deco != null && Math.abs(a.po2Deco - b.po2Deco) >= 0.05) { const lo = a.po2Deco < b.po2Deco ? A : B; lines.push(`${lo}: nižší pO₂ během deko (${f1(Math.min(a.po2Deco, b.po2Deco), 2)} vs. ${f1(Math.max(a.po2Deco, b.po2Deco), 2)} bar) – prodlužuje zastávky.`); level = Math.max(level, 1) as 0 | 1 | 2; }
+    if (Math.abs(a.offMin - b.offMin) >= 5) { const w = a.offMin > b.offMin ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${w.who}: déle mimo setpoint o víc než 0,1 bar (${f1(w.x.offMin, 0)} vs. ${f1(w.y.offMin, 0)} min)` + (w.x.dosesMan > w.y.dosesMan + 3 ? `, častěji dávkoval O₂ ručně (${w.x.dosesMan}× vs. ${w.y.dosesMan}×).` : ".")); level = Math.max(level, 1) as 0 | 1 | 2; }
+    out.push(sec("po2", level, lines));
   }
-  if (Math.abs(a.offMin - b.offMin) >= 5) {
-    const w = a.offMin > b.offMin ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
-    out.push(`${w.who} byl déle mimo setpoint o víc než 0,1 bar (${f1(w.x.offMin, 0)} vs. ${f1(w.y.offMin, 0)} min)` + (w.x.dosesMan > w.y.dosesMan + 3 ? ` a častěji dávkoval O₂ ručně (${w.x.dosesMan}× vs. ${w.y.dosesMan}×).` : "."));
+  // ---- CO₂
+  {
+    const lines: string[] = []; let level: 0 | 1 | 2 = 0;
+    if (a.co2Max != null && b.co2Max != null && (Math.abs(a.co2Max - b.co2Max) >= 1 || a.co2Alarms !== b.co2Alarms)) {
+      const hi = a.co2Max > b.co2Max ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
+      const why: string[] = [];
+      if (hi.x.scrubLeftStart < hi.y.scrubLeftStart - 30) why.push(`méně zbývajícího scrubberu na začátku (${hi.x.scrubLeftStart} vs. ${hi.y.scrubLeftStart} min)`);
+      if (hi.x.vMove > hi.y.vMove * 1.2) why.push(`víc pohybu ve vertikále (${f1(hi.x.vMove)} vs. ${f1(hi.y.vMove)} m/min) – nejspíš vyšší zátěž`);
+      if (hi.x.dens52 > hi.y.dens52 + 3) why.push(`delší dýchání husté směsi nad 5,2 g/l (${f1(hi.x.dens52, 0)} vs. ${f1(hi.y.dens52, 0)} min)`);
+      if (hi.x.tempMin < hi.y.tempMin - 1) why.push(`nižší teplota (${hi.x.tempMin} vs. ${hi.y.tempMin} °C)`);
+      lines.push(`${hi.who}: vyšší CO₂ (max. ${f1(hi.x.co2Max)} vs. ${f1(hi.y.co2Max)} mbar, alarmy ${hi.x.co2Alarms}× vs. ${hi.y.co2Alarms}×).`);
+      lines.push(why.length ? `Souvisí nejspíš s: ${why.join(", ")}.` : "Z profilu ani scrubberu jasná příčina neplyne – zkontroluj sorbent a smyčku.");
+      level = hi.x.co2Alarms > 0 || (hi.x.co2Max ?? 0) >= 5 ? 2 : 1;
+    }
+    out.push(sec("co2", level, lines));
   }
-  if (Math.abs(a.ascRate - b.ascRate) >= 1.5) {
-    const f = a.ascRate > b.ascRate ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
-    out.push(`${f.who} vystupoval rychleji (průměrně ${f1(f.x.ascRate)} vs. ${f1(f.y.ascRate)} m/min od nejhlubšího bodu).`);
+  // ---- dýchání a smyčka
+  {
+    const lines: string[] = []; let level: 0 | 1 | 2 = 0;
+    if (Math.abs(a.densMax - b.densMax) >= 0.3 || Math.abs(a.dens52 - b.dens52) >= 3) { const h = a.densMax > b.densMax ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${h.who}: hustší směs (max. ${f1(h.x.densMax)} vs. ${f1(h.y.densMax)} g/l, nad 5,2 g/l ${f1(h.x.dens52, 0)} vs. ${f1(h.y.dens52, 0)} min).`); level = h.x.densMax > 6.2 ? 2 : 1; }
+    if (Math.abs(a.vents - b.vents) >= 4) { const v = a.vents > b.vents ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${v.who}: častěji upouštěl smyčku nebo vyfukoval masku (${v.x.vents}× vs. ${v.y.vents}×) – může souviset s vyvážením nebo stresem.`); level = Math.max(level, 1) as 0 | 1 | 2; }
+    out.push(sec("breath", level, lines));
   }
-  if (Math.abs(a.vents - b.vents) >= 4) {
-    const v = a.vents > b.vents ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
-    out.push(`${v.who} častěji upouštěl smyčku nebo vyfukoval masku (${v.x.vents}× vs. ${v.y.vents}×) – může souviset s vyvážením nebo stresem.`);
+  // ---- profil
+  {
+    const lines: string[] = []; let level: 0 | 1 | 2 = 0;
+    if (Math.abs(a.avgDepth - b.avgDepth) >= 1) { lines.push(`Průměrná hloubka ${A} ${f1(a.avgDepth)} m, ${B} ${f1(b.avgDepth)} m.`); level = 1; }
+    if (Math.abs(a.maxDepth - b.maxDepth) >= 3) { lines.push(`Max. hloubka ${A} ${f1(a.maxDepth)} m, ${B} ${f1(b.maxDepth)} m.`); level = 1; }
+    if (Math.abs(a.durMin - b.durMin) >= 3) { lines.push(`Délka ponoru ${A} ${f1(a.durMin, 0)} min, ${B} ${f1(b.durMin, 0)} min.`); level = 1; }
+    if (Math.abs(a.ascRate - b.ascRate) >= 1.5) { const f = a.ascRate > b.ascRate ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${f.who}: rychlejší výstup (${f1(f.x.ascRate)} vs. ${f1(f.y.ascRate)} m/min od nejhlubšího bodu).`); level = 1; }
+    out.push(sec("profile", level, lines));
   }
-  if (a.dil !== b.dil) out.push(`Diluent se lišil (${a.dil} vs. ${b.dil}).`);
-  return out;
+  // ---- plyny
+  out.push(sec("gas", a.dil !== b.dil ? 1 : 0, a.dil !== b.dil ? [`Jiný diluent (${A} ${a.dil}, ${B} ${b.dil}).`] : []));
+  return sortSec(out);
+}
+
+/** Závěr pro 3 a více potápěčů po sekcích: v každé sekci jen ti, kdo se od průměru skupiny liší. */
+export function groupSections(names: string[], st: DiveStats[]): Section[] {
+  const n = st.length, avg = (f: (s: DiveStats) => number) => st.reduce((a, s) => a + f(s), 0) / n;
+  const tts = avg((s) => s.ttsMax), decoAvg = avg((s) => s.decoMin), amb = avg((s) => s.ambInt), po2 = avg((s) => s.po2Int), inert = avg((s) => s.inert);
+  const ups = st.map((s) => s.spUp?.t ?? null).filter((x): x is number => x != null);
+  const upAvg = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
+  const mk = (key: string, items: [number, string][], head?: string): Section => {
+    const lv = items.reduce((m, [l]) => Math.max(m, l), 0) as 0 | 1 | 2;
+    return sec(key, lv, [...(head ? [head] : []), ...items.map(([, t]) => t)]);
+  };
+  const deco: [number, string][] = [];
+  st.forEach((s, i) => {
+    const d = s.ttsMax - tts, dz = s.decoMin - decoAvg;
+    if (d < 2 && dz < 2) return;
+    const dIn = s.inert - inert, why: string[] = [];
+    if (Math.abs(dIn) >= 10 && Math.abs(dIn) / (inert || 1) >= 0.05) {
+      const dDepth = s.ambInt - amb, dPo2 = po2 - s.po2Int, tot = Math.abs(dDepth) + Math.abs(dPo2) || 1;
+      if (dPo2 > 0 && dPo2 / tot >= 0.3) why.push(s.spUp && upAvg != null && s.spUp.t - upAvg >= 120 ? `pozdější přepnutí SP (${Math.round(s.spUp.t / 60)}. min, průměr ${Math.round(upAvg / 60)}.)` : !s.spUp ? "nepřepnutý vysoký SP" : `nižší pO₂ (${f1(s.po2All, 2)} bar)`);
+      if (dDepth > 0 && dDepth / tot >= 0.3) { const w = Math.abs(s.avgDepth - avg((x) => x.avgDepth)) >= 0.3 ? `vyšší průměrná hloubka (${f1(s.avgDepth)} vs. ${f1(avg((x) => x.avgDepth))} m)` : Math.abs(s.durMin - avg((x) => x.durMin)) >= 2 ? `delší ponor (${f1(s.durMin, 0)} min)` : null; if (w) why.push(w); }
+    } else if (s.po2Deco != null) { const pd = avg((x) => x.po2Deco ?? s.po2Deco!); if (pd - s.po2Deco >= 0.03) why.push(`nižší pO₂ během deko (${f1(s.po2Deco, 2)} bar)`); }
+    deco.push([d >= 4 || dz >= 4 ? 2 : 1, `${names[i]}: ${d >= 2 ? `delší dekomprese (TTS ${s.ttsMax} min, průměr ${f1(tts)})` : `delší čas na zastávkách (${f1(s.decoMin, 0)} min, průměr ${f1(decoAvg, 0)})`}${why.length ? " – " + why.join(", ") : ""}.`]);
+  });
+  const gfs = new Set(st.map((s) => s.gf));
+  if (gfs.size > 1) deco.push([1, `Různé GF: ${st.map((s, i) => `${names[i]} ${s.gf}`).join(", ")}.`]);
+  const p2: [number, string][] = [];
+  st.forEach((s, i) => {
+    if (s.spUp && upAvg != null && s.spUp.t - upAvg >= 120) p2.push([s.spUp.t - upAvg >= 300 ? 2 : 1, `${names[i]}: později přepnutý vysoký SP (${Math.round(s.spUp.t / 60)}. min, průměr ${Math.round(upAvg / 60)}.).`]);
+    if (!s.spUp && ups.length) p2.push([2, `${names[i]}: vysoký SP nepřepnut.`]);
+    if (s.offMin - avg((x) => x.offMin) >= 5) p2.push([1, `${names[i]}: nejdéle mimo setpoint (${f1(s.offMin, 0)} min).`]);
+  });
+  const c2: [number, string][] = [];
+  st.forEach((s, i) => { if (s.co2Max != null && st.every((x, j) => j === i || (x.co2Max ?? 0) + 1 <= s.co2Max!)) c2.push([s.co2Alarms > 0 || s.co2Max >= 5 ? 2 : 1, `${names[i]}: nejvyšší CO₂ (${f1(s.co2Max)} mbar, alarmy ${s.co2Alarms}×)${s.dens52 > avg((x) => x.dens52) + 3 ? ", déle dýchal hustou směs" : ""}${s.scrubLeftStart < avg((x) => x.scrubLeftStart) - 30 ? ", méně zbývajícího scrubberu" : ""}.`]); });
+  const br: [number, string][] = [];
+  st.forEach((s, i) => { if (s.vents - avg((x) => x.vents) >= 3) br.push([1, `${names[i]}: častěji upouštěl smyčku (${s.vents}×).`]); if (s.densMax - avg((x) => x.densMax) >= 0.3) br.push([s.densMax > 6.2 ? 2 : 1, `${names[i]}: hustší směs (max. ${f1(s.densMax)} g/l).`]); });
+  const pr: [number, string][] = [];
+  st.forEach((s, i) => { if (s.ascRate - avg((x) => x.ascRate) >= 1.5) pr.push([1, `${names[i]}: rychlejší výstup (${f1(s.ascRate)} m/min).`]); if (Math.abs(s.avgDepth - avg((x) => x.avgDepth)) >= 1) pr.push([1, `${names[i]}: průměrná hloubka ${f1(s.avgDepth)} m (skupina ${f1(avg((x) => x.avgDepth))} m).`]); });
+  const dils = new Set(st.map((s) => s.dil));
+  return sortSec([
+    mk("deco", deco, `Max. TTS: ${st.map((s, i) => `${names[i]} ${s.ttsMax}`).join(", ")} min.`),
+    mk("po2", p2), mk("co2", c2), mk("breath", br), mk("profile", pr),
+    sec("gas", dils.size > 1 ? 1 : 0, dils.size > 1 ? [`Diluenty: ${st.map((s, i) => `${names[i]} ${s.dil}`).join(", ")}.`] : []),
+  ]);
+}
+
+/** Zpětná kompatibilita: závěr skupiny jako seznam vět. */
+export function groupConclusion(names: string[], st: DiveStats[]): string[] {
+  const x = groupSections(names, st).flatMap((s) => s.lines);
+  return x.length > 1 ? x : [...x, "Žádný potápěč se od skupiny výrazně neliší."];
+}
+
+/** Zpětná kompatibilita: závěr jako seznam vět. */
+export function conclusion(A: string, B: string, a: DiveStats, b: DiveStats): string[] {
+  return conclusionSections(A, B, a, b).flatMap((s) => s.lines);
 }
 
 /** Hodnoty obou ponorů na společné časové ose (s od začátku mého ponoru, krok 10 s). */
@@ -212,4 +297,19 @@ export function alignSeries(a: Dive, b: Dive, pick: (d: Dive) => (number | null)
   };
   const va = pick(a), vb = pick(b);
   return { t, a: t.map((x) => at(a, va, x)), b: t.map((x) => at(b, vb, x - off)), off };
+}
+
+/** Posun podle profilu: skutečný rozdíl začátků (s), rozdíl hodin počítačů (s) a shoda profilů (RMSE v m). */
+export function profileLag(a: Dive, b: Dive): { real: number; clock: number; rmse: number } {
+  const clock = b.h.start - a.h.start;
+  const sample = (d: Dive, step: number) => { const out: number[] = []; let j = 0; for (let t = 0; t <= d.h.diveTimeS; t += step) { while (j + 1 < d.s.t.length && d.s.t[j] < t) j++; out.push(d.s.depth[j]); } return out; };
+  const STEP = 10, A = sample(a, STEP), B = sample(b, STEP);
+  let best = 0, bestE = Infinity;
+  for (let lag = -1500; lag <= 1500; lag += STEP) {
+    // b posunuté tak, že jeho začátek je v čase lag (s) od začátku a
+    const k0 = lag / STEP; let e = 0, n = 0;
+    for (let i = 0; i < A.length; i += 2) { const j = i - k0; const y = j >= 0 && j < B.length ? B[j] : 0; e += (A[i] - y) ** 2; n++; }
+    e /= n; if (e < bestE) { bestE = e; best = lag; }
+  }
+  return { real: best, clock, rmse: Math.sqrt(bestE) };
 }

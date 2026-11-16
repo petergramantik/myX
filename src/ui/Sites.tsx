@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
+import { clockDrift, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
 import { BLSwitch, Card, KV, back, fmtDate, go, num, useStore } from "./common";
@@ -172,6 +172,16 @@ export function BuddiesScreen() {
   );
 }
 
+/** Odchylka hodin buddyho počítače proti mým (odhad z časů začátku společných ponorů). */
+function Drift({ serial }: { serial: string }) {
+  const [d, setD] = useState<{ at: number; diff: number }[]>([]);
+  useEffect(() => { clockDrift(serial).then(setD); }, [serial]);
+  if (!d.length) return null;
+  const f = (s: number) => `${s >= 0 ? "+" : "−"}${Math.floor(Math.abs(s) / 60)}:${String(Math.abs(s) % 60).padStart(2, "0")}`;
+  const last = d[d.length - 1];
+  return <div className="small muted">Hodiny: naposledy {f(last.diff)} min ({fmtDate(last.at)}){d.length > 1 ? ` · vývoj: ${d.slice(-6).map((x) => f(x.diff)).join(" → ")}` : ""}<br />Odhad z času začátku společných ponorů; kladné = jdou napřed.</div>;
+}
+
 function BuddyComputer({ id }: { id: string }) {
   const st = useStore();
   const [logs, setLogs] = useState<GuestLog[]>([]);
@@ -180,7 +190,7 @@ function BuddyComputer({ id }: { id: string }) {
   if (!comps.length) return <span className="muted">–</span>;
   return <>{comps.map((c) => {
     const log = logs.find((l) => l.serial === c.id);
-    return <div key={c.id}>{c.model} {c.id}{log && st.guest?.id !== log.id && <> · <a onClick={async () => { await openGuest(log); go({ t: "home" }); }}>Otevřít jeho log ›</a></>}</div>;
+    return <div key={c.id}>{c.model} {c.id}{log && st.guest?.id !== log.id && <> · <a onClick={async () => { await openGuest(log); go({ t: "home" }); }}>Otevřít jeho log ›</a></>}<Drift serial={c.id} /></div>;
   })}</>;
 }
 

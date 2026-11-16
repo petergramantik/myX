@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.16";
+export const APP_VERSION = "1.17";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.17", date: "16. 11. 2026", title: "Přesnější srovnání",
+    items: [
+      "Závěr srovnání po sekcích (Dekomprese, pO₂ a setpoint, CO₂, Dýchání, Profil, Plyny) seřazených podle významu",
+      "Podíl hloubky vysvětlen tím, co se opravdu liší; malý rozdíl zátěže se nerozkládá",
+      "Zarovnání podle profilu hloubky (hodiny počítačů se rozcházejí), odchylka hodin u buddyho",
+      "Popisky setpointu a plynu v pruhu nad grafem, bez překrývání",
+    ],
+  },
   {
     version: "1.16", date: "16. 11. 2026", title: "Záložka Srovnat a srovnání více potápěčů",
     items: [

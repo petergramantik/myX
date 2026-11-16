@@ -60,8 +60,26 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
     return [lo, hi + (hi - lo) * 0.05];
   };
   const [lo, hi] = range(left), [rlo, rhi] = range(right, !rightInvert);
-  const m = { l: 36, r: right.length ? 34 : 8, t: 8, b: 20 };
   const x0 = t[0], x1 = t[t.length - 1] || 1;
+  // popisky značek (setpoint, přepnutí plynu) v pruhu nad grafem, rozložené do řádků bez překryvu
+  const tags = [
+    ...(pins || []).map((p) => ({ t: p.t, label: p.label, color: p.color, dash: "3 3" })),
+    ...(strip || []).slice(1).map((g) => ({ t: g.from, label: g.label, color: g.color, dash: "2 3" })),
+  ].sort((a, b) => a.t - b.t);
+  const pl = 36, pr = right.length ? 34 : 8;
+  const xOf = (v: number) => pl + ((v - x0) / (x1 - x0 || 1)) * (W - pl - pr);
+  const rowEnd: number[] = [];
+  const placed = tags.map((g) => {
+    const x = xOf(g.t), w = g.label.length * 5.6 + 4;
+    const lx = Math.min(Math.max(x - w / 2, 2), W - w - 2);
+    let r = rowEnd.findIndex((e) => e < lx - 3);
+    if (r < 0) { r = rowEnd.length; rowEnd.push(0); }
+    rowEnd[r] = lx + w;
+    return { ...g, x, lx, row: r };
+  });
+  const tagH = rowEnd.length ? rowEnd.length * 11 + 3 : 0;
+  height += tagH; // pruh s popisky graf nezmenšuje, přidá se nad něj
+  const m = { l: pl, r: pr, t: 8 + tagH, b: 20 };
   const X = (v: number) => m.l + ((v - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
   const Y = (v: number, a = lo, b = hi, inv = invert) => { const f = (v - a) / (b - a || 1); return inv ? m.t + f * (height - m.t - m.b) : height - m.b - f * (height - m.t - m.b); };
   const path = (s: Series) => {
@@ -114,19 +132,13 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
         {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={s.right ? 0.55 : 1} />)}
         {vlines?.map((v, i) => <line key={"v" + i} x1={X(v.t)} x2={X(v.t)} y1={m.t} y2={Y(v.to)} stroke={v.color} strokeWidth={1} />)}
         {marks?.map((k, i) => <line key={"k" + i} x1={X(k.t)} x2={X(k.t)} y1={height - m.b - 9} y2={height - m.b} stroke={k.color} strokeWidth={2} />)}
-        {pins?.map((p, i) => (
+        {placed.map((p, i) => (
           <g key={"p" + i}>
-            <line x1={X(p.t)} x2={X(p.t)} y1={m.t} y2={height - m.b} stroke={p.color} strokeWidth={1} strokeDasharray="3 3" opacity={0.9} />
-            <text x={X(p.t) + 3} y={m.t + 10 + (i % 2) * 11} fill={p.color} className="strip-l">{p.label}</text>
+            <line x1={p.x} x2={p.x} y1={4 + p.row * 11 + 9} y2={height - m.b} stroke={p.color} strokeWidth={1} strokeDasharray={p.dash} opacity={0.85} />
+            <text x={p.lx} y={4 + p.row * 11 + 8} fill={p.color} className="strip-l">{p.label}</text>
           </g>
         ))}
         {strip?.map((g, i) => <rect key={"s" + i} x={X(g.from)} width={Math.max(1, X(g.to) - X(g.from))} y={height - m.b - 5} height={4} fill={g.color} opacity={0.85} />)}
-        {strip?.slice(1).map((g, i) => (
-          <g key={"sw" + i}>
-            <line x1={X(g.from)} x2={X(g.from)} y1={m.t} y2={height - m.b} stroke={g.color} strokeWidth={1} strokeDasharray="2 3" opacity={0.8} />
-            <text x={X(g.from) + 3} y={m.t + 10} fill={g.color} className="strip-l">{g.label}</text>
-          </g>
-        ))}
         {hover != null && <line x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref" />}
       </svg>
       {hover != null && (

@@ -279,3 +279,7 @@ p.legend { display: flex; gap: 14px; }
 table.cmp td.hi { color: #ffb74d; font-weight: 700; } table.cmp td.lo { color: #4fc3f7; font-weight: 700; }
 .note .hi { color: #ffb74d; } .note .lo { color: #4fc3f7; }
 .chips label.chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid; }
+.csec { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; }
+.csec.l2 { border-left-color: var(--warn); } .csec.l1 { border-left-color: var(--accent); }
+.csec b { display: block; text-transform: uppercase; font-size: 12px; letter-spacing: .04em; color: var(--muted); }
+.csec.l2 b { color: var(--warn); } .csec p { margin: 4px 0; }

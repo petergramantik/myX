@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
-import { loadDive, myNum, ownMetas, setNote } from "../app/store";
+import { PAIR_S, loadDive, myNum, ownMetas, setNote } from "../app/store";
 import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
@@ -20,7 +20,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const lb = st.lb;
   // u cizího logu: ponory, ke kterým mám svůj ponor (začátek do ±15 min)
   const mine = st.guest ? ownMetas() : [];
-  const common = (m: Meta) => mine.some((x) => Math.abs(x.start - m.start) <= 900);
+  const common = (m: Meta) => mine.some((x) => Math.abs(x.start - m.start) <= PAIR_S);
   const n = norm(q);
   const match = (note: { siteId?: string; buddyIds: string[]; note: string; rating?: string } | undefined, date: number) => {
     if (site && note?.siteId !== site) return false;
