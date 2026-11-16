@@ -9,7 +9,7 @@ import { AboutScreen, SettingsScreen } from "./ui/Settings";
 import { DraftScreen } from "./ui/Draft";
 import { CellsScreen } from "./ui/Cells";
 import { BatteriesScreen } from "./ui/Batteries";
-import { createDraft } from "./app/store";
+import { closeGuest, createDraft } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
 import { Co2Screen } from "./ui/Cells";
 import { APP_VERSION } from "./app/version";
@@ -90,8 +90,14 @@ function App() {
         <button className={"warnbtn " + (w.worst || "none")} onClick={() => (s.t === "warn" ? back() : (setAnim("from-left"), go({ t: "warn" })))} aria-label="Varování">
           ⚠{w.count > 0 && <span>{w.count}</span>}
         </button>
-        <button className={"plus" + (busy ? " busy" : "")} onClick={newDive} aria-label="Nový ponor">＋</button>
+        {!st.guest && <button className={"plus" + (busy ? " busy" : "")} onClick={newDive} aria-label="Nový ponor">＋</button>}
       </header>
+      {st.guest && (
+        <div className="guestbar">
+          <span>Prohlížíš cizí log · <b>{st.guest.name}</b> · {st.guest.count} ponorů</span>
+          <button className="btn small" onClick={() => { closeGuest(); go({ t: "home" }); }}>Zavřít</button>
+        </div>
+      )}
       <main onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className={anim} key={s.t + ("id" in s ? s.id : "")} onAnimationEnd={() => setAnim("")}>
         {st.ready ? <Body s={s} /> : <p className="muted center">Načítám…</p>}
       </main>

@@ -265,3 +265,6 @@ label.inline { display: flex; align-items: center; gap: 6px; font-size: 13px; } 
 .link { cursor: pointer; }
 .nw { white-space: nowrap; }
 img.qr { display: block; margin: 12px auto 4px; background: #fff; padding: 8px; border-radius: 10px; image-rendering: pixelated; }
+/* 1.12 – cizí log */
+.guestbar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; background: #4a3b16; color: #ffe0a3; font-size: 13px; border-bottom: 1px solid #8a6d2a; }
+.pre { white-space: pre-wrap; }

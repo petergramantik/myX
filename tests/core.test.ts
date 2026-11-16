@@ -1,6 +1,7 @@
 // Testy jádra bez soukromých dat: syntetický záznam ponoru a sloučení logbooků.
 import { decodeDive } from "../src/core/shearwater";
-import { summarize, injections, alerts, realStops, gasLabel, pressureUse, DEFAULT_THRESHOLDS } from "../src/core/analysis";
+import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpointChanges, o2Doses, DEFAULT_THRESHOLDS } from "../src/core/analysis";
+import { applyCloud } from "../src/app/store";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
 import { detectCellEvents, cellStatus, cellDiveWarnings, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
@@ -89,6 +90,38 @@ ok(Array.isArray(d.alarms), "alarmy se dekódují");
   ok(!pressureUse(t, t.map(() => 9), dep, 99999).ok, "jen mezitlak = nelze spočítat");
 }
 ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" && gasLabel("32/0").label === "NX 32" && gasLabel("100/0").label === "O₂", "štítky plynů");
+
+{ // tlačítka 0x51, ruční přepnutí setpointu, CO₂ častěji než vzorky, dávky O₂
+  const r2: Uint8Array[] = recs.filter((r) => r[0] !== 0x01 && r[0] !== 0xe1 && r[0] !== 0x30 && r[0] < 0x20);
+  for (let i = 0; i < 60; i++) {
+    const dep = i < 10 ? i * 20 : i < 50 ? 200 : (60 - i) * 20;
+    const sp = i < 20 ? 50 : 130;
+    const pp = i === 14 ? 60 : i === 15 ? 80 : i === 16 ? 95 : i < 20 ? 60 : 130; // nárůst nad setpointem 0,5 = ručně O₂
+    r2.push(rec(0x01, [[1, be16(dep)], [7, [pp]], [8, [21]], [13, [60]], [15, [62]], [16, [61]], [18, [149]], [19, [sp]], [25, [255]]]));
+    r2.push(rec(0x30, [[1, [29]], [4, be32(START + i * 5)], [8, be32(2000)]]));
+    if (i === 30) r2.push(rec(0x30, [[1, [29]], [4, be32(START + i * 5 + 2)], [8, be32(9000)]])); // špička mezi vzorky
+    if (i === 25) { // stisky zapsané v dávce až později: menu v 88 s, potvrzení v 90 s (přepnutí ve vzorku 20 = 100 s)
+      const d0 = new Date((START + 88) * 1000), d1 = new Date((START + 90) * 1000);
+      r2.push(rec(0x51, [[0, [0x51, 2, 0, 0xb3, 0, 0x06, d0.getUTCMinutes(), d0.getUTCSeconds()]], [8, [0x51, 1, 0, 0x06, 0, 0xb3, d1.getUTCMinutes(), d1.getUTCSeconds()]]]));
+    }
+  }
+  r2.push(...recs.filter((r) => r[0] >= 0x20 && r[0] <= 0x27));
+  const raw2 = new Uint8Array(r2.length * 32); r2.forEach((r, i) => raw2.set(r, i * 32));
+  const gz2 = gzipSync(raw2);
+  const b2 = new Uint8Array(4 + gz2.length); b2.set([raw2.length & 255, (raw2.length >> 8) & 255, (raw2.length >> 16) & 255, 0], 0); b2.set(gz2, 4);
+  const d2 = await decodeDive({ id: "t2", blob: b2 });
+  ok(d2.buttons.length === 2 && d2.buttons[0].t === 88 && d2.buttons[1].from === 0x06, "tlačítka 0x51 s časem podle hodin");
+  const sp = setpointChanges(d2);
+  ok(sp.length === 1 && sp[0].manual && sp[0].to === 1.3, "ruční přepnutí setpointu z menu Petrelu");
+  ok(d2.s.co2raw[30] === 9000, "CO₂: ke vzorku maximum z intervalu");
+  ok(o2Doses(d2).some((x) => x.kind === "man" && x.preSw), "ruční dávka O₂ nad setpointem před přepnutím");
+}
+{ // převzetí lokality a buddy ze Shearwater Cloud jen tam, kde nic není
+  const lb = emptyLogbook(); lb.notes.b = { buddyIds: [], note: "moje", siteId: undefined, updated: 1 };
+  const out = applyCloud(lb, new Map([["a", { site: "Hemmoor", buddies: ["Roman", "Dan"], notes: "x" }], ["b", { site: "Lom", buddies: [], notes: "cizí" }]]), new Set(["a", "b"]));
+  const sa = out.notes.a, sb = out.notes.b;
+  ok(!!sa && out.sites[sa.siteId!].name === "Hemmoor" && sa.buddyIds.length === 2 && sb.note === "moje" && !!sb.siteId, "údaje ze Shearwater Cloud");
+}
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

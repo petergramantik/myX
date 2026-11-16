@@ -1,9 +1,20 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.11.1";
+export const APP_VERSION = "1.12";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.12", date: "16. 11. 2026", title: "Cizí logy, setpoint a dávkování O₂",
+    items: [
+      "Cizí log (export jiného potápěče) jen k prohlížení, uložený zvlášť a bez synchronizace",
+      "Lokalita, buddy a poznámka ze Shearwater Cloud se převezmou při importu",
+      "Ovládání počítače (stisky tlačítek) v Událostech, ruční přepnutí setpointu poznané z menu Petrelu",
+      "Časová osa setpointů, upozornění na pozdní vysoký setpoint, 0,19 před výstupem",
+      "Dávkování O₂: solenoid vs. ručně, barevné značky v grafu pO₂",
+      "Petrel 3: CO₂ zapisované častěji než vzorky se už neztrácí (maximum v intervalu)",
+    ],
+  },
   {
     version: "1.11.1", date: "14. 11. 2026", title: "Sdílení aplikace",
     items: ["Sdílet aplikaci (systémové sdílení nebo zkopírování odkazu) a QR kód v Nastavení", "Skloňování „buddy“ v textech"],

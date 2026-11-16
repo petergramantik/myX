@@ -1,5 +1,5 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
-import { decodeDive, peekHeader, readShearwaterDb, type Dive, type RawDive } from "../core/shearwater";
+import { decodeDive, peekHeader, readCloudDetails, readShearwaterDb, type CloudDetail, type Dive, type RawDive } from "../core/shearwater";
 import { injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
@@ -15,11 +15,14 @@ export interface State {
   pos: Pos | null; posErr: string | null;
   sync: { state: "off" | "idle" | "busy" | "error"; msg: string; at: number };
   toast: string | null;
+  guest: GuestLog | null;  // prohlížený cizí log (jen pro čtení); null = vlastní data
 }
+/** Cizí log uložený v samostatné databázi, nikdy se nesynchronizuje. */
+export interface GuestLog { id: string; name: string; count: number; added: number }
 
 let st: State = {
   ready: false, metas: [], lb: emptyLogbook(), pos: null, posErr: null,
-  sync: { state: "off", msg: "", at: 0 }, toast: null,
+  sync: { state: "off", msg: "", at: 0 }, toast: null, guest: null,
 };
 const subs = new Set<() => void>();
 export const getState = () => st;
@@ -41,7 +44,7 @@ const diveCache = new Map<string, Promise<Dive>>();
 export function loadDive(id: string): Promise<Dive> {
   let p = diveCache.get(id);
   if (!p) {
-    p = db.get<RawDive>("raw", id).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeDive(r); });
+    p = db.get<RawDive>("raw", id, st.guest ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeDive(r); });
     diveCache.set(id, p);
   }
   return p;
@@ -66,6 +69,7 @@ export async function init() {
 }
 
 async function saveLb(lb: Logbook) {
+  if (st.guest) { toast("Cizí log je jen k prohlížení"); return; }
   set({ lb });
   await db.put("kv", lb, "lb");
   scheduleSync();
@@ -73,7 +77,11 @@ async function saveLb(lb: Logbook) {
 
 // ---------- import exportu Shearwater Cloud
 export async function importDb(file: File): Promise<number> {
-  const raws = readShearwaterDb(new Uint8Array(await file.arrayBuffer()));
+  if (st.guest) { toast("Nejdřív zavři cizí log"); return 0; }
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const raws = readShearwaterDb(buf);
+  const cloud = readCloudDetails(buf);
+  if (cloud.size) { const lb = applyCloud(st.lb, cloud, new Set(raws.map((r) => r.id))); if (lb !== st.lb) await saveLb(lb); }
   const have = new Set(st.metas.map((m) => m.id));
   const added: Meta[] = [];
   for (const r of raws) {
@@ -91,6 +99,96 @@ export async function importDb(file: File): Promise<number> {
   await autoLinkDrafts();
   scheduleSync();
   return added.length;
+}
+
+/**
+ * Převezme lokalitu, buddy a poznámku zapsané v Shearwater Cloud – jen tam, kde v myX u ponoru ještě nic není.
+ * Lokality a buddy se párují podle jména, chybějící se založí.
+ */
+export function applyCloud(lb0: Logbook, cloud: Map<string, CloudDetail>, ids: Set<string>): Logbook {
+  const lb = structuredClone(lb0);
+  let changed = false;
+  const now = Date.now();
+  const siteBy = (name: string) => {
+    const n = norm(name);
+    let s = Object.values(lb.sites).find((x) => norm(x.name) === n);
+    if (!s) { s = { id: uid(), name, updated: now }; lb.sites[s.id] = s; }
+    return s.id;
+  };
+  const buddyBy = (name: string) => {
+    const n = norm(name);
+    let b = Object.values(lb.buddies).find((x) => norm(x.name) === n);
+    if (!b) { b = { id: uid(), name, updated: now }; lb.buddies[b.id] = b; }
+    return b.id;
+  };
+  for (const [id, c] of cloud) {
+    if (!ids.has(id)) continue;
+    const cur = lb.notes[id] || { buddyIds: [], note: "", updated: 0 };
+    const next = { ...cur };
+    if (!cur.siteId && c.site) next.siteId = siteBy(c.site);
+    if (!cur.buddyIds.length && c.buddies.length) next.buddyIds = c.buddies.map(buddyBy);
+    if (!cur.note && c.notes) next.note = c.notes;
+    if (next.siteId !== cur.siteId || next.buddyIds !== cur.buddyIds || next.note !== cur.note) { lb.notes[id] = { ...next, updated: now }; changed = true; }
+  }
+  return changed ? lb : lb0;
+}
+
+// ---------- cizí logy (jen k prohlížení, oddělená databáze, bez synchronizace)
+let own: { metas: Meta[]; lb: Logbook } | null = null;
+export async function guestLogs(): Promise<GuestLog[]> {
+  return ((await db.get<GuestLog[]>("kv", "logs", db.GUEST)) || []).sort((a, b) => b.added - a.added);
+}
+export async function importGuest(file: File): Promise<GuestLog | null> {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const raws = readShearwaterDb(buf);
+  if (!raws.length) { toast("V souboru nejsou žádné ponory"); return null; }
+  const fn = raws.find((r) => r.fn)?.fn || "";
+  const model = (/^(.*?)\[/.exec(fn)?.[1] || "Počítač").trim();
+  const serial = /\[([0-9A-F]+)\]/i.exec(fn)?.[1] || "";
+  const id = uid();
+  const metas: Meta[] = [];
+  for (const r of raws) {
+    try {
+      const ph = await peekHeader(r.blob);
+      const raw: RawDive = { ...r, id: `${id}:${r.id}`, num: ph.num, start: ph.start, blob: r.blob.slice() };
+      await db.put("raw", raw, undefined, db.GUEST);
+      metas.push(await metaOf(raw));
+    } catch { /* poškozený ponor přeskočit */ }
+  }
+  const cloud = new Map([...readCloudDetails(buf)].map(([k, v]) => [`${id}:${k}`, v]));
+  const lb = applyCloud(emptyLogbook(), cloud, new Set(metas.map((m) => m.id)));
+  await db.put("kv", { metas, lb }, id, db.GUEST);
+  const log: GuestLog = { id, name: `${model}${serial ? " " + serial : ""}`, count: metas.length, added: Date.now() };
+  await db.put("kv", [log, ...(await guestLogs())], "logs", db.GUEST);
+  await openGuest(log);
+  return log;
+}
+export async function openGuest(log: GuestLog) {
+  const data = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", log.id, db.GUEST);
+  if (!data) { toast("Cizí log se nepodařilo načíst"); return; }
+  if (data.metas.some((m) => m.v !== META_V)) { // nová verze výpočtů – přepočítat ze surových dat
+    const fresh: Meta[] = [];
+    for (const m of data.metas) { const raw = await db.get<RawDive>("raw", m.id, db.GUEST); if (raw) fresh.push(await metaOf(raw)); }
+    data.metas = fresh;
+    await db.put("kv", data, log.id, db.GUEST);
+  }
+  if (!own) own = { metas: st.metas, lb: st.lb };
+  diveCache.clear();
+  // nastavení (limity, objemy lahví) zůstávají vlastní, čidla a baterie cizí log nemá
+  set({ guest: log, metas: sortMetas(data.metas), lb: { ...data.lb, settings: own.lb.settings } });
+}
+export function closeGuest() {
+  if (!own) return;
+  diveCache.clear();
+  set({ guest: null, metas: own.metas, lb: own.lb });
+  own = null;
+}
+export async function deleteGuest(log: GuestLog) {
+  if (st.guest?.id === log.id) closeGuest();
+  const data = await db.get<{ metas: Meta[] }>("kv", log.id, db.GUEST);
+  for (const m of data?.metas || []) await db.del("raw", m.id, db.GUEST);
+  await db.del("kv", log.id, db.GUEST);
+  await db.put("kv", (await guestLogs()).filter((l) => l.id !== log.id), "logs", db.GUEST);
 }
 
 // ---------- rozpracované ponory (založené na lokalitě) a jejich spárování s logem
@@ -288,7 +386,7 @@ let syncTimer: ReturnType<typeof setTimeout> | undefined;
 let syncing = false;
 let lastSyncErr = "";
 export function scheduleSync() {
-  if (!workerUrl() || !syncKey()) return;
+  if (!workerUrl() || !syncKey() || st.guest) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(syncNow, 1500);
 }
@@ -300,6 +398,7 @@ async function api(path: string, init?: RequestInit): Promise<Response> {
 }
 
 export async function syncNow(): Promise<void> {
+  if (st.guest) return;
   if (!workerUrl() || !syncKey()) { set({ sync: { state: "off", msg: "Synchronizace není nastavená", at: 0 } }); return; }
   if (syncing || !navigator.onLine) { if (!navigator.onLine) set({ sync: { ...st.sync, state: "idle", msg: "Bez připojení – odešle se později" } }); return; }
   syncing = true;

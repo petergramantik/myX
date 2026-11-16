@@ -41,7 +41,7 @@ export interface Logbook {
   settings: Settings;
 }
 
-export const META_V = 9;
+export const META_V = 10;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };

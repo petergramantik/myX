@@ -7,7 +7,29 @@ export interface RawDive {
   num: number;         // číslo ponoru v počítači
   start: number;       // místní čas počítače jako „UTC“ sekundy
   blob: Uint8Array;    // původní data_bytes_1 (4 B délka + gzip)
+  fn?: string;         // název souboru v Shearwater Cloud, např. „Petrel 3[B94F4935]#138 …“
 }
+
+/** Údaje zapsané v Shearwater Cloud (lokalita, buddy, poznámka) podle log_id. */
+export interface CloudDetail { site: string; buddies: string[]; notes: string }
+export function readCloudDetails(buf: Uint8Array): Map<string, CloudDetail> {
+  const out = new Map<string, CloudDetail>();
+  let rows: Record<string, unknown>[] = [];
+  try { rows = [...new SqliteFile(buf).rows("dive_details")]; } catch { return out; }
+  const junk = new Set(["", "-", "no", "ne", "x", "none", "nikdo", "solo", "sólo"]);
+  for (const r of rows) {
+    const id = String(r["DiveId"] ?? "");
+    if (!id) continue;
+    const site = String(r["Site"] || r["Location"] || "").trim();
+    const buddies = String(r["Buddy"] || "").split(/[,;/]| a | and /).map((x) => x.trim()).filter((x) => !junk.has(x.toLowerCase()));
+    const notes = String(r["Notes"] || "").trim();
+    if (site || buddies.length || notes) out.set(id, { site, buddies, notes });
+  }
+  return out;
+}
+
+/** Stisk tlačítka na počítači (záznam 0x51): čas od začátku ponoru podle hodin v záznamu. */
+export interface Button { t: number; btn: number; from: number; to: number; clock: string }
 
 export interface Tissue { t: number; n2: number[]; he: number[] }
 export interface DiveEvent { t: number; kind: string; label: string; payload: string }
@@ -32,7 +54,7 @@ export interface Header {
 
 /** Alarm z počítače: začátek (událost 9) a konec (událost 10), čas v sekundách od začátku ponoru. */
 export interface Alarm { kind: "co2" | "po2low" | "po2high"; label: string; start: number; end: number }
-export interface Dive { id: string; h: Header; s: Samples; tissues: Tissue[]; events: DiveEvent[]; alarms: Alarm[] }
+export interface Dive { id: string; h: Header; s: Samples; tissues: Tissue[]; events: DiveEvent[]; alarms: Alarm[]; buttons: Button[] }
 /** Bity alarmů: událost 9 nese masku spuštěných v bajtech 8–11, událost 10 masku ukončených v bajtech 12–15 (stejné rozložení). */
 const ALARM_BITS: { kind: Alarm["kind"]; label: string; byte: number; bit: number }[] = [
   { kind: "co2", label: "Alarm CO₂", byte: 2, bit: 0x20 },
@@ -94,7 +116,7 @@ export function readShearwaterDb(buf: Uint8Array): RawDive[] {
     if (!(blob instanceof Uint8Array) || blob.length < 40) continue;
     const fn = String(r["file_name"] ?? "");
     const m = /#(\d+)/.exec(fn);
-    out.push({ id: String(r["log_id"]), num: m ? +m[1] : 0, start: 0, blob });
+    out.push({ id: String(r["log_id"]), num: m ? +m[1] : 0, start: 0, blob, fn });
   }
   return out;
 }
@@ -132,6 +154,8 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
   const tissues: Tissue[] = [];
   const events: DiveEvent[] = [];
   const alarms: Alarm[] = [];
+  const buttons: Button[] = [];
+  const sd = new Date(start * 1000), startClock = sd.getUTCMinutes() * 60 + sd.getUTCSeconds();
   const open: Partial<Record<Alarm["kind"], Alarm>> = {};
   let tb: number[] = [];
   const pressure = (depth: number) => surfP / 1000 + depth * salinity / 1000 * 0.0981;
@@ -152,7 +176,8 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
       const ts = u32(r, 4) - start;
       if (r[1] === 29) {
         const i = Math.max(n - 1, 0);
-        if (n) { const v = u32(r, 8); s.co2raw[i] = v; s.co2[i] = Math.round(v * pressure(s.depth[i]) / 10) / 1000; }
+        // Petrel 3 zapisuje CO₂ častěji než vzorky – ke vzorku se ukládá maximum z intervalu, aby se neztratily špičky
+        if (n) { const v = u32(r, 8); if (s.co2raw[i] == null || v > s.co2raw[i]!) { s.co2raw[i] = v; s.co2[i] = Math.round(v * pressure(s.depth[i]) / 10) / 1000; } }
       } else {
         events.push({ t: ts, kind: String(r[1]), label: EVN[r[1]] ?? `Událost typu ${r[1]}`, payload: hex(r.subarray(8, 16)) });
         if (r[1] === 9 || r[1] === 10) for (const b of ALARM_BITS) {
@@ -163,10 +188,14 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
         }
       }
     } else if (t === 0x51) {
-      for (const k of [1, 8]) {
-        const sub = r.subarray(k, k + 7);
-        if (!sub[0]) continue;
-        events.push({ t: Math.round(Math.max(n - 1, 0) * rateS), kind: "0x51/" + sub[0], label: `Krátký záznam (čas ${sub[5]}:${String(sub[6]).padStart(2, "0")})`, payload: hex(sub) });
+      // 4 položky po 8 B: 0x51, tlačítko (1 pravé, 2 levé, 4 návrat), obrazovka z (u16 BE), obrazovka na (u16 BE), minuta, sekunda
+      for (let k = 0; k < 32; k += 8) {
+        if (r[k] !== 0x51 || !r[k + 1]) continue;
+        const mm = r[k + 6], ss = r[k + 7];
+        let tt = (mm * 60 + ss) - startClock;
+        const prev = buttons.length ? buttons[buttons.length - 1].t : -600;
+        while (tt < prev - 600) tt += 3600;
+        buttons.push({ t: tt, btn: r[k + 1], from: (r[k + 2] << 8) | r[k + 3], to: (r[k + 4] << 8) | r[k + 5], clock: `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}` });
       }
     } else if (t >= 0x70 && t <= 0x75) {
       if (t === 0x70) tb = [];
@@ -176,7 +205,8 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
     }
   }
   for (const a of Object.values(open)) a!.end = Math.max(a!.start, h.diveTimeS);
-  return { id: raw.id, h, s, tissues, events, alarms };
+  buttons.sort((x, y) => x.t - y.t);
+  return { id: raw.id, h, s, tissues, events, alarms, buttons };
 }
 
 /** Rychlé přečtení hlavičky bez celého dekódování (číslo, začátek). */

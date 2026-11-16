@@ -30,13 +30,17 @@ function ticks(lo: number, hi: number, n = 5): number[] {
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
-export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip }: {
+export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks }: {
   t: number[]; series: Series[]; height?: number; invert?: boolean; zero?: boolean; markers?: number[]; rightInvert?: boolean;
   bands?: { from: number; to: number; color: string }[];
   /** Svislé čáry od horního okraje grafu k hodnotě `to` (levá osa). */
   vlines?: { t: number; to: number; color: string }[];
   xFmt?: (v: number) => string; xTitle?: (v: number) => string;
   extra?: { label: string; values: (number | string | null)[]; unit?: string }[];
+  /** Svislé čárkované značky přes celý graf s popiskem nahoře (např. přepnutí setpointu). */
+  pins?: { t: number; label: string; color: string }[];
+  /** Krátké barevné značky u spodní osy (např. dávky O₂ podle druhu). */
+  marks?: { t: number; color: string }[];
   /** Tenký barevný pruh dole (např. použitý plyn) se svislými značkami v místě přepnutí. */
   strip?: { from: number; to: number; color: string; label: string }[];
 }) {
@@ -109,6 +113,13 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
         {series.filter((s) => s.fillUp && !s.right).map((s, i) => <path key={"f" + i} d={area(s)} fill={s.color} opacity={0.18} stroke="none" />)}
         {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={s.right ? 0.55 : 1} />)}
         {vlines?.map((v, i) => <line key={"v" + i} x1={X(v.t)} x2={X(v.t)} y1={m.t} y2={Y(v.to)} stroke={v.color} strokeWidth={1} />)}
+        {marks?.map((k, i) => <line key={"k" + i} x1={X(k.t)} x2={X(k.t)} y1={height - m.b - 9} y2={height - m.b} stroke={k.color} strokeWidth={2} />)}
+        {pins?.map((p, i) => (
+          <g key={"p" + i}>
+            <line x1={X(p.t)} x2={X(p.t)} y1={m.t} y2={height - m.b} stroke={p.color} strokeWidth={1} strokeDasharray="3 3" opacity={0.9} />
+            <text x={X(p.t) + 3} y={m.t + 10 + (i % 2) * 11} fill={p.color} className="strip-l">{p.label}</text>
+          </g>
+        ))}
         {strip?.map((g, i) => <rect key={"s" + i} x={X(g.from)} width={Math.max(1, X(g.to) - X(g.from))} y={height - m.b - 5} height={4} fill={g.color} opacity={0.85} />)}
         {strip?.slice(1).map((g, i) => (
           <g key={"sw" + i}>

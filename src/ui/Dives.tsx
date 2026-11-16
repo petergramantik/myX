@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, injections, realStops, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { loadDive, myNum, setNote } from "../app/store";
 import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
@@ -104,6 +104,34 @@ export function DiveScreen({ id }: { id: string }) {
   );
 }
 
+const DOSE_COLOR = { sol: "#4fc3f7", man: "#ffb74d", amb: "#b39ddb", dil: "#cfd8dc" } as const;
+const fmtSp = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+/** Značky přepnutí setpointu do grafů. */
+function spPins(d: Dive) {
+  return setpointChanges(d).map((c) => ({ t: c.t, label: `SP ${fmtSp(c.to)}${c.manual ? "" : "?"}`, color: c.to >= 1 ? "#ffb74d" : c.to < 0.3 ? "#b0bec5" : "#81c784" }));
+}
+
+/** Lokalita, buddy a poznámka cizího logu – jen k přečtení (ze Shearwater Cloud). */
+function GuestNote({ note }: { note: DiveNote }) {
+  const lb = useStore().lb;
+  const site = note.siteId ? lb.sites[note.siteId]?.name : null;
+  const buddies = note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean);
+  return (
+    <Card title="Logbook (ze Shearwater Cloud)">
+      <p>📍 {site || <span className="muted">lokalita nezadaná</span>}</p>
+      {buddies.length > 0 && <p>S kým: {buddies.join(", ")}</p>}
+      {note.note && <p className="pre">{note.note}</p>}
+      <p className="note">Cizí log je jen k prohlížení.</p>
+    </Card>
+  );
+}
+
+function SpTile({ meta }: { meta: Meta }) {
+  const up = meta.sum.sp.find((c) => c.to >= 1);
+  const man = meta.sum.sp.filter((c) => c.manual).length;
+  return <span className="use">{up ? `${fmtSp(up.to)} v ${Math.round(up.t / 60)}. min` : "beze změny"}<small>{up ? `${num(up.depth)} m · ` : ""}{meta.sum.sp.length}× přepnuto{man ? `, ${man}× ručně` : ""}</small></span>;
+}
+
 /** Dvě hodnoty v jedné dlaždici: vlevo a vpravo, každá s malým popiskem. */
 function Pair({ l, ll, r, rl }: { l: React.ReactNode; ll: string; r: React.ReactNode; rl: string }) {
   return <span className="pair"><span>{l}<small>{ll}</small></span><span className="r">{r}<small>{rl}</small></span></span>;
@@ -193,7 +221,7 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
           const mine = ext.filter((e) => e.gas === gas);
           const kind = gas === "dil" ? "S80" : "S40";
           const virt: ExtGas | null = !mine.length && extDetected(u) ? { id: "auto-" + gas, gas, kind, vol: EXT_KINDS[kind] } : null;
-          return virt ? [virt] : mine;
+          return st.guest ? [] : virt ? [virt] : mine;
         })().map((e) => (
           <div key={e.id} className="ext-row">
             <select value={e.kind} onChange={(ev) => setExt(e.id, { kind: ev.target.value, vol: EXT_KINDS[ev.target.value] ?? e.vol }, e)}>
@@ -205,11 +233,11 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
             <button className="btn small" onClick={() => save({ ext: ext.filter((x) => x.id !== e.id) })}>✕</button>
           </div>
         ))}
-        <div className="row">
+        {!st.guest && <div className="row">
           <button className="btn" onClick={() => { const kind = gas === "dil" ? "S80" : "S40"; save({ ext: [...ext, { id: uid(), gas, kind, vol: EXT_KINDS[kind] }] }); }}>+ Externí lahev</button>
           <label className="inline">Ručně (l)<input inputMode="decimal" defaultValue={note?.useManual?.[gas] ?? ""} placeholder="–"
             onBlur={(ev) => save({ useManual: { ...note?.useManual, [gas]: n(ev.target.value) } })} /></label>
-        </div>
+        </div>}
       </div>
     );
   };
@@ -261,10 +289,12 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Diluent", <UseTile gas="dil" meta={meta} note={note} />], ["O₂", <UseTile gas="o2" meta={meta} note={note} />],
           ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
           ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)],
+          ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
+          ["Setpoint", <SpTile meta={meta} />],
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
-      <NoteEditor note={note} onChange={(p) => setNote(id, p)} />
+      {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} />}
       <GasUseCard id={id} meta={meta} note={note} />
     </>
   );
@@ -272,6 +302,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
 
 function ProfileCard({ d }: { d: Dive }) {
   const s = d.s;
+  const [btns, setBtns] = useState(false);
   const stops = useMemo(() => realStops(d), [d]);
   const first = stops.findIndex((v) => v != null);
   const lastStop = stops.length - 1 - [...stops].reverse().findIndex((v) => v != null);
@@ -285,8 +316,9 @@ function ProfileCard({ d }: { d: Dive }) {
         { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m", fillUp: true },
         { label: "", color: C[1], values: link, width: 1 },
         { label: "Zastávka", color: C[1], values: stops, unit: "m", width: 3 },
-      ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} strip={segs} extra={[{ label: "Plyn", values: gasAt }, { label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
-      <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna. Barevný pruh dole = použitý plyn, čárkovaná značka = přepnutí plynu.</p>
+      ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} strip={segs} pins={spPins(d)} marks={btns ? d.buttons.filter((b) => b.t >= 0 && b.t <= d.h.diveTimeS).map((b) => ({ t: b.t, color: b.btn === 2 ? "#ffb74d" : "#b0bec5" })) : undefined} extra={[{ label: "Plyn", values: gasAt }, { label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
+      <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna. Barevný pruh dole = použitý plyn. Svislé čárkované značky SP = přepnutí setpointu (? = bez potvrzené obsluhy Petrelu).
+        {d.buttons.length > 0 && <> <label className="inline"><input type="checkbox" checked={btns} onChange={(e) => setBtns(e.target.checked)} /> stisky tlačítek</label></>}</p>
     </Card>
   );
 }
@@ -295,7 +327,7 @@ function ChartsTab({ d }: { d: Dive }) {
   const s = d.s;
   const [cellMode, setCellMode] = useState<"cal" | "mv">("cal");
   const cal = useMemo(() => cellCalibration(d), [d]);
-  const inj = useMemo(() => injections(d), [d]);
+  const doses = useMemo(() => o2Doses(d), [d]);
   const vrate = useMemo(() => s.depth.map((_, i) => {
     const a = Math.max(0, i - 3), b = Math.min(s.t.length - 1, i + 3);
     return s.t[b] === s.t[a] ? 0 : +(-(s.depth[b] - s.depth[a]) / (s.t[b] - s.t[a]) * 60).toFixed(1);
@@ -309,7 +341,7 @@ function ChartsTab({ d }: { d: Dive }) {
       <Card title="pO₂ a čidla" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
         {cellMode === "cal" ? (
-          <LineChart t={s.t} markers={inj.map((x) => x.t)} bands={d.alarms.filter((a) => a.kind !== "co2").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" }))} series={[
+          <LineChart t={s.t} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={d.alarms.filter((a) => a.kind !== "co2").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" }))} series={[
             { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: "Čidlo 1", color: C[1], values: cells[0], unit: "bar" },
             { label: "Čidlo 2", color: C[2], values: cells[1], unit: "bar" }, { label: "Čidlo 3", color: C[3], values: cells[2], unit: "bar" }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3" },
           ]} extra={depthExtra} />
@@ -320,7 +352,7 @@ function ChartsTab({ d }: { d: Dive }) {
         )}
         <p className="note">
           {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
-          Čárky dole = odhadnuté vstřiky O₂ ({inj.length}×), podle rychlého nárůstu průměrného pO₂.
+          Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční.
         </p>
       </Card>
       <Card title="CO₂ v dýchací smyčce">
@@ -385,6 +417,22 @@ function ValuesTab({ d }: { d: Dive }) {
 function EventsTab({ d }: { d: Dive }) {
   return (
     <>
+    <Card title="Setpoint">
+      {(() => { const sp = setpointChanges(d); return sp.length ? (
+        <table className="kv"><thead><tr><th>Čas</th><th>Hloubka</th><th>Setpoint</th><th>Obsluha</th></tr></thead>
+          <tbody>{sp.map((c, i) => <tr key={i}><td>{Math.round(c.t / 60)}′</td><td>{num(c.depth)} m</td><td>{fmtSp(c.from)} → {fmtSp(c.to)}{c.to < 0.3 && c.depth <= 6 ? " (před výstupem)" : ""}</td><td>{c.manual ? "ručně (menu Petrelu)" : "bez potvrzené obsluhy"}</td></tr>)}</tbody>
+        </table>) : <p className="muted">Setpoint se během ponoru neměnil.</p>; })()}
+      <p className="note">Ruční přepnutí = levé tlačítko (menu) a pravé (potvrzení první položky) 0–25 s před změnou ve vzorcích. Ruční dávky O₂ před přepnutím na vysoký setpoint: {o2Doses(d).filter((x) => x.preSw && x.kind === "man").length}×.</p>
+    </Card>
+    <Card title="Ovládání počítače">
+      {d.buttons.length ? <>
+        <p>{d.buttons.length} stisků · menu otevřeno {d.buttons.filter((b) => b.from === 0xb3 && b.to === 0x06).length}× · mimo hlavní obrazovku {Math.round(summarize(d).offMainS / 60)} min</p>
+        <table className="kv"><thead><tr><th>Čas</th><th>Tlačítko</th><th>Obrazovka</th></tr></thead>
+          <tbody>{d.buttons.map((b, i) => <tr key={i}><td>{b.clock}<br /><small className="muted">{b.t < 0 ? "před ponorem" : `${Math.floor(b.t / 60)}′${String(Math.round(b.t % 60)).padStart(2, "0")}″`}</small></td><td>{BTN_NAMES[b.btn] ?? `tlačítko ${b.btn}`}</td><td>{scrName(b.from)} → {scrName(b.to)}</td></tr>)}</tbody>
+        </table>
+      </> : <p className="muted">Bez záznamu o ovládání.</p>}
+      <p className="note">Ze záznamů 0x51. Čas = minuta:sekunda na hodinách počítače. Petrel je zapisuje v dávkách, pořadí se řadí podle času.</p>
+    </Card>
     <Card title="Alarmy z počítače">
       {d.alarms.length ? (
         <table className="kv"><thead><tr><th>Alarm</th><th>Od</th><th>Do</th><th>Délka</th></tr></thead>
@@ -394,7 +442,7 @@ function EventsTab({ d }: { d: Dive }) {
       <p className="note">Z událostí 9 (spuštění) a 10 (ukončení). V grafech CO₂ a pO₂ jsou alarmy vyznačené podbarvením.</p>
     </Card>
     <Card title="Události v záznamu">
-      <p className="note">Bez CO₂ (to je v grafu). Popisy u typů 0, 1 a 0x51 jsou odhad.</p>
+      <p className="note">Bez CO₂ (to je v grafu) a bez stisků tlačítek (výše). Popisy u typů 0, 1 a 2 jsou odhad.</p>
       <table className="kv"><thead><tr><th>Čas</th><th>Typ</th><th>Význam / data</th></tr></thead>
         <tbody>{d.events.map((e, i) => <tr key={i}><td>{Math.round(e.t / 60)}′</td><td>{e.kind}</td><td>{e.label}<br /><code>{e.payload}</code></td></tr>)}</tbody>
       </table>

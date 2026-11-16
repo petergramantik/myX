@@ -3,6 +3,8 @@ import type { Dive, Header } from "./shearwater";
 
 export interface Summary {
   avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[]; dilUse: GasUse; o2Use: GasUse; pn2Max: number;
+  btnN: number; menuN: number; offMainS: number;
+  sp: SpChange[]; dose: { sol: number; man: number; amb: number; dil: number; manPreSw: number };
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
 }
@@ -55,6 +57,99 @@ export function pressureUse(t: number[], p: (number | null)[], depth: number[], 
   const firstV = sm.find((v) => v != null) ?? null, lastV = [...sm].reverse().find((v) => v != null) ?? null;
   const net = Math.max(0, bar);
   return { ok: true, start: firstV, end: lastV, bar: Math.round(net), ext: ext.map(([a, b]) => [Math.round(a), Math.round(b)]), noisy: rise + wiggle > Math.max(60, net * 4) };
+}
+
+// ---------- ovládání počítače (záznamy 0x51)
+export const SCR_MAIN = 0xb3, SCR_MENU = 0x06;
+const SCR_NAMES: Record<number, string> = { 0xb3: "hlavní obrazovka", 0x155: "info 1", 0x156: "info 2", 0x06: "menu", 0xa4: "po vynoření" };
+export const scrName = (c: number) => SCR_NAMES[c] ?? `obrazovka 0x${c.toString(16)}`;
+export const BTN_NAMES: Record<number, string> = { 1: "pravé tlačítko", 2: "levé tlačítko", 4: "návrat" };
+/** Čas strávený mimo hlavní obrazovku během ponoru (s). */
+function offMain(d: Dive): number {
+  let off = 0, since: number | null = null;
+  for (const b of d.buttons) {
+    if (b.t < 0 || b.t > d.h.diveTimeS) continue;
+    if (b.from === SCR_MAIN && b.to !== SCR_MAIN && since == null) since = b.t;
+    if (b.to === SCR_MAIN && since != null) { off += b.t - since; since = null; }
+  }
+  return off;
+}
+/** Potvrzení první položky menu (levé → menu, pravé → zpět na hlavní) = ruční přepnutí setpointu na Petrelu. */
+export function menuSelects(d: Dive): number[] {
+  const b = d.buttons, out: number[] = [];
+  b.forEach((x, i) => {
+    if (x.btn === 1 && x.from === SCR_MENU && x.to === SCR_MAIN && b.slice(Math.max(0, i - 3), i).some((y) => y.btn === 2 && y.from === SCR_MAIN && y.to === SCR_MENU && x.t - y.t < 15)) out.push(x.t);
+  });
+  return out;
+}
+
+// ---------- setpoint
+export interface SpChange { t: number; from: number; to: number; depth: number; manual: boolean }
+/** Přepnutí setpointu ze vzorků; „ručně“, pokud mu 0–25 s předcházelo potvrzení v menu Petrelu. */
+export function setpointChanges(d: Dive): SpChange[] {
+  const s = d.s, sel = menuSelects(d), out: SpChange[] = [];
+  for (let j = 1; j < s.sp.length; j++) {
+    if (s.sp[j] === s.sp[j - 1] || s.t[j] > d.h.diveTimeS) continue;
+    out.push({ t: s.t[j], from: s.sp[j - 1], to: s.sp[j], depth: s.depth[j], manual: sel.some((x) => s.t[j] - x >= -5 && s.t[j] - x <= 25) });
+  }
+  return out;
+}
+export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, lateMin: number): Alert[] {
+  const out: Alert[] = [];
+  const s = d.s;
+  const down = s.t.find((_, i) => s.depth[i] >= 1.5) ?? 0;
+  let iMax = 0; s.depth.forEach((x, i) => { if (x > s.depth[iMax]) iMax = i; });
+  const startHigh = s.sp[s.t.findIndex((t) => t >= down)] >= 1.0;
+  const up = sum.sp.find((c) => c.to >= 1.0);
+  const fmt = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+  if (!startHigh && d.h.maxDepth > 10) {
+    if (!up) out.push({ level: "warn", title: "Vysoký setpoint nenastaven", text: "Během ponoru nebyl setpoint přepnut na vysoký (≥ 1,0)." });
+    else {
+      const late = up.t > s.t[iMax] || up.t - down > lateMin * 60;
+      const txt = `Setpoint ${fmt(up.to)} nastaven v ${Math.round(up.t / 60)}. min v ${fmt(up.depth)} m, ${Math.round((up.t - down) / 60)} min po zanoření${up.manual ? " (ručně v menu Petrelu)" : ""}.`;
+      out.push(late ? { level: "warn", title: "Pozdní přepnutí na vysoký setpoint", text: txt + (up.t > s.t[iMax] ? " Až po dosažení maximální hloubky." : "") } : { level: "info", title: "Přepnutí setpointu", text: txt });
+    }
+  }
+  for (const c of sum.sp.filter((c) => c.to < 0.3)) {
+    const endPhase = c.depth <= 6 && c.t >= d.h.diveTimeS - 600;
+    if (!endPhase) out.push({ level: "warn", title: `Setpoint ${fmt(c.to)} mimo závěr ponoru`, text: `Přepnuto v ${Math.round(c.t / 60)}. min v ${fmt(c.depth)} m – nízký setpoint pod 6 m nebo dřív než v posledních 10 min.` });
+  }
+  return out;
+}
+
+// ---------- dávkování O₂
+export type DoseKind = "sol" | "man" | "amb" | "dil";
+export interface Dose { t: number; rise: number; depth: number; kind: DoseKind; preSw: boolean }
+/**
+ * Nárůsty podílu O₂ ve smyčce. Solenoid dávkuje jen pod setpointem, takže nárůst nad setpointem je ruční;
+ * diluent ale podíl O₂ zvedne nejvýš na svůj obsah O₂ – nad ním je to jistě O₂, pod ním nejisté.
+ */
+export function o2Doses(d: Dive): Dose[] {
+  const s = d.s, n = s.t.length, out: Dose[] = [];
+  const P = s.depth.map((x) => d.h.surfP / 1000 + x * 0.0981);
+  const f = s.ppo2.map((v, i) => v / P[i]);
+  const ups = setpointChanges(d).filter((c) => c.to > c.from).map((c) => c.t);
+  let i = 1;
+  while (i < n - 3) {
+    if (s.depth[i] < 1.5 || !inDive(d, i)) { i++; continue; }
+    let best = 1;
+    for (let k = 2; k <= 3; k++) if (f[i + k] - f[i] > f[i + best] - f[i]) best = k;
+    const rise = (f[i + best] - f[i]) * P[i];
+    if (rise >= 0.03 && f[i] <= f[i - 1] + 1e-9) {
+      const dils = s.dil.slice(Math.max(0, i - 2), i + best + 3).filter((x): x is number => x != null && x >= 20);
+      const dilDrop = dils.length > 1 ? dils[0] - Math.min(...dils) : 0;
+      const above = s.ppo2[i] > s.sp[i] + 0.05;
+      const kind: DoseKind = dilDrop >= 2 ? "dil" : !above ? "sol" : f[i + best] > s.o2[i] / 100 + 0.01 ? "man" : "amb";
+      out.push({ t: s.t[i], rise: round(rise, 2), depth: s.depth[i], kind, preSw: kind !== "sol" && ups.some((u) => u - s.t[i] >= 0 && u - s.t[i] <= 300) });
+      i += best + 1;
+    } else i++;
+  }
+  return out;
+}
+function doseSummary(d: Dive) {
+  const x = o2Doses(d);
+  const c = (k: DoseKind) => x.filter((y) => y.kind === k).length;
+  return { sol: c("sol"), man: c("man"), amb: c("amb"), dil: c("dil"), manPreSw: x.filter((y) => y.preSw && y.kind === "man").length };
 }
 
 /** Max. parciální tlak dusíku: (okolní tlak − pO₂) × podíl N₂ v inertní části plynu. */
@@ -121,6 +216,11 @@ export function summarize(d: Dive): Summary {
     co2Max: co2.length && Math.max(...co2) > 0 ? round(Math.max(...co2), 2) : null,
     gases: gasUse(d),
     pn2Max: pn2Max(d),
+    btnN: d.buttons.filter((b) => b.t >= 0 && b.t <= d.h.diveTimeS).length,
+    menuN: d.buttons.filter((b) => b.t >= 0 && b.t <= d.h.diveTimeS && b.from === SCR_MAIN && b.to === SCR_MENU).length,
+    offMainS: offMain(d),
+    sp: setpointChanges(d),
+    dose: doseSummary(d),
     dilUse: pressureUse(d.s.t, d.s.dil, d.s.depth, d.h.diveTimeS),
     o2Use: pressureUse(d.s.t, d.s.o2p, d.s.depth, d.h.diveTimeS),
     co2AlarmN: d.alarms.filter((a) => a.kind === "co2").length,
@@ -175,8 +275,8 @@ export interface Alert { level: "warn" | "bad" | "info"; title: string; text: st
 /** Minuty jako „4 h 41 min“. */
 export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
 
-export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number }
-export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05 };
+export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number }
+export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 10 };
 
 const DAY = 86400;
 const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC" });
@@ -241,10 +341,11 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     const as = d.alarms.filter((a) => a.kind === kind);
     if (!as.length) continue;
     const min = as.reduce((x, a) => x + a.end - a.start, 0) / 60;
-    out.push({ level: kind === "po2low" ? "info" : kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače`,
+    const lowSp = kind === "po2low" && as.some((a) => d.s.sp[d.s.t.findIndex((t) => t >= a.start)] < 0.3);
+    out.push({ level: kind === "po2low" ? "info" : kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
       text: `${as.length}× (${as.map((a) => `${Math.round(a.start / 60)}.–${Math.max(Math.round(a.start / 60), Math.round(a.end / 60))}. min`).join(", ")}), celkem ${min < 1 ? "pod 1 min" : Math.round(min) + " min"}.` });
   }
-  const cal = cellCalibration(d);
+  out.push(...spWarnings(d, sum, th.spLateMin ?? 10));
   const mv = [d.s.mv1, d.s.mv2, d.s.mv3];
   mv.forEach((a, k) => {
     const mid = d.s.depth.map((x, i) => (x > 1.5 ? a[i] : null)).filter((x): x is number => x != null);

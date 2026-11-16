@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
 import { DEFAULT_ALL_TH } from "../app/model";
-import { exportBackup, importBackup, saveSettings, syncNow, toast, wipeLocal } from "../app/store";
+import { closeGuest, deleteGuest, exportBackup, guestLogs, importBackup, importGuest, openGuest, saveSettings, syncNow, toast, wipeLocal, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { Card, KV, fmtDate, go, useStore } from "./common";
@@ -39,6 +39,7 @@ export function SettingsScreen() {
 
       <Card title="Upozornění">
         <label>Scrubber – upozornit při zbytku (%)<input inputMode="decimal" defaultValue={th.scrubPct} onBlur={(e) => setTh("scrubPct", e.target.value)} /></label>
+        <label>Setpoint – upozornit na pozdní přepnutí na vysoký po (min)<input inputMode="decimal" defaultValue={th.spLateMin ?? 10} onBlur={(e) => setTh("spLateMin", e.target.value)} /></label>
         <label>Scrubber – upozornit po dnech od náplně<input inputMode="decimal" defaultValue={th.scrubDays} onBlur={(e) => setTh("scrubDays", e.target.value)} /></label>
         <label>Baterie – rezerva nad prahem varování (V)<input inputMode="decimal" defaultValue={th.batMarginV} onBlur={(e) => setTh("batMarginV", e.target.value)} /></label>
         <label>Čidla – životnost, když u čidla není zadaná (měsíce)<input inputMode="decimal" defaultValue={th.cellLifeM} onBlur={(e) => setTh("cellLifeM", e.target.value)} /></label>
@@ -72,6 +73,8 @@ export function SettingsScreen() {
           <button className="btn danger" onClick={async () => { if (confirm("Smazat všechna data v tomto telefonu? Data ve Workeru zůstanou.")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
         </div>
       </Card>
+
+      <GuestCard />
 
       <ShareCard />
 
@@ -113,6 +116,39 @@ function ShareCard() {
       <img className="qr" src="qr.svg" alt={"QR kód: " + APP_URL} width={180} height={180} />
       <p className="center small"><a href={APP_URL}>{APP_URL.replace("https://", "")}</a></p>
       <p className="note">Každý má svá data jen ve svém zařízení. Klíč k synchronizaci nesdílej – s ním by se ponory slily do tvého logbooku.</p>
+    </Card>
+  );
+}
+
+/** Cizí logy: jen k prohlížení, uložené zvlášť, bez synchronizace. */
+function GuestCard() {
+  const st = useStore();
+  const [logs, setLogs] = useState<GuestLog[]>([]);
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const reload = () => guestLogs().then(setLogs);
+  useEffect(() => { reload(); }, [st.guest]);
+  const pick = async (f?: File) => {
+    if (!f) return;
+    setBusy(true);
+    try { const l = await importGuest(f); if (l) { toast(`Otevřen cizí log: ${l.name} (${l.count} ponorů)`); go({ t: "home" }); } }
+    catch (e) { toast("Soubor se nepodařilo načíst: " + (e as Error).message); }
+    finally { setBusy(false); reload(); if (ref.current) ref.current.value = ""; }
+  };
+  return (
+    <Card title="Cizí logy">
+      <p className="note">Export Shearwater Cloud jiného potápěče jen k prohlížení. Ukládá se zvlášť, nesynchronizuje se a s tvými ponory, čidly ani bateriemi se nemíchá.</p>
+      <input ref={ref} type="file" accept=".db,application/octet-stream" hidden onChange={(e) => pick(e.target.files?.[0])} />
+      <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Otevřít cizí log"}</button>
+      {logs.map((l) => (
+        <div key={l.id} className="kvline">
+          <span>{l.name} · {l.count} ponorů</span>
+          {st.guest?.id === l.id
+            ? <button className="btn small" onClick={() => closeGuest()}>Zavřít</button>
+            : <button className="btn small" onClick={async () => { await openGuest(l); go({ t: "home" }); }}>Otevřít</button>}
+          <button className="btn small" onClick={async () => { if (confirm(`Smazat cizí log ${l.name}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
+        </div>
+      ))}
     </Card>
   );
 }
