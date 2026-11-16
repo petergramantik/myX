@@ -1,6 +1,6 @@
 // Testy jádra bez soukromých dat: syntetický záznam ponoru a sloučení logbooků.
 import { decodeDive } from "../src/core/shearwater";
-import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpointChanges, o2Doses, DEFAULT_THRESHOLDS } from "../src/core/analysis";
+import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpointChanges, o2Doses, spWarnings, SP_RULES, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { applyCloud } from "../src/app/store";
 import { diveStats, diffRows, conclusion } from "../src/core/compare";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
@@ -116,6 +116,9 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(sp.length === 1 && sp[0].manual && sp[0].to === 1.3, "ruční přepnutí setpointu z menu Petrelu");
   ok(d2.s.co2raw[30] === 9000, "CO₂: ke vzorku maximum z intervalu");
   ok(o2Doses(d2).some((x) => x.kind === "man" && x.preSw), "ruční dávka O₂ nad setpointem před přepnutím");
+  const w2 = spWarnings(d2, { sp }, { ...SP_RULES, lateMin: 0.5 });
+  ok(w2.some((a) => a.title === "Pozdní přepnutí na vysoký setpoint" && /po dosažení dna/.test(a.text)), "pozdní setpoint měřený od dosažení dna");
+  ok(!spWarnings(d2, { sp }).some((a) => a.title === "Pozdní přepnutí na vysoký setpoint" || a.title === "Klesání s vysokým setpointem"), "včasné přepnutí bez varování");
 }
 { // převzetí lokality a buddy ze Shearwater Cloud jen tam, kde nic není
   const lb = emptyLogbook(); lb.notes.b = { buddyIds: [], note: "moje", siteId: undefined, updated: 1 };

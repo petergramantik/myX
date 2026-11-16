@@ -94,21 +94,58 @@ export function setpointChanges(d: Dive): SpChange[] {
   }
   return out;
 }
-export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, lateMin: number): Alert[] {
-  const out: Alert[] = [];
+/** Parametry hodnocení setpointu: hranice pozdního přepnutí (min), oscilace dna (m), výraznější klesání (m). */
+export interface SpRules { lateMin: number; osc: number; descM: number; stableS: number }
+export const SP_RULES: SpRules = { lateMin: 5, osc: 3, descM: 6, stableS: 180 };
+
+/**
+ * Začátek „dna“, na kterém byl vysoký setpoint přepnut: jde se zpět od přepnutí, dokud hloubka nezačne
+ * být o víc než `osc` mělčí než nejhlubší místo úseku (tj. dokud nejsme v klesání).
+ */
+function plateauStart(d: Dive, j: number, osc: number): number {
   const s = d.s;
-  const down = s.t.find((_, i) => s.depth[i] >= 1.5) ?? 0;
-  let iMax = 0; s.depth.forEach((x, i) => { if (x > s.depth[iMax]) iMax = i; });
-  const startHigh = s.sp[s.t.findIndex((t) => t >= down)] >= 1.0;
-  const up = sum.sp.find((c) => c.to >= 1.0);
+  let mx = s.depth[j], k = j;
+  while (k > 0 && s.depth[k - 1] >= mx - osc) { k--; mx = Math.max(mx, s.depth[k]); }
+  return k;
+}
+
+export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RULES): Alert[] {
+  const out: Alert[] = [];
+  const s = d.s, n = s.t.length;
   const fmt = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
-  if (!startHigh && d.h.maxDepth > 10) {
-    if (!up) out.push({ level: "warn", title: "Vysoký setpoint nenastaven", text: "Během ponoru nebyl setpoint přepnut na vysoký (≥ 1,0)." });
-    else {
-      const late = up.t > s.t[iMax] || up.t - down > lateMin * 60;
-      const txt = `Setpoint ${fmt(up.to)} nastaven v ${Math.round(up.t / 60)}. min v ${fmt(up.depth)} m, ${Math.round((up.t - down) / 60)} min po zanoření${up.manual ? " (ručně v menu Petrelu)" : ""}.`;
-      out.push(late ? { level: "warn", title: "Pozdní přepnutí na vysoký setpoint", text: txt + (up.t > s.t[iMax] ? " Až po dosažení maximální hloubky." : "") } : { level: "info", title: "Přepnutí setpointu", text: txt });
+  const down = s.t.find((_, i) => s.depth[i] >= 1.5) ?? 0;
+  const startHigh = s.sp[Math.max(0, s.t.findIndex((t) => t >= down))] >= 1.0;
+  const ups = sum.sp.filter((c) => c.to >= 1.0 && c.from < 1.0);
+  // pozdní přepnutí: měřeno od dosažení dna (hloubka se pak ≥ stableS nezvýší o víc než osc)
+  for (const [k, c] of ups.entries()) {
+    const j = s.t.findIndex((t) => t >= c.t);
+    if (j < 0) continue;
+    const p = plateauStart(d, j, r.osc);
+    const delay = (c.t - s.t[p]) / 60;
+    const txt = `Setpoint ${fmt(c.to)} nastaven v ${Math.round(c.t / 60)}. min v ${fmt(c.depth)} m, ${fmt(Math.round(delay * 10) / 10)} min po dosažení dna (${fmt(s.depth[p])} m)${c.manual ? ", ručně v menu Petrelu" : ""}.`;
+    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: "warn", title: "Pozdní přepnutí na vysoký setpoint", text: txt });
+    else if (k === 0) out.push({ level: "info", title: "Přepnutí setpointu", text: txt });
+  }
+  if (!startHigh && !ups.length && d.h.maxDepth > 10) {
+    // bez přepnutí: varovat jen pokud se potápěč na dně ≥ lateMin zdržel
+    let longest = 0;
+    for (let i = 0; i < n; i++) { if (s.depth[i] < 10) continue; const p = plateauStart(d, i, r.osc); longest = Math.max(longest, s.t[i] - s.t[p]); }
+    if (longest > r.lateMin * 60) out.push({ level: "warn", title: "Vysoký setpoint nenastaven", text: `Během ponoru nebyl setpoint přepnut na vysoký (≥ 1,0), i když byl potápěč na dně ${Math.round(longest / 60)} min.` });
+  }
+  // klesání s vysokým setpointem: o víc než descM od nejmělčího místa
+  let minI = -1, peakI = -1, warned = false;
+  for (let i = 0; i < n; i++) {
+    if (s.t[i] > d.h.diveTimeS) break;
+    if (s.sp[i] < 1.0) { minI = -1; warned = false; continue; }
+    if (minI < 0 || s.depth[i] < s.depth[minI]) { minI = i; peakI = i; warned = false; }
+    if (s.depth[i] > s.depth[peakI]) peakI = i;
+    const end = s.depth[i] < s.depth[peakI] - r.osc || i === n - 1 || s.sp[i + 1] < 1.0;
+    if (!warned && s.depth[peakI] - s.depth[minI] > r.descM && end) {
+      const po2 = Math.max(...s.ppo2.slice(minI, peakI + 1));
+      out.push({ level: "warn", title: "Klesání s vysokým setpointem", text: `V ${Math.round(s.t[minI] / 60)}.–${Math.round(s.t[peakI] / 60)}. min klesání z ${fmt(s.depth[minI])} na ${fmt(s.depth[peakI])} m se setpointem ${fmt(s.sp[minI])} – před klesáním nebylo přepnuto na nízký. Nejvyšší pO₂ během klesání ${fmt(po2)} bar.` });
+      warned = true;
     }
+    if (end && s.depth[i] < s.depth[peakI] - r.osc) { minI = i; peakI = i; warned = false; } // nové klesání se počítá od tohoto místa
   }
   for (const c of sum.sp.filter((c) => c.to < 0.3)) {
     const endPhase = c.depth <= 6 && c.t >= d.h.diveTimeS - 600;
@@ -275,8 +312,8 @@ export interface Alert { level: "warn" | "bad" | "info"; title: string; text: st
 /** Minuty jako „4 h 41 min“. */
 export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
 
-export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number }
-export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 5 };
+export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number; spOsc?: number; spDescM?: number }
+export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 5, spOsc: 3, spDescM: 6 };
 
 const DAY = 86400;
 const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC" });
@@ -345,7 +382,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     out.push({ level: kind === "po2low" ? "info" : kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
       text: `${as.length}× (${as.map((a) => `${Math.round(a.start / 60)}.–${Math.max(Math.round(a.start / 60), Math.round(a.end / 60))}. min`).join(", ")}), celkem ${min < 1 ? "pod 1 min" : Math.round(min) + " min"}.` });
   }
-  out.push(...spWarnings(d, sum, th.spLateMin ?? 5));
+  out.push(...spWarnings(d, sum, { ...SP_RULES, lateMin: th.spLateMin ?? 5, osc: th.spOsc ?? 3, descM: th.spDescM ?? 6 }));
   const mv = [d.s.mv1, d.s.mv2, d.s.mv3];
   mv.forEach((a, k) => {
     const mid = d.s.depth.map((x, i) => (x > 1.5 ? a[i] : null)).filter((x): x is number => x != null);

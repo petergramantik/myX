@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.14";
+export const APP_VERSION = "1.14.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.14.1", date: "16. 11. 2026", title: "Setpoint podle průběhu hloubky",
+    items: [
+      "Pozdní přepnutí na vysoký setpoint se měří od dosažení dna (hloubka se 3 min nezvýší o víc než 3 m), ne od zanoření",
+      "Nové upozornění na klesání o víc než 6 m s vysokým setpointem",
+      "Hranice (5 min, 3 m, 6 m) jdou upravit v Nastavení",
+    ],
+  },
   {
     version: "1.14", date: "16. 11. 2026", title: "Sdílení logu do myX",
     items: [
