@@ -63,7 +63,7 @@ function Body({ s }: { s: Screen }) {
     case "warn": return <WarningsScreen />;
     case "co2": return <Co2Screen />;
     case "cmp": return <CompareScreen id={s.id} other={s.other} />;
-    case "hub": return <CompareHub sub={s.sub} />;
+    case "hub": return <CompareHub sub={s.sub} who={s.who} />;
   }
 }
 
@@ -78,6 +78,7 @@ function App() {
       history.replaceState(null, "", location.pathname);
       const r = await takeShared().catch(() => null);
       if (!r) { toast("Sdílený soubor se nepodařilo načíst"); return; }
+      if (!r.log) { if (r.last) go({ t: "dive", id: r.last.id }); toast(r.own ? `Načten tvůj log: ${r.own} nových ponorů` : "Tvůj log je aktuální – žádné nové ponory"); return; }
       const who = ownerName(r.log) || r.log.name;
       if (r.mine && r.last) { closeGuest(); go({ t: "cmp", id: r.mine.id, other: r.last.id }); toast(`Načten log: ${who} – porovnání s tvým ponorem`); }
       else if (r.last) { go({ t: "dive", id: r.last.id }); toast(`Načten log: ${who}. Porovnání nabídnu, až stáhneš svůj ponor.`); }

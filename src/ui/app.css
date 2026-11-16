@@ -293,3 +293,5 @@ table.cmp td.hi { color: #ffb74d; font-weight: 700; } table.cmp td.lo { color: #
 i.sugg { font-weight: 500; color: var(--muted); } i.sugg small { font-size: 11px; }
 .suggest { border-top: 1px solid var(--line); padding: 6px 0; } .suggest:first-of-type { border-top: 0; }
 .kvline.wrap { flex-wrap: wrap; }
+.logtile .lt-h { display: flex; justify-content: space-between; align-items: center; font-size: 17px; }
+.logtile.open { border-color: var(--accent); } .logtile .row { margin-top: 8px; flex-wrap: wrap; }

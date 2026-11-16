@@ -1,9 +1,16 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.19";
+export const APP_VERSION = "1.20";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.20", date: "16. 11. 2026", title: "Přehled logů a rozpoznání vlastního logu",
+    items: [
+      "Databáze: každý log buddyho jako dlaždice (majitel, počítač, rozsah, společné ponory) s tlačítkem Otevřít (jen čtení)",
+      "Import i sdílení do myX pozná tvůj počítač – tvoje ponory se doplní, ostatní počítače jsou vždy samostatné cizí logy",
+    ],
+  },
   {
     version: "1.19", date: "16. 11. 2026", title: "Lokalita a buddy z logu buddyho",
     items: [

@@ -81,11 +81,40 @@ async function saveLb(lb: Logbook) {
 }
 
 // ---------- import exportu Shearwater Cloud
-export async function importDb(file: File): Promise<number> {
-  if (st.guest) { toast("Nejdřív zavři cizí log"); return 0; }
+/** Sériové číslo počítače z názvu souboru v Shearwater Cloud („Petrel 2[306E13C5]#…“). */
+const serialOf = (fn?: string) => (/\[([0-9A-F]+)\]/i.exec(fn || "")?.[1] || "").toUpperCase();
+/** Sériová čísla mých počítačů (z mých ponorů). */
+export const ownSerials = () => new Set(ownMetas().map((m) => (m.h.serial || 0).toString(16).toUpperCase()).filter((x) => x !== "0"));
+
+/**
+ * Import exportu Shearwater Cloud. K mým ponorům jdou jen ponory mých počítačů (při úplně prvním importu počítač
+ * s nejvíc ponory); každý jiný počítač se načte jako samostatný cizí log jen pro čtení. Logy se nikdy nekombinují.
+ */
+export async function importAny(file: File): Promise<{ own: number; guests: GuestLog[] }> {
+  if (st.guest) closeGuest();
   const buf = new Uint8Array(await file.arrayBuffer());
   const raws = readShearwaterDb(buf);
-  if (raws.length) await db.put("kv", { name: file.name || "Shearwater_Cloud.db", at: Date.now(), count: raws.length, data: buf }, "orig"); // pro sdílení buddymu
+  if (!raws.length) { toast("V souboru nejsou žádné ponory"); return { own: 0, guests: [] }; }
+  const groups = new Map<string, RawDive[]>();
+  for (const r of raws) { const k = serialOf(r.fn); groups.set(k, [...(groups.get(k) || []), r]); }
+  let mine = ownSerials();
+  if (!mine.size && !st.metas.length) mine = new Set([[...groups].sort((a, b) => b[1].length - a[1].length)[0][0]]);
+  const ownRaws = [...groups].filter(([k]) => mine.has(k) || (!k && groups.size === 1 && mine.size === 0)).flatMap(([, v]) => v);
+  const own = ownRaws.length ? await importOwn(buf, file.name, ownRaws) : 0;
+  const guests: GuestLog[] = [];
+  for (const [k, v] of groups) if (!mine.has(k) && !ownRaws.includes(v[0])) { const g = await importGuestRaws(buf, v, false); if (g) guests.push(g); }
+  return { own, guests };
+}
+
+/** Původní ruční import z Přehledu – vrací počet nových vlastních ponorů. */
+export async function importDb(file: File): Promise<number> {
+  const r = await importAny(file);
+  if (r.guests.length) toast(`Načteno jako cizí log: ${r.guests.map((g) => ownerName(g) || g.name).join(", ")}`);
+  return r.own;
+}
+
+async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promise<number> {
+  await db.put("kv", { name: name || "Shearwater_Cloud.db", at: Date.now(), count: raws.length, data: buf }, "orig"); // pro sdílení buddymu
   const cloud = readCloudDetails(buf);
   if (cloud.size) { const lb = applyCloud(st.lb, cloud, new Set(raws.map((r) => r.id))); if (lb !== st.lb) await saveLb(lb); }
   const have = new Set(st.metas.map((m) => m.id));
@@ -297,12 +326,16 @@ export async function guestLogs(): Promise<GuestLog[]> {
   return ((await db.get<GuestLog[]>("kv", "logs", db.GUEST)) || []).sort((a, b) => b.added - a.added);
 }
 export async function importGuest(file: File): Promise<GuestLog | null> {
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const raws = readShearwaterDb(buf);
-  if (!raws.length) { toast("V souboru nejsou žádné ponory"); return null; }
+  const r = await importAny(file);
+  if (r.own) toast(`Přidáno ${r.own} tvých ponorů (tvůj počítač)`);
+  if (r.guests[0]) await openGuest(r.guests[0]);
+  return r.guests[0] || null;
+}
+async function importGuestRaws(buf: Uint8Array, raws: RawDive[], open = true): Promise<GuestLog | null> {
+  if (!raws.length) return null;
   const fn = raws.find((r) => r.fn)?.fn || "";
   const model = (/^(.*?)\[/.exec(fn)?.[1] || "Počítač").trim();
-  const serial = /\[([0-9A-F]+)\]/i.exec(fn)?.[1] || "";
+  const serial = serialOf(fn);
   const id = uid();
   const metas: Meta[] = [];
   for (const r of raws) {
@@ -313,17 +346,18 @@ export async function importGuest(file: File): Promise<GuestLog | null> {
       metas.push(await metaOf(raw));
     } catch { /* poškozený ponor přeskočit */ }
   }
-  const cloud = new Map([...readCloudDetails(buf)].map(([k, v]) => [`${id}:${k}`, v]));
+  const ids = new Set(raws.map((r) => r.id));
+  const cloud = new Map([...readCloudDetails(buf)].filter(([k]) => ids.has(k)).map(([k, v]) => [`${id}:${k}`, v]));
   const lb = applyCloud(emptyLogbook(), cloud, new Set(metas.map((m) => m.id)));
   await db.put("kv", { metas, lb }, id, db.GUEST);
-  const log: GuestLog = { id, name: `${model}${serial ? " " + serial : ""}`, count: metas.length, added: Date.now(), serial: serial.toUpperCase() || undefined, model };
+  const log: GuestLog = { id, name: `${model}${serial ? " " + serial : ""}`, count: metas.length, added: Date.now(), serial: serial || undefined, model };
   // starší log ze stejného počítače nahradit, ať se nehromadí duplicity
   for (const old of (await guestLogs()).filter((l) => log.serial && l.serial === log.serial)) await deleteGuest(old);
   await db.put("kv", [log, ...(await guestLogs())], "logs", db.GUEST);
   guestIndex = null;
   const known = log.serial ? ownLb().computers?.[log.serial] : undefined;
   if (known?.buddyId) await setComputerOwner(log, { id: known.buddyId }); // stejný počítač už má majitele
-  await openGuest(log);
+  if (open) await openGuest(log);
   return log;
 }
 /** Původní soubor posledního importu (export Shearwater Cloud) – pro sdílení buddymu. */
@@ -332,7 +366,7 @@ export async function lastExport(): Promise<{ name: string; at: number; count: n
 }
 
 /** Soubor sdílený do aplikace (Web Share Target) – načte se jako cizí log. Vrací log a jeho nejnovější ponor. */
-export async function takeShared(): Promise<{ log: GuestLog; last: Meta | null; mine: Meta | null } | null> {
+export async function takeShared(): Promise<{ log: GuestLog | null; last: Meta | null; mine: Meta | null; own: number } | null> {
   if (!("caches" in self)) return null;
   const c = await caches.open("myx-share");
   const r = await c.match("shared.db");
@@ -340,12 +374,13 @@ export async function takeShared(): Promise<{ log: GuestLog; last: Meta | null; 
   await c.delete("shared.db");
   const name = decodeURIComponent(r.headers.get("X-Name") || "sdileny.db");
   const file = new File([await r.blob()], name);
-  if (st.guest) closeGuest();
-  const log = await importGuest(file);
-  if (!log) return null;
+  const res = await importAny(file);
+  const log = res.guests[0] || null;
+  if (!log) return { log: null, last: [...st.metas].sort((a, b) => b.start - a.start)[0] || null, mine: null, own: res.own };
+  await openGuest(log);
   const last = [...st.metas].sort((a, b) => b.start - a.start)[0] || null;
   const mine = last ? ownMetas().find((m) => Math.abs(m.start - last.start) <= PAIR_S) || null : null;
-  return { log, last, mine };
+  return { log, last, mine, own: res.own };
 }
 
 export async function openGuest(log: GuestLog) {

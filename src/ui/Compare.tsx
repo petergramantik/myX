@@ -133,7 +133,7 @@ export async function commonDives(metas: Meta[]): Promise<Common[]> {
 }
 
 /** Záložka DB: podkarty Srovnání (společné ponory s filtry) a Databáze (cizí logy, sdílení mého logu). */
-export function CompareHub({ sub = "cmp" }: { sub?: "cmp" | "db" }) {
+export function CompareHub({ sub = "cmp", who }: { sub?: "cmp" | "db"; who?: string }) {
   const st = useStore();
   return (
     <div className="screen">
@@ -143,15 +143,15 @@ export function CompareHub({ sub = "cmp" }: { sub?: "cmp" | "db" }) {
       </div>
       {sub === "db" ? <><GuestCard /><ShareMine /></>
         : st.guest ? <p className="muted">Zavři prohlížený cizí log – společné ponory se hledají k tvým ponorům.</p>
-        : <CommonList />}
+        : <CommonList who={who} />}
     </div>
   );
 }
 
-function CommonList() {
+function CommonList({ who }: { who?: string }) {
   const st = useStore();
   const [rows, setRows] = useState<Common[] | null>(null);
-  const [sel, setSel] = useState<string[]>([]);
+  const [sel, setSel] = useState<string[]>(who ? [who] : []);
   const [year, setYear] = useState(""), [month, setMonth] = useState(""), [day, setDay] = useState("");
   useEffect(() => { commonDives(st.metas).then(setRows); }, [st.metas, st.lb.computers]);
   if (rows == null) return <p className="muted">Hledám…</p>;

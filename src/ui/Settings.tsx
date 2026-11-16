@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
 import { DEFAULT_ALL_TH } from "../app/model";
 import { OwnerPicker } from "./Owner";
-import { closeGuest, deleteGuest, ownerName, setComputerOwner, exportBackup, guestLogs, importBackup, importGuest, openGuest, saveSettings, syncNow, toast, wipeLocal, type GuestLog } from "../app/store";
+import { closeGuest, deleteGuest, ownerName, setComputerOwner, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
-import { Card, KV, fmtDate, go, useStore } from "./common";
+import { Card, KV, fmtDate, go, tab, useStore } from "./common";
 import { ImportButton } from "./Overview";
 
 export function SettingsScreen() {
@@ -125,34 +125,59 @@ function ShareCard() {
 export function GuestCard() {
   const st = useStore();
   const [logs, setLogs] = useState<GuestLog[]>([]);
+  const [info, setInfo] = useState<Record<string, { from: number; to: number; common: number }>>({});
   const [busy, setBusy] = useState(false);
   const [ownerFor, setOwnerFor] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
-  const reload = () => guestLogs().then(setLogs);
+  const reload = async () => {
+    setLogs(await guestLogs());
+    const ix = await guestIndexLoad(), mine = ownMetas(), out: typeof info = {};
+    for (const { log, metas } of ix) {
+      const st0 = metas.map((m) => m.start);
+      out[log.id] = { from: Math.min(...st0), to: Math.max(...st0), common: mine.filter((m) => nearestPair(metas, m).length).length };
+    }
+    setInfo(out);
+  };
   useEffect(() => { reload(); }, [st.guest, st.lb.computers]);
   const pick = async (f?: File) => {
     if (!f) return;
     setBusy(true);
-    try { const l = await importGuest(f); if (l) { toast(`Otevřen cizí log: ${l.name} (${l.count} ponorů)`); go({ t: "home" }); } }
-    catch (e) { toast("Soubor se nepodařilo načíst: " + (e as Error).message); }
+    try {
+      const r = await importAny(f);
+      const g = r.guests[0];
+      toast([r.own ? `Přidáno ${r.own} tvých ponorů` : "", ...r.guests.map((x) => `cizí log ${ownerName(x) || x.name} (${x.count} ponorů)`)].filter(Boolean).join(" · ") || "Žádné nové ponory");
+      if (g) { await openGuest(g); go({ t: "home" }); }
+    } catch (e) { toast("Soubor se nepodařilo načíst: " + (e as Error).message); }
     finally { setBusy(false); reload(); if (ref.current) ref.current.value = ""; }
   };
   return (
-    <Card title="Cizí logy">
-      <p className="note">Export Shearwater Cloud jiného potápěče jen k prohlížení. Ukládá se zvlášť, nesynchronizuje se a s tvými ponory, čidly ani bateriemi se nemíchá.</p>
-      <input ref={ref} type="file" accept=".db,application/octet-stream" hidden onChange={(e) => pick(e.target.files?.[0])} />
-      <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Otevřít cizí log"}</button>
-      {logs.map((l) => (
-        <div key={l.id} className="kvline">
-          <span>{ownerName(l) ? <b>{ownerName(l)} · </b> : null}{l.name} · {l.count} ponorů{l.serial && <> · <a onClick={() => setOwnerFor(ownerFor === l.id ? null : l.id)}>{ownerName(l) ? "změnit majitele" : "přiřadit majitele"}</a></>}</span>
-          {st.guest?.id === l.id
-            ? <button className="btn small" onClick={() => closeGuest()}>Zavřít</button>
-            : <button className="btn small" onClick={async () => { await openGuest(l); go({ t: "home" }); }}>Otevřít</button>}
-          <button className="btn small" onClick={async () => { if (confirm(`Smazat cizí log ${l.name}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
-          {ownerFor === l.id && <div style={{ width: "100%" }}><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
-            {ownerName(l) && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení</button>}</div>}
-        </div>
-      ))}
-    </Card>
+    <>
+      <Card title="Logy buddyů">
+        <input ref={ref} type="file" accept=".db,application/octet-stream" hidden onChange={(e) => pick(e.target.files?.[0])} />
+        <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Načíst log buddyho"}</button>
+        <p className="note">Export Shearwater Cloud buddyho. Jde ho poslat i přes WhatsApp nebo Quick Share → myX. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům.</p>
+        {!logs.length && <p className="muted">Zatím žádné logy buddyů.</p>}
+      </Card>
+      {logs.map((l) => {
+        const i = info[l.id], open = st.guest?.id === l.id, who = ownerName(l);
+        return (
+          <section key={l.id} className={"card logtile" + (open ? " open" : "")}>
+            <div className="lt-h"><b>{who || "Nepřiřazený log"}</b>{open && <span className="pill info">otevřený</span>}</div>
+            <div className="small">{l.model || "Počítač"}{l.serial ? ` ${l.serial}` : ""}</div>
+            <div className="small muted">{l.count} ponorů{i ? ` · ${fmtDate(i.from)} – ${fmtDate(i.to)}` : ""}{i ? ` · ${i.common} společných se mnou` : ""}</div>
+            <div className="small muted">Načteno {new Date(l.added).toLocaleDateString("cs-CZ")}</div>
+            <div className="row">
+              {open ? <button className="btn primary" onClick={() => closeGuest()}>Zavřít</button>
+                : <button className="btn primary" onClick={async () => { await openGuest(l); go({ t: "home" }); }}>Otevřít (jen čtení)</button>}
+              {i?.common ? <button className="btn" onClick={() => tab({ t: "hub", sub: "cmp", who: who || l.name })}>Srovnání</button> : null}
+              {l.serial && <button className="btn" onClick={() => setOwnerFor(ownerFor === l.id ? null : l.id)}>Majitel</button>}
+              <button className="btn" onClick={async () => { if (confirm(`Smazat log ${who || l.name}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
+            </div>
+            {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
+              {who && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení</button>}</div>}
+          </section>
+        );
+      })}
+    </>
   );
 }
