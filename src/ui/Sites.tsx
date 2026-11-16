@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
-import { Card, KV, back, fmtDate, go, num, useStore } from "./common";
+import { BLSwitch, Card, KV, back, fmtDate, go, num, useStore } from "./common";
 import { WeatherCard } from "./Weather";
 
 const MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
@@ -18,6 +18,7 @@ export function SitesScreen() {
   const [name, setName] = useState("");
   return (
     <div className="screen">
+      <BLSwitch on="sites" />
       <input className="search" placeholder="Hledat lokalitu" value={q} onChange={(e) => setQ(e.target.value)} />
       {list.map(({ s, c, km }) => (
         <div key={s.id} className="list-item" onClick={() => go({ t: "site", id: s.id })}>
@@ -156,6 +157,7 @@ export function BuddiesScreen() {
   const list = Object.values(st.lb.buddies).sort((a, b) => (counts[b.id]?.n || 0) - (counts[a.id]?.n || 0) || a.name.localeCompare(b.name, "cs"));
   return (
     <div className="screen">
+      <BLSwitch on="buddies" />
       {list.map((b) => (
         <div key={b.id} className="list-item" onClick={() => go({ t: "buddy", id: b.id })}>
           <div className="li-main"><b>{b.name}</b><small>{counts[b.id] ? `${counts[b.id].n} ponorů · naposledy ${fmtDate(counts[b.id].last)}` : "bez ponorů"}</small></div>

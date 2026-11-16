@@ -77,8 +77,6 @@ export function SettingsScreen() {
         </div>
       </Card>
 
-      <GuestCard />
-
       <ShareCard />
 
       <Card title="O aplikaci">
@@ -124,7 +122,7 @@ function ShareCard() {
 }
 
 /** Cizí logy: jen k prohlížení, uložené zvlášť, bez synchronizace. */
-function GuestCard() {
+export function GuestCard() {
   const st = useStore();
   const [logs, setLogs] = useState<GuestLog[]>([]);
   const [busy, setBusy] = useState(false);

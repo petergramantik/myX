@@ -274,3 +274,8 @@ img.qr { display: block; margin: 12px auto 4px; background: #fff; padding: 8px; 
 table.cmp tr.big td { font-weight: 700; } table.cmp tr.big td:first-child { color: var(--warn); }
 table.cmp tr.small-diff td { color: var(--muted); }
 p.legend { display: flex; gap: 14px; }
+/* 1.16 */
+.seg.bl { display: flex; margin-bottom: 10px; } .seg.bl button { flex: 1; }
+table.cmp td.hi { color: #ffb74d; font-weight: 700; } table.cmp td.lo { color: #4fc3f7; font-weight: 700; }
+.note .hi { color: #ffb74d; } .note .lo { color: #4fc3f7; }
+.chips label.chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid; }

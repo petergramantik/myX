@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.15";
+export const APP_VERSION = "1.16";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.16", date: "16. 11. 2026", title: "Záložka Srovnat a srovnání více potápěčů",
+    items: [
+      "Buddy a lokality sloučené do záložky B&L (podkarty Buddy | Lokality)",
+      "Nová záložka Srovnat: společné ponory s buddyi, cizí logy, sdílení mého logu (původní export)",
+      "Srovnání 3 a více potápěčů: grafy, tabulka se zvýrazněním nejvyšší/nejnižší hodnoty a závěr proti průměru skupiny",
+      "Cizí log: bez čekajících ponorů, výchozí filtr jen společné ponory",
+    ],
+  },
   {
     version: "1.15", date: "16. 11. 2026", title: "Zátěž a dechová práce",
     items: [

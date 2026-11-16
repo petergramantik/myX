@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
-import { loadDive, myNum, setNote } from "../app/store";
+import { loadDive, myNum, ownMetas, setNote } from "../app/store";
 import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
@@ -16,7 +16,11 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const st = useStore();
   const [q, setQ] = useState("");
   const [rate, setRate] = useState<string>("");
+  const [onlyCommon, setOnlyCommon] = useState(true);
   const lb = st.lb;
+  // u cizího logu: ponory, ke kterým mám svůj ponor (začátek do ±15 min)
+  const mine = st.guest ? ownMetas() : [];
+  const common = (m: Meta) => mine.some((x) => Math.abs(x.start - m.start) <= 900);
   const n = norm(q);
   const match = (note: { siteId?: string; buddyIds: string[]; note: string; rating?: string } | undefined, date: number) => {
     if (site && note?.siteId !== site) return false;
@@ -26,15 +30,23 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
     const txt = norm([note?.siteId ? lb.sites[note.siteId]?.name : "", ...(note?.buddyIds || []).map((b) => lb.buddies[b]?.name || ""), note?.note || "", fmtDate(date)].join(" "));
     return n.split(" ").every((w) => txt.includes(w));
   };
-  const rows = st.metas.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse().filter(({ m, note }) => match(note, m.start));
-  const drafts = Object.values(lb.drafts).filter((d) => match(d, d.created)).sort((a, b) => b.created - a.created);
+  const rows = st.metas.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse()
+    .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)));
+  const drafts = st.guest ? [] : Object.values(lb.drafts).filter((d) => match(d, d.created)).sort((a, b) => b.created - a.created);
   return (
     <div className="screen">
       {(site || buddy) && <p className="muted">Filtr: {site ? lb.sites[site]?.name : lb.buddies[buddy!]?.name} · <a onClick={() => go({ t: "dives" })}>zrušit</a></p>}
       <input className="search" placeholder="Hledat lokalitu, buddyho, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div className="seg filter">
-        {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
-      </div>
+      {st.guest ? (
+        <div className="seg filter">
+          <button className={onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(true)}>Jen společné ({st.metas.filter(common).length})</button>
+          <button className={!onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(false)}>Všechny ({st.metas.length})</button>
+        </div>
+      ) : (
+        <div className="seg filter">
+          {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
+        </div>
+      )}
       {drafts.map((d) => (
         <div key={d.id} className="dive-row draft" onClick={() => go({ t: "draft", id: d.id })}>
           <div className="dr-main"><b>{d.siteId ? lb.sites[d.siteId]?.name : "bez lokality"}</b><small>{fmtDate(d.created)} · čeká na data z počítače</small></div>

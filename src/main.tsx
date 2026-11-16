@@ -12,14 +12,14 @@ import { BatteriesScreen } from "./ui/Batteries";
 import { closeGuest, createDraft, ownerName } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
 import { Co2Screen } from "./ui/Cells";
-import { CompareScreen } from "./ui/Compare";
+import { CompareHub, CompareScreen } from "./ui/Compare";
 import { OwnerPicker } from "./ui/Owner";
 import { APP_VERSION } from "./app/version";
 import "./ui/app.css";
 
 const TABS: [Screen, string, string][] = [
-  [{ t: "home" }, "Přehled", "◉"], [{ t: "dives" }, "Ponory", "≋"], [{ t: "sites" }, "Lokality", "⌖"],
-  [{ t: "buddies" }, "Buddy", "☺"], [{ t: "settings" }, "Nastavení", "⚙"],
+  [{ t: "home" }, "Přehled", "◉"], [{ t: "dives" }, "Ponory", "≋"], [{ t: "buddies" }, "B&L", "☺"],
+  [{ t: "hub" }, "Srovnat", "⇄"], [{ t: "settings" }, "Nastavení", "⚙"],
 ];
 
 function title(s: Screen, st: ReturnType<typeof useStore>): string {
@@ -30,9 +30,9 @@ function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
     case "home": return "Přehled";
     case "dives": return "Ponory";
     case "dive": { const n = st.metas.findIndex((m) => m.id === s.id) + 1; return n ? `Ponor ${n}` : "Ponor"; }
-    case "sites": return "Lokality";
+    case "sites": return "B&L";
     case "site": return st.lb.sites[s.id]?.name || "Lokalita";
-    case "buddies": return "Buddy";
+    case "buddies": return "B&L";
     case "buddy": return st.lb.buddies[s.id]?.name || "Buddy";
     case "settings": return "Nastavení";
     case "about": return "Co je nového";
@@ -42,6 +42,7 @@ function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
     case "warn": return "Varování";
     case "co2": return "Čidlo CO₂";
     case "cmp": return "Porovnání";
+    case "hub": return "Srovnat";
   }
 }
 
@@ -62,10 +63,11 @@ function Body({ s }: { s: Screen }) {
     case "warn": return <WarningsScreen />;
     case "co2": return <Co2Screen />;
     case "cmp": return <CompareScreen id={s.id} other={s.other} />;
+    case "hub": return <CompareHub />;
   }
 }
 
-const isTab = (s: Screen) => s.t !== "warn" && TABS.some(([t]) => t.t === s.t && !("site" in s && s.site) && !("buddy" in s && s.buddy));
+const isTab = (s: Screen) => s.t !== "warn" && (s.t === "sites" || TABS.some(([t]) => t.t === s.t && !("site" in s && s.site) && !("buddy" in s && s.buddy)));
 
 function App() {
   const s = useScreen();
@@ -118,7 +120,7 @@ function App() {
       </main>
       <nav className="tabs-bottom">
         {TABS.map(([t, l, ic]) => (
-          <button key={l} className={s.t === t.t || (t.t === "dives" && s.t === "dive") || (t.t === "sites" && s.t === "site") || (t.t === "buddies" && s.t === "buddy") ? "on" : ""} onClick={() => tab(t)}>
+          <button key={l} className={s.t === t.t || (t.t === "dives" && s.t === "dive") || (t.t === "buddies" && ["buddy", "sites", "site"].includes(s.t)) || (t.t === "hub" && s.t === "cmp") ? "on" : ""} onClick={() => tab(t)}>
             <span>{ic}</span>{l}
           </button>
         ))}

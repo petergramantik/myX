@@ -59,40 +59,86 @@ export interface DiffRow { key: string; label: string; a: string; b: string; wei
 const f1 = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLocaleString("cs-CZ", { maximumFractionDigits: d, minimumFractionDigits: d > 1 ? d : 0 }));
 const spTxt = (c: SpChange | null) => (c ? `${Math.round(c.t / 60)}. min, ${f1(c.depth)} m` : "nepřepnuto");
 
-/** Tabulka rozdílů seřazená podle relativní velikosti rozdílu. */
+/** Porovnávané veličiny: hodnota (číslo pro výpočet rozdílu), text, měřítko „podstatného“ rozdílu a váha. */
+interface Metric { key: string; label: string; v: (s: DiveStats) => number | null; txt: (s: DiveStats) => string; scale: number | ((xs: number[]) => number); w: number; cat?: boolean }
+const METRICS: Metric[] = [
+  { key: "tts", label: "Max. zbývající deko (TTS)", v: (s) => s.ttsMax, txt: (s) => `${s.ttsMax} min`, scale: 3, w: 1.5 },
+  { key: "deco", label: "Na zastávkách", v: (s) => s.decoMin, txt: (s) => `${f1(s.decoMin, 0)} min`, scale: 2, w: 1 },
+  { key: "spUp", label: "Přepnutí na vysoký SP", v: (s) => (s.spUp ? s.spUp.t / 60 : null), txt: (s) => spTxt(s.spUp), scale: 3, w: 1.3 },
+  { key: "spVal", label: "Vysoký setpoint", v: (s) => s.spUpVal, txt: (s) => f1(s.spUpVal, 2), scale: 0.05, w: 1 },
+  { key: "inert", label: "Inertní zátěž ∫(P − pO₂)", v: (s) => s.inert, txt: (s) => `${f1(s.inert, 0)} bar·min`, scale: (xs) => Math.max(5, (xs.reduce((a, b) => a + b, 0) / xs.length) * 0.06), w: 1 },
+  { key: "avg", label: "Průměrná hloubka", v: (s) => s.avgDepth, txt: (s) => `${f1(s.avgDepth)} m`, scale: 1, w: 1 },
+  { key: "max", label: "Max. hloubka", v: (s) => s.maxDepth, txt: (s) => `${f1(s.maxDepth)} m`, scale: 2, w: 1 },
+  { key: "t20", label: "Čas pod 20 m", v: (s) => s.t20, txt: (s) => `${f1(s.t20, 0)} min`, scale: 3, w: 1 },
+  { key: "dur", label: "Délka ponoru", v: (s) => s.durMin, txt: (s) => `${f1(s.durMin, 0)} min`, scale: 3, w: 1 },
+  { key: "po2", label: "Průměrné pO₂", v: (s) => s.po2All, txt: (s) => `${f1(s.po2All, 2)} bar`, scale: 0.05, w: 1 },
+  { key: "po2b", label: "pO₂ na dně", v: (s) => s.po2Bottom, txt: (s) => `${f1(s.po2Bottom, 2)} bar`, scale: 0.05, w: 1 },
+  { key: "po2d", label: "pO₂ během deko", v: (s) => s.po2Deco, txt: (s) => (s.po2Deco != null ? `${f1(s.po2Deco, 2)} bar` : "–"), scale: 0.05, w: 1 },
+  { key: "off", label: "Mimo setpoint o > 0,1 bar", v: (s) => s.offMin, txt: (s) => `${f1(s.offMin, 0)} min`, scale: 5, w: 1 },
+  { key: "gf", label: "GF", v: () => null, txt: (s) => s.gf, scale: 1, w: 2.5, cat: true },
+  { key: "co2", label: "Max. CO₂", v: (s) => s.co2Max ?? 0, txt: (s) => (s.co2Max != null ? `${f1(s.co2Max)} mbar` : "–"), scale: 1, w: 1 },
+  { key: "co2al", label: "Alarmy CO₂", v: (s) => s.co2Alarms, txt: (s) => `${s.co2Alarms}×`, scale: 1, w: 1 },
+  { key: "scrub", label: "Scrubber na začátku", v: (s) => s.scrubLeftStart, txt: (s) => `${s.scrubLeftStart} min`, scale: 60, w: 0.5 },
+  { key: "man", label: "Ruční dávky O₂", v: (s) => s.dosesMan, txt: (s) => `${s.dosesMan}×`, scale: 3, w: 0.6 },
+  { key: "sol", label: "Solenoid (odhad)", v: (s) => s.dosesSol, txt: (s) => `${s.dosesSol}×`, scale: 5, w: 0.4 },
+  { key: "asc", label: "Rychlost výstupu", v: (s) => s.ascRate, txt: (s) => `${f1(s.ascRate)} m/min`, scale: 1, w: 0.6 },
+  { key: "move", label: "Pohyb ve vertikále", v: (s) => s.vMove, txt: (s) => `${f1(s.vMove)} m/min`, scale: 0.5, w: 0.5 },
+  { key: "cns", label: "CNS na konci", v: (s) => s.cnsEnd, txt: (s) => `${s.cnsEnd} %`, scale: 5, w: 0.5 },
+  { key: "dens", label: "Hustota plynu max", v: (s) => s.densMax, txt: (s) => `${f1(s.densMax)} g/l`, scale: 0.5, w: 0.8 },
+  { key: "dens52", label: "Nad 5,2 g/l", v: (s) => s.dens52, txt: (s) => `${f1(s.dens52, 0)} min`, scale: 5, w: 0.6 },
+  { key: "vents", label: "Upouštění smyčky", v: (s) => s.vents, txt: (s) => `${s.vents}×`, scale: 3, w: 0.5 },
+  { key: "dil", label: "Diluent", v: () => null, txt: (s) => s.dil, scale: 1, w: 2, cat: true },
+  { key: "temp", label: "Min. teplota", v: (s) => s.tempMin, txt: (s) => `${s.tempMin} °C`, scale: 2, w: 0.3 },
+  { key: "btn", label: "Stisky tlačítek", v: (s) => s.btnN, txt: (s) => `${s.btnN}`, scale: 10, w: 0.2 },
+];
+
+export interface MultiRow { key: string; label: string; vals: string[]; weight: number; hi: number; lo: number }
+/** Tabulka rozdílů pro 2 a více potápěčů, seřazená podle rozptylu; hi/lo = index nejvyšší a nejnižší hodnoty. */
+export function multiRows(st: DiveStats[]): MultiRow[] {
+  return METRICS.map((m) => {
+    const vals = st.map(m.txt);
+    if (m.cat) return { key: m.key, label: m.label, vals, weight: new Set(vals).size > 1 ? m.w : 0, hi: -1, lo: -1 };
+    const xs = st.map(m.v);
+    const ok = xs.filter((x): x is number => x != null);
+    // chybějící hodnota (např. nepřepnutý SP) proti existující = výrazný rozdíl
+    if (ok.length < xs.length) return { key: m.key, label: m.label, vals, weight: ok.length ? 3 * m.w : 0, hi: -1, lo: -1 };
+    const scale = typeof m.scale === "function" ? m.scale(ok) : m.scale;
+    const mx = Math.max(...ok), mn = Math.min(...ok);
+    return { key: m.key, label: m.label, vals, weight: Math.min(3, (mx - mn) / scale) * m.w, hi: mx > mn ? xs.indexOf(mx) : -1, lo: mx > mn ? xs.indexOf(mn) : -1 };
+  }).sort((a, b) => b.weight - a.weight);
+}
+
+/** Tabulka rozdílů dvou potápěčů (zpětná kompatibilita). */
 export function diffRows(a: DiveStats, b: DiveStats): DiffRow[] {
-  const rel = (x: number, y: number, scale: number) => Math.min(3, Math.abs(x - y) / scale);
-  const rows: DiffRow[] = [
-    { key: "tts", label: "Max. zbývající deko (TTS)", a: `${a.ttsMax} min`, b: `${b.ttsMax} min`, weight: rel(a.ttsMax, b.ttsMax, 3) * 1.5 },
-    { key: "deco", label: "Na zastávkách", a: `${f1(a.decoMin, 0)} min`, b: `${f1(b.decoMin, 0)} min`, weight: rel(a.decoMin, b.decoMin, 2) },
-    { key: "spUp", label: "Přepnutí na vysoký SP", a: spTxt(a.spUp), b: spTxt(b.spUp), weight: (a.spUp && b.spUp ? rel(a.spUp.t / 60, b.spUp.t / 60, 3) : a.spUp || b.spUp ? 3 : 0) * 1.3 },
-    { key: "spVal", label: "Vysoký setpoint", a: f1(a.spUpVal, 2), b: f1(b.spUpVal, 2), weight: rel(a.spUpVal ?? 0, b.spUpVal ?? 0, 0.05) },
-    { key: "inert", label: "Inertní zátěž ∫(P − pO₂)", a: `${f1(a.inert, 0)} bar·min`, b: `${f1(b.inert, 0)} bar·min`, weight: rel(a.inert, b.inert, Math.max(5, (a.inert + b.inert) * 0.03)) },
-    { key: "avg", label: "Průměrná hloubka", a: `${f1(a.avgDepth)} m`, b: `${f1(b.avgDepth)} m`, weight: rel(a.avgDepth, b.avgDepth, 1) },
-    { key: "max", label: "Max. hloubka", a: `${f1(a.maxDepth)} m`, b: `${f1(b.maxDepth)} m`, weight: rel(a.maxDepth, b.maxDepth, 2) },
-    { key: "t20", label: "Čas pod 20 m", a: `${f1(a.t20, 0)} min`, b: `${f1(b.t20, 0)} min`, weight: rel(a.t20, b.t20, 3) },
-    { key: "dur", label: "Délka ponoru", a: `${f1(a.durMin, 0)} min`, b: `${f1(b.durMin, 0)} min`, weight: rel(a.durMin, b.durMin, 3) },
-    { key: "po2", label: "Průměrné pO₂", a: `${f1(a.po2All, 2)} bar`, b: `${f1(b.po2All, 2)} bar`, weight: rel(a.po2All, b.po2All, 0.05) },
-    { key: "po2b", label: "pO₂ na dně", a: `${f1(a.po2Bottom, 2)} bar`, b: `${f1(b.po2Bottom, 2)} bar`, weight: rel(a.po2Bottom, b.po2Bottom, 0.05) },
-    { key: "po2d", label: "pO₂ během deko", a: a.po2Deco != null ? `${f1(a.po2Deco, 2)} bar` : "–", b: b.po2Deco != null ? `${f1(b.po2Deco, 2)} bar` : "–", weight: a.po2Deco != null && b.po2Deco != null ? rel(a.po2Deco, b.po2Deco, 0.05) : 0 },
-    { key: "off", label: "Mimo setpoint o > 0,1 bar", a: `${f1(a.offMin, 0)} min`, b: `${f1(b.offMin, 0)} min`, weight: rel(a.offMin, b.offMin, 5) },
-    { key: "gf", label: "GF", a: a.gf, b: b.gf, weight: a.gf !== b.gf ? 2.5 : 0 },
-    { key: "co2", label: "Max. CO₂", a: a.co2Max != null ? `${f1(a.co2Max)} mbar` : "–", b: b.co2Max != null ? `${f1(b.co2Max)} mbar` : "–", weight: rel(a.co2Max ?? 0, b.co2Max ?? 0, 1) },
-    { key: "co2al", label: "Alarmy CO₂", a: `${a.co2Alarms}×`, b: `${b.co2Alarms}×`, weight: rel(a.co2Alarms, b.co2Alarms, 1) },
-    { key: "scrub", label: "Scrubber na začátku", a: `${a.scrubLeftStart} min`, b: `${b.scrubLeftStart} min`, weight: rel(a.scrubLeftStart, b.scrubLeftStart, 60) * 0.5 },
-    { key: "man", label: "Ruční dávky O₂", a: `${a.dosesMan}×`, b: `${b.dosesMan}×`, weight: rel(a.dosesMan, b.dosesMan, 3) * 0.6 },
-    { key: "sol", label: "Solenoid (odhad)", a: `${a.dosesSol}×`, b: `${b.dosesSol}×`, weight: rel(a.dosesSol, b.dosesSol, 5) * 0.4 },
-    { key: "asc", label: "Rychlost výstupu", a: `${f1(a.ascRate)} m/min`, b: `${f1(b.ascRate)} m/min`, weight: rel(a.ascRate, b.ascRate, 1) * 0.6 },
-    { key: "move", label: "Pohyb ve vertikále", a: `${f1(a.vMove)} m/min`, b: `${f1(b.vMove)} m/min`, weight: rel(a.vMove, b.vMove, 0.5) * 0.5 },
-    { key: "cns", label: "CNS na konci", a: `${a.cnsEnd} %`, b: `${b.cnsEnd} %`, weight: rel(a.cnsEnd, b.cnsEnd, 5) * 0.5 },
-    { key: "dil", label: "Diluent", a: a.dil, b: b.dil, weight: a.dil !== b.dil ? 2 : 0 },
-    { key: "dens", label: "Hustota plynu max", a: `${f1(a.densMax)} g/l`, b: `${f1(b.densMax)} g/l`, weight: rel(a.densMax, b.densMax, 0.5) * 0.8 },
-    { key: "dens52", label: "Nad 5,2 g/l", a: `${f1(a.dens52, 0)} min`, b: `${f1(b.dens52, 0)} min`, weight: rel(a.dens52, b.dens52, 5) * 0.6 },
-    { key: "vents", label: "Upouštění smyčky", a: `${a.vents}×`, b: `${b.vents}×`, weight: rel(a.vents, b.vents, 3) * 0.5 },
-    { key: "temp", label: "Min. teplota", a: `${a.tempMin} °C`, b: `${b.tempMin} °C`, weight: rel(a.tempMin, b.tempMin, 2) * 0.3 },
-    { key: "btn", label: "Stisky tlačítek", a: `${a.btnN}`, b: `${b.btnN}`, weight: rel(a.btnN, b.btnN, 10) * 0.2 },
-  ];
-  return rows.sort((x, y) => y.weight - x.weight);
+  return multiRows([a, b]).map((r) => ({ key: r.key, label: r.label, a: r.vals[0], b: r.vals[1], weight: r.weight }));
+}
+
+/** Závěr pro 3 a více potápěčů: každý proti průměru skupiny, jen podstatné odchylky. */
+export function groupConclusion(names: string[], st: DiveStats[]): string[] {
+  const n = st.length, avg = (f: (s: DiveStats) => number) => st.reduce((a, s) => a + f(s), 0) / n;
+  const out: string[] = [];
+  const tts = avg((s) => s.ttsMax), amb = avg((s) => s.ambInt), po2 = avg((s) => s.po2Int), dep = avg((s) => s.avgDepth);
+  const ups = st.map((s) => s.spUp?.t ?? null).filter((x): x is number => x != null);
+  const upAvg = ups.length ? ups.reduce((a, b) => a + b, 0) / ups.length : null;
+  out.push(`Deko ve skupině: max. TTS ${st.map((s, i) => `${names[i]} ${s.ttsMax}`).join(", ")} min (průměr ${f1(tts, 1)}).`);
+  st.forEach((s, i) => {
+    const parts: string[] = [];
+    if (s.ttsMax - tts >= 2) {
+      const dDepth = s.ambInt - amb, dPo2 = po2 - s.po2Int, tot = Math.abs(dDepth) + Math.abs(dPo2) || 1;
+      const why: string[] = [];
+      if (dPo2 > 0 && dPo2 / tot >= 0.3) why.push(s.spUp && upAvg != null && s.spUp.t - upAvg >= 120 ? `pozdější přepnutí na vysoký SP (${Math.round(s.spUp.t / 60)}. min, průměr ${Math.round(upAvg / 60)}.)` : !s.spUp ? "nepřepnutý vysoký SP" : `nižší pO₂ (${f1(s.po2All, 2)} bar)`);
+      if (dDepth > 0 && dDepth / tot >= 0.3) why.push(s.avgDepth > dep + 0.3 ? `držel se níž (průměr ${f1(s.avgDepth)} vs. ${f1(dep)} m)` : `delší pobyt v hloubce (${f1(s.t20, 0)} min pod 20 m)`);
+      parts.push(`nejdelší deko nad průměrem skupiny (TTS ${s.ttsMax} min)${why.length ? " – " + why.join(", ") : ""}`);
+    }
+    if (s.gf !== st[0].gf || st.some((x) => x.gf !== s.gf)) if (st.filter((x) => x.gf === s.gf).length === 1) parts.push(`jiné GF (${s.gf})`);
+    if (s.co2Max != null && st.every((x, j) => j === i || (x.co2Max ?? 0) + 1 <= s.co2Max!)) parts.push(`nejvyšší CO₂ (${f1(s.co2Max)} mbar, alarmy ${s.co2Alarms}×)${s.dens52 > avg((x) => x.dens52) + 3 ? ", déle dýchal hustou směs" : ""}`);
+    if (s.offMin - avg((x) => x.offMin) >= 5) parts.push(`nejdéle mimo setpoint (${f1(s.offMin, 0)} min)`);
+    if (s.vents - avg((x) => x.vents) >= 3) parts.push(`častěji upouštěl smyčku (${s.vents}×)`);
+    if (s.ascRate - avg((x) => x.ascRate) >= 1.5) parts.push(`rychlejší výstup (${f1(s.ascRate)} m/min)`);
+    if (parts.length) out.push(`${names[i]}: ${parts.join("; ")}.`);
+  });
+  if (out.length === 1) out.push("Žádný potápěč se od skupiny výrazně neliší.");
+  return out;
 }
 
 /**

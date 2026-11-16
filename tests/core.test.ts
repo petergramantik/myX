@@ -2,7 +2,7 @@
 import { decodeDive } from "../src/core/shearwater";
 import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpointChanges, o2Doses, spWarnings, SP_RULES, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { applyCloud } from "../src/app/store";
-import { diveStats, diffRows, conclusion } from "../src/core/compare";
+import { diveStats, diffRows, conclusion, groupConclusion, multiRows } from "../src/core/compare";
 import { gasDensity } from "../src/core/effort";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
 import { detectCellEvents, cellStatus, cellDiveWarnings, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
@@ -133,6 +133,10 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(conclusion("já", "R", sa, sb)[0].startsWith("Dekompresní povinnost byla podobná") && diffRows(sa, sb).every((r) => r.weight === 0), "porovnání stejných ponorů");
   const sc = { ...sb, ttsMax: sb.ttsMax + 6, ambInt: sb.ambInt + 30, inert: sb.inert + 30 };
   ok(/U potápěče R byla dekomprese delší.*hloub/.test(conclusion("já", "R", sa, sc)[0]), "závěr: delší deko kvůli hloubce");
+  const sd = { ...sb, ttsMax: sb.ttsMax + 8, ambInt: sb.ambInt + 40, inert: sb.inert + 40, avgDepth: sb.avgDepth + 3 };
+  const g = groupConclusion(["já", "R", "D"], [sa, sb, sd]);
+  ok(g.some((x) => x.startsWith("D:") && /nejdelší deko/.test(x)), "závěr skupiny: odchylka proti průměru");
+  ok(multiRows([sa, sb, sd]).find((r) => r.key === "tts")!.hi === 2, "tabulka skupiny: nejvyšší hodnota");
   const l1 = emptyLogbook(), l2 = emptyLogbook(); l2.computers = { B94F4935: { id: "B94F4935", model: "Petrel 3", buddyId: "r", updated: 5 } };
   ok(mergeLogbooks(l1, l2).computers?.B94F4935?.buddyId === "r", "majitel cizího počítače se synchronizuje");
 }

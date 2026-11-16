@@ -85,6 +85,7 @@ export async function importDb(file: File): Promise<number> {
   if (st.guest) { toast("Nejdřív zavři cizí log"); return 0; }
   const buf = new Uint8Array(await file.arrayBuffer());
   const raws = readShearwaterDb(buf);
+  if (raws.length) await db.put("kv", { name: file.name || "Shearwater_Cloud.db", at: Date.now(), count: raws.length, data: buf }, "orig"); // pro sdílení buddymu
   const cloud = readCloudDetails(buf);
   if (cloud.size) { const lb = applyCloud(st.lb, cloud, new Set(raws.map((r) => r.id))); if (lb !== st.lb) await saveLb(lb); }
   const have = new Set(st.metas.map((m) => m.id));
@@ -227,6 +228,11 @@ export async function importGuest(file: File): Promise<GuestLog | null> {
   await openGuest(log);
   return log;
 }
+/** Původní soubor posledního importu (export Shearwater Cloud) – pro sdílení buddymu. */
+export async function lastExport(): Promise<{ name: string; at: number; count: number; data: Uint8Array } | undefined> {
+  return db.get("kv", "orig");
+}
+
 /** Soubor sdílený do aplikace (Web Share Target) – načte se jako cizí log. Vrací log a jeho nejnovější ponor. */
 export async function takeShared(): Promise<{ log: GuestLog; last: Meta | null; mine: Meta | null } | null> {
   if (!("caches" in self)) return null;

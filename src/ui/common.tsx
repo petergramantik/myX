@@ -8,7 +8,7 @@ export const useStore = (): State => useSyncExternalStore(subscribe, getState);
 export type Screen =
   | { t: "home" } | { t: "dives"; site?: string; buddy?: string } | { t: "dive"; id: string }
   | { t: "sites" } | { t: "site"; id: string } | { t: "buddies" } | { t: "buddy"; id: string }
-  | { t: "settings" } | { t: "about" } | { t: "draft"; id: string } | { t: "cells"; pos?: number; install?: string } | { t: "bats"; pos?: number } | { t: "warn" } | { t: "co2" } | { t: "cmp"; id: string; other: string };
+  | { t: "settings" } | { t: "about" } | { t: "draft"; id: string } | { t: "cells"; pos?: number; install?: string } | { t: "bats"; pos?: number } | { t: "warn" } | { t: "co2" } | { t: "cmp"; id: string; other: string } | { t: "hub" };
 
 let stack: Screen[] = [{ t: "home" }];
 const navSubs = new Set<() => void>();
@@ -31,6 +31,16 @@ export function Card({ title, children, right, id }: { title?: string; children:
       {title && <div className="card-h"><h2>{title}</h2>{right}</div>}
       {children}
     </section>
+  );
+}
+
+/** Přepínač podkaret B&L (Buddy | Lokality). */
+export function BLSwitch({ on }: { on: "buddies" | "sites" }) {
+  return (
+    <div className="seg bl">
+      <button className={on === "buddies" ? "on" : ""} onClick={() => tab({ t: "buddies" })}>Buddy</button>
+      <button className={on === "sites" ? "on" : ""} onClick={() => tab({ t: "sites" })}>Lokality</button>
+    </div>
   );
 }
 
