@@ -189,6 +189,7 @@ ul.small { font-size: 13px; color: var(--muted); }
 .warnbtn span { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; padding: 0 4px; }
 .warnbtn.warn span { background: #e08a00; } .warnbtn.info span { background: #0288d1; }
 .alert.link { cursor: pointer; }
+.alert.fold { cursor: pointer; } .alert.fold b { margin-bottom: 0; display: flex; justify-content: space-between; gap: 8px; } .alert.fold.open b { margin-bottom: 2px; } .fold-arr { opacity: .6; font-weight: normal; }
 main.from-left { animation: fromLeft .2s ease-out; } main.from-right { animation: fromRight .2s ease-out; }
 @keyframes fromLeft { from { transform: translateX(-30%); opacity: .4; } to { transform: none; opacity: 1; } }
 @keyframes fromRight { from { transform: translateX(30%); opacity: .4; } to { transform: none; opacity: 1; } }

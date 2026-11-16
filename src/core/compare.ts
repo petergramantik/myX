@@ -1,6 +1,6 @@
 // Porovnání dvou současných ponorů (můj vs. buddyho): metriky, rozdíly a stručný závěr z dat.
 import type { Dive } from "./shearwater";
-import { atStop, setpointChanges, o2Doses, summarize, type SpChange } from "./analysis";
+import { atStop, setpointChanges, o2Doses, summarize, cellSpread, type SpChange, type CellIssue } from "./analysis";
 import { co2Plausibility, effortOf } from "./effort";
 
 const amb = (d: Dive, i: number) => (d.h.surfP || 1013) / 1000 + d.s.depth[i] * ((d.h.salinity || 1000) / 1000) * 0.0981;
@@ -15,7 +15,7 @@ export interface DiveStats {
   co2Max: number | null; co2Avg: number | null; co2Alarms: number; scrubLeftStart: number;
   dil: string; dosesMan: number; dosesSol: number; tempMin: number; btnN: number;
   inert: number; ambInt: number; po2Int: number; // bar·min
-  densMax: number; dens52: number; vents: number; co2Bad: boolean;
+  densMax: number; dens52: number; vents: number; co2Bad: boolean; cellIssue: CellIssue;
 }
 
 /** Metriky ponoru pro porovnání. Časově vážené průměry přes úseky ponoru (hloubka > 1,5 m). */
@@ -94,7 +94,7 @@ export function diveStats(d: Dive, dev: SpDev = SP_DEV): DiveStats {
     scrubLeftStart: d.h.scrubLeftStartMin, dil: sum.dilUsed.split(",")[0] || "", dosesMan: doses.filter((x) => x.kind === "man").length, dosesSol: doses.filter((x) => x.kind === "sol").length,
     tempMin: sum.tempMin, btnN: sum.btnN,
     inert: ambI - po2I, ambInt: ambI, po2Int: po2I,
-    densMax: ef.densMax, dens52: ef.densOver52, vents: ef.vents, co2Bad: co2Plausibility(d)?.ok === false,
+    densMax: ef.densMax, dens52: ef.densOver52, vents: ef.vents, co2Bad: co2Plausibility(d)?.ok === false, cellIssue: cellSpread(d)?.kind ?? "",
   };
 }
 
@@ -254,6 +254,7 @@ export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveSt
       if (Math.abs(a[k] - b[k]) >= 2) { const w = a[k] > b[k] ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${w.who}: déle ${lab} (${f1(w.x[k], 1)} vs. ${f1(w.y[k], 1)} min)` + (k === "offBelow" && w.x.dosesMan > w.y.dosesMan + 3 ? `, častěji dávkoval O₂ ručně (${w.x.dosesMan}× vs. ${w.y.dosesMan}×).` : ".")); level = Math.max(level, k === "offBelow" ? 2 : 1) as 0 | 1 | 2; }
     }
     if (Math.abs(a.boostMin - b.boostMin) >= 2) { const w = a.boostMin > b.boostMin ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${w.who}: během deko pO₂ zvýšené na ${f1(w.x.boostPo2, 2)} bar po ${f1(w.x.boostMin, 0)} min (${w.y.boostMin >= 0.5 ? `${f1(w.y.boostMin, 0)} min` : "druhý ne"}) – zkracuje zastávky.`); level = Math.max(level, 1) as 0 | 1 | 2; }
+    for (const [w, x] of [[A, a], [B, b]] as const) if (x.cellIssue) { lines.push(`${w}: ${cellIssueText(x.cellIssue)} – hodnoty pO₂ ber s rezervou.`); level = Math.max(level, 1) as 0 | 1 | 2; }
     out.push(sec("po2", level, lines));
   }
   // ---- CO₂
@@ -330,6 +331,7 @@ export function groupSections(names: string[], st: DiveStats[]): Section[] {
     if (s.offAbove - avg((x) => x.offAbove) >= 2) p2.push([1, `${names[i]}: nejdéle nad setpointem mimo deko (${f1(s.offAbove, 1)} min).`]);
     if (s.boostMin - avg((x) => x.boostMin) >= 2) p2.push([1, `${names[i]}: během deko pO₂ zvýšené (${f1(s.boostPo2, 2)} bar, ${f1(s.boostMin, 0)} min).`]);
   });
+  st.forEach((s, i) => { if (s.cellIssue) p2.push([1, `${names[i]}: ${cellIssueText(s.cellIssue)} – hodnoty pO₂ ber s rezervou.`]); });
   const c2: [number, string][] = [];
   st.forEach((s, i) => { if (s.co2Bad) c2.push([1, `${names[i]}: CO₂ nelze porovnat – čidlo nejspíš podhodnocuje (oříznutá nula).`]); });
   st.forEach((s, i) => { if (!s.co2Bad && s.co2Max != null && st.every((x, j) => j === i || x.co2Bad || (x.co2Max ?? 0) + 1 <= s.co2Max!)) c2.push([s.co2Alarms > 0 || s.co2Max >= 5 ? 2 : 1, `${names[i]}: nejvyšší CO₂ (${f1(s.co2Max)} mbar, alarmy ${s.co2Alarms}×)${s.dens52 > avg((x) => x.dens52) + 3 ? ", déle dýchal hustou směs" : ""}${s.scrubLeftStart < avg((x) => x.scrubLeftStart) - 30 ? ", méně zbývajícího scrubberu" : ""}.`]); });
@@ -383,4 +385,9 @@ export function profileLag(a: Dive, b: Dive): { real: number; clock: number; rms
     e /= n; if (e < bestE) { bestE = e; best = lag; }
   }
   return { real: best, clock, rmse: Math.sqrt(bestE) };
+}
+
+/** Krátký popis problému s O₂ čidly (jen nad prahem SPREAD_MIN; podprahové výkyvy se nehlásí). */
+export function cellIssueText(k: CellIssue): string {
+  return k === "wet" ? "podezření na vlhkost na čidlech" : k === "multi" ? "podezření na vadná čidla" : k ? `podezření na nefunkční čidlo ${k.slice(1)}` : "";
 }

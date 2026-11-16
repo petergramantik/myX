@@ -151,5 +151,27 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(Math.max(...dn) > 3.5 && Math.max(...dn) < 4.2, `hustota plynu ve 20 m (${Math.max(...dn)} g/l)`);
 }
 
+// ---- rozjetá O₂ čidla: klasifikace (vlhkost / jedno čidlo) a práh 3 min
+{
+  const { cellSpread, SPREAD_MIN } = await import("../src/core/analysis");
+  const { cellIssueText } = await import("../src/core/compare");
+  const mkSp = (f: (i: number) => [number, number, number]) => {
+    const N = 360, t = [...Array(N).keys()].map((i) => i * 10);
+    const c = t.map((_, i) => f(i));
+    return { h: { rateS: 10, diveTimeS: N * 10 }, s: { t, depth: t.map(() => 30), ppo2: t.map(() => 1.3),
+      mv1: c.map((x) => x[0] * 50), mv2: c.map((x) => x[1] * 50), mv3: c.map((x) => x[2] * 50) } } as any;
+  };
+  const ok1 = (i: number, a: number, b: number) => i >= a && i < b;
+  const one = cellSpread(mkSp((i) => [ok1(i, 100, 124) ? 0.8 : 1.3, 1.3, 1.3]))!;
+  ok(one.kind === "c1" && one.min >= SPREAD_MIN, `jedno čidlo 4 min → c1 (${one.kind}, ${one.min})`);
+  const short = cellSpread(mkSp((i) => [ok1(i, 100, 112) ? 0.8 : 1.3, 1.3, 1.3]))!;
+  ok(short.kind === "" && short.bands.length === 1, `podprahové 2 min → bez hlášky, jen pásmo (${short.kind})`);
+  ok(cellIssueText(short.kind) === "", "podprahové rozjetí se do srovnání nedostane");
+  const wet = cellSpread(mkSp((i) => ok1(i, 100, 130) ? [0.9, 1.3, 1.7] : [1.3, 1.3, 1.3]))!;
+  ok(wet.kind === "wet" && wet.cells.join() === "1,3", `dvě čidla, srovnaná na konci → vlhkost (${wet.kind}, ${wet.cells})`);
+  const multi = cellSpread(mkSp((i) => i >= 250 ? [0.9, 1.3, 1.7] : [1.3, 1.3, 1.3]))!;
+  ok(multi.kind === "multi", `dvě čidla bez srovnání → vadná čidla (${multi.kind})`);
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.24";
+export const APP_VERSION = "1.24.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.24.1", date: "2026-11-16", title: "Příčina rozjetých čidel, rozbalovací upozornění", items: [
+    "Rozjetá O₂ čidla se rozlišují: podezření na vlhkost (víc čidel najednou, po výstupu srovnaná) nebo na nefunkční čidlo N.",
+    "Upozornění až od 3 minut rozdílu; kratší výkyvy jen podbarvené v grafu, nehlásí se ani ve srovnáních.",
+    "Tagy v seznamu ponorů: Vlhkost?, Čidlo N.",
+    "Upozornění v detailu ponoru: vidět je hláška, popis se rozbalí klepnutím.",
+  ] },
   {
     version: "1.24", date: "16. 11. 2026", title: "Tagy ponorů a slučování",
     items: [

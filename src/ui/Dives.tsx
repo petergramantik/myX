@@ -169,7 +169,9 @@ function DiveTags({ m }: { m: Meta }) {
   if (x.co2Bad) tags.push(["warn", "CO₂?"]);
   if (x.ppo2Max > 1.6 || x.po2HiN > 0) tags.push(["bad", "pO₂ 1,6+"]);
   if (x.po2LoN > 0) tags.push(["warn", "pO₂ nízké"]);
-  if (x.spreadMin >= 1) tags.push(["warn", "Čidla"]);
+  if (x.cellIssue === "wet") tags.push(["bad", "Vlhkost?"]);
+  else if (x.cellIssue === "multi") tags.push(["warn", "Čidla"]);
+  else if (x.cellIssue) tags.push(["warn", "Čidlo " + x.cellIssue.slice(1)]);
   if (!tags.length) return null;
   return <div className="dr-tags">{tags.map(([c, t]) => <span key={t} className={"tag " + c}>{t}</span>)}</div>;
 }
@@ -401,7 +403,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const warns = [...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)];
   return (
     <>
-      {warns.map((a, i) => <AlertBox key={i} a={a} />)}
+      {warns.map((a, i) => <AlertBox key={i} a={a} fold />)}
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
         <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > 1.6 ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > 3.5 ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
           ["Hloubka", <Pair l={`${num(meta.h.maxDepth)} m`} ll="max" r={`${num(meta.sum.avgDepth)} m`} rl="průměr" />],
