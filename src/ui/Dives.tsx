@@ -111,8 +111,8 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <div key={m.id} className="dive-row full" onClick={open}>
             <div className="dr-top"><span className="dr-chips"><DilChip m={m} /><DiveTags m={m} /></span>{rate}</div>
             <div className="dr-mid">
-              <div className="dr-main"><b className="wrap">{siteEl}</b><small>č. {no} · {fmtDate(m.start)}</small></div>
-              <div className="dr-num col"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
+              <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}</small></div>
+              <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             </div>
             {(buds || badge) && <div className="dr-bud"><span className="dr-bnames">{buds}</span>{badge}</div>}
           </div>
