@@ -98,6 +98,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
           <div className="dr-rate">{note?.rating ? RATING[note.rating].icon : ""}{cmp.get(m.id) ? <span className="badge">⇄ {cmp.get(m.id)!.with.length + 1}</span> : ""}</div>
           <DiveTags m={m} />
+          <DilChip m={m} />
         </div>
       ))}
       {!rows.length && !drafts.length && <p className="muted center">Žádné ponory</p>}
@@ -159,6 +160,14 @@ const fmtSp = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 
 /** Značky přepnutí setpointu do grafů. */
 function spPins(d: Dive) {
   return setpointChanges(d).map((c) => ({ t: c.t, label: `SP ${fmtSp(c.to)}${c.manual ? "" : "?"}`, color: c.to >= 1 ? "#ffb74d" : c.to < 0.3 ? "#b0bec5" : "#81c784" }));
+}
+
+/** Štítek hlavního diluentu (plyn s nejdelším časem) v pravém horním rohu řádku. */
+function DilChip({ m }: { m: Meta }) {
+  const g = [...(m.sum.gases || [])].sort((a, b) => b.s - a.s)[0];
+  if (!g) return null;
+  const l = gasLabel(g.mix);
+  return <span className={"gchip dr-gas " + l.cls}>{l.label}</span>;
 }
 
 /** Tagy ponoru v seznamu (jen důležité): CO₂, nevěrohodné čidlo CO₂, vysoké a nízké pO₂, rozjetá čidla. */
@@ -385,10 +394,16 @@ function DiveTitle({ id }: { id: string }) {
   const note = lb.notes[id];
   const site = note?.siteId ? lb.sites[note.siteId] : null;
   const buddies = (note?.buddyIds || []).map((b) => lb.buddies[b]?.name).filter(Boolean);
-  if (!site) return null;
+  const [sug, setSug] = useState<{ name: string; who: string } | null>(null);
+  useEffect(() => {
+    setSug(null);
+    if (site || !meta || st.guest) return;
+    suggestionsFor(meta).then((x) => { const g = x.find((y) => y.site); if (g?.site) setSug({ name: g.site.mine ? lb.sites[g.site.mine]?.name || g.site.name : g.site.name, who: g.who }); });
+  }, [id, site?.id, st.guest, lb.aliases]);
+  if (!site && !sug) return null;
   return (
     <div className="dive-title">
-      <h2 onClick={() => go({ t: "site", id: site.id })}>{site.name}</h2>
+      {site ? <h2 onClick={() => go({ t: "site", id: site.id })}>{site.name}</h2> : <h2 className="sugg"><i>{sug!.name}</i> <small>· z logu {sug!.who}</small></h2>}
       <small>{meta ? fmtDate(meta.start) : ""}{buddies.length ? ` · ${buddies.join(", ")}` : ""}</small>
     </div>
   );
