@@ -100,8 +100,8 @@ export function RatingPicker({ value, onChange }: { value?: string; onChange: (v
 
 export { hm } from "../core/analysis";
 
-export function AlertBox({ a, fold }: { a: { level: string; title: string; text: string }; fold?: boolean }) {
+export function AlertBox({ a, fold }: { a: { level: string; title: string; text: string; parts?: string[] }; fold?: boolean }) {
   const [open, setOpen] = useState(false);
   if (!fold || !a.text) return <div className={"alert " + a.level}><b>{a.title}</b>{a.text && <div>{a.text}</div>}</div>;
-  return <div className={"alert fold " + a.level + (open ? " open" : "")} onClick={() => setOpen(!open)}><b>{a.title}<span className="fold-arr">{open ? "▴" : "▾"}</span></b>{open && <div>{a.text}</div>}</div>;
+  return <div className={"alert fold " + a.level + (open ? " open" : "")} onClick={() => setOpen(!open)}><b>{a.title}<span className="fold-arr">{open ? "▴" : "▾"}</span></b>{open && (a.parts ? <div className="alert-parts">{a.parts.map((p, i) => <div key={i}>{p}</div>)}</div> : <div>{a.text}</div>)}</div>;
 }

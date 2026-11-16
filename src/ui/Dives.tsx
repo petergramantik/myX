@@ -162,6 +162,19 @@ function spPins(d: Dive) {
   return setpointChanges(d).map((c) => ({ t: c.t, label: `SP ${fmtSp(c.to)}${c.manual ? "" : "?"}`, color: c.to >= 1 ? "#ffb74d" : c.to < 0.3 ? "#b0bec5" : "#81c784" }));
 }
 
+/** Sloučí upozornění se stejným nadpisem do jednoho („Nadpis – N×“), popisy pod sebe; úroveň podle nejzávažnějšího. */
+function groupAlerts<T extends { level: string; title: string; text: string }>(as: T[]): { level: string; title: string; text: string; parts?: string[] }[] {
+  const rank: Record<string, number> = { bad: 3, warn: 2, info: 1 };
+  const m = new Map<string, { level: string; title: string; text: string; parts: string[] }>();
+  for (const a of as) {
+    const g = m.get(a.title);
+    if (!g) { m.set(a.title, { level: a.level, title: a.title, text: a.text, parts: [a.text] }); continue; }
+    g.parts.push(a.text);
+    if ((rank[a.level] || 0) > (rank[g.level] || 0)) g.level = a.level;
+  }
+  return [...m.values()].map((g) => g.parts.length > 1 ? { ...g, title: `${g.title} – ${g.parts.length}×` } : { level: g.level, title: g.title, text: g.text });
+}
+
 /** Štítek hlavního diluentu (plyn s nejdelším časem) v pravém horním rohu řádku. */
 function DilChip({ m }: { m: Meta }) {
   const g = [...(m.sum.gases || [])].sort((a, b) => b.s - a.s)[0];
@@ -418,7 +431,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const warns = [...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)];
   return (
     <>
-      {warns.map((a, i) => <AlertBox key={i} a={a} fold />)}
+      {groupAlerts(warns).map((a, i) => <AlertBox key={i} a={a} fold />)}
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
         <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > 1.6 ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > 3.5 ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
           ["Hloubka", <Pair l={`${num(meta.h.maxDepth)} m`} ll="max" r={`${num(meta.sum.avgDepth)} m`} rl="průměr" />],

@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.24.2";
+export const APP_VERSION = "1.24.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.24.3", date: "2026-11-16", title: "Sdružená upozornění v detailu ponoru", items: [
+    "Opakovaná upozornění stejného typu jsou v jednom řádku s počtem (např. „Souvislost CO₂ – 10×“), jednotlivé popisy po rozbalení.",
+  ] },
   { version: "1.24.2", date: "2026-11-16", title: "Diluent v seznamu, převzatá lokalita v detailu", items: [
     "V seznamu ponorů je v pravém horním rohu štítek hlavního diluentu (AIR, TMX…).",
     "Detail ponoru bez lokality zobrazí v nadpisu převzatý název z buddyho logu (kurzívou).",

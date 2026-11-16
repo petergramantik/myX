@@ -309,3 +309,4 @@ tr.muted-row td { color: var(--muted); font-style: italic; }
 .namechoice { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
 .dive-row { position: relative; } .dr-gas { position: absolute; top: 3px; right: 6px; font-size: 9px; padding: 0 4px; }
 .dive-title h2.sugg small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.alert-parts > div + div { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 6px; }
