@@ -295,3 +295,8 @@ i.sugg { font-weight: 500; color: var(--muted); } i.sugg small { font-size: 11px
 .kvline.wrap { flex-wrap: wrap; }
 .logtile .lt-h { display: flex; justify-content: space-between; align-items: center; font-size: 17px; }
 .logtile.open { border-color: var(--accent); } .logtile .row { margin-top: 8px; flex-wrap: wrap; }
+.cmphead .cmp-site { margin: 0; font-size: 20px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.cmp-align { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+label.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.chips label.chip input, label.switch input { width: auto; margin: 0; flex: none; }
+label.switch { white-space: nowrap; }

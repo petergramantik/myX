@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.20";
+export const APP_VERSION = "1.21";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.21", date: "16. 11. 2026", title: "Srovnání: lokalita, setpoint, deko",
+    items: [
+      "Záhlaví srovnání: název lokality, kompaktní přepínač zarovnání a odchylka hodin",
+      "Mimo setpoint jen významně: pod SP o > 0,15 bar, nad SP o > 0,2 bar mimo deko (≥ 30 s); zvýšené pO₂ během deko zvlášť",
+      "„bez deko“ místo pomlčky, hodnoceno jako rozdíl; nový řádek pO₂ při výstupu",
+    ],
+  },
   {
     version: "1.20", date: "16. 11. 2026", title: "Přehled logů a rozpoznání vlastního logu",
     items: [

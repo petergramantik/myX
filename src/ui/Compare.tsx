@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { setpointChanges } from "../core/analysis";
 import { conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag } from "../core/compare";
-import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, loadDive, loadGuestDive, ownerName, toast } from "../app/store";
+import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, ownerName, toast } from "../app/store";
 import { GuestCard } from "./Settings";
 import { Card, fmtDate, fmtDateTime, go, tab, useStore } from "./common";
 import { LineChart } from "./Chart";
@@ -38,13 +38,22 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   const [names, setNames] = useState<string[]>([]);
   const [off, setOff] = useState<Set<number>>(new Set());
   const [byClock, setByClock] = useState(false);
+  const [showClock, setShowClock] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const st0 = useStore();
+  useEffect(() => {
+    const m = st0.metas.find((x) => x.id === id), sid = st0.lb.notes[id]?.siteId;
+    if (sid && st0.lb.sites[sid]) setSite(st0.lb.sites[sid].name);
+    else if (m) suggestionsFor(m).then((sg) => { const x = sg.find((y) => y.site); setSite(x?.site ? (x.site.mine && st0.lb.sites[x.site.mine]?.name) || x.site.name : null); });
+  }, [id, st0.lb.notes[id]?.siteId]);
   useEffect(() => {
     Promise.all([loadDive(id), ...ids.map((x) => loadGuestDive(x))]).then(setDives).catch((e) => setErr(e.message));
     guestIndexLoad().then((ix) => setNames(["Já", ...ids.map((x) => { const g = ix.find((y) => y.metas.some((m) => m.id === x)); return g ? ownerName(g.log) || g.log.name : "buddy"; })]));
   }, [id, other]);
   const all = dives.filter((d): d is Dive => !!d);
-  const stats = useMemo(() => all.map((d) => diveStats(d)), [dives]);
+  const th = useStore().lb.settings.th;
+  const stats = useMemo(() => all.map((d) => diveStats(d, { below: th.spBelow ?? 0.15, above: th.spAbove ?? 0.2 })), [dives, th.spBelow, th.spAbove]);
+  const [site, setSite] = useState<string | null>(null);
   // zarovnání podle profilu hloubky (hodiny počítačů se rozcházejí); při neshodě profilů zůstanou hodiny
   const lags = useMemo(() => all.map((d, i) => (i === 0 ? { real: 0, clock: 0, rmse: 0 } : profileLag(all[0], d))), [dives]);
   if (err) return <div className="screen"><p className="alert bad">{err}</p></div>;
@@ -64,22 +73,21 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   const pins = D.flatMap((d, k) => setpointChanges(d).map((c) => ({ t: c.t + offs[k], label: `SP ${c.to.toLocaleString("cs-CZ")}`, color: C[k] })));
   const rows = multiRows(S);
   const sections = D.length === 2 ? conclusionSections(N[0], N[1], S[0], S[1], deeperWindow(D[0], D[1], offs[1])) : groupSections(N, S);
-  const clockTxt = all.slice(1).map((d, k) => {
-    const l = lags[k + 1], who = names[k + 1];
-    if (l.rmse > 3) return `${who}: profily se liší (odchylka ${l.rmse.toFixed(1).replace(".", ",")} m) – nejspíš jste nebyli celou dobu spolu, zarovnáno podle hodin.`;
-    const diff = l.clock - l.real, a = Math.abs(diff);
-    return a < 20 ? `Hodiny Petrelu (${who}) jdou přesně.` : `Hodiny Petrelu (${who}) jdou o ${Math.floor(a / 60)} min ${a % 60} s ${diff > 0 ? "napřed" : "pozadu"}.`;
+  const clockInfo = all.slice(1).map((_, k) => {
+    const l = lags[k + 1], who = names[k + 1], diff = l.clock - l.real, a = Math.abs(diff);
+    return { who, bad: l.rmse > 3, rmse: l.rmse, txt: l.rmse > 3 ? "≠ profil" : `${diff >= 0 ? "+" : "−"}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}` };
   });
   const hasCo2 = D.some((d) => d.s.co2.some((v) => v != null && v > 0));
   return (
     <div className="screen">
-      <Card title={names.length > 2 ? `Srovnání ${names.length} potápěčů` : `Já vs. ${names[1]}`}>
-        <p className="muted">Ponor {fmtDateTime(all[0].h.start)} · <a onClick={() => go({ t: "dive", id })}>Detail mého ponoru ›</a></p>
-        <div className="seg filter">
-          <button className={!byClock ? "on" : ""} onClick={() => setByClock(false)}>Zarovnat podle profilu</button>
-          <button className={byClock ? "on" : ""} onClick={() => setByClock(true)}>Podle hodin</button>
+      <section className="card cmphead">
+        <h2 className="cmp-site">{site || "Lokalita nezadaná"}</h2>
+        <div className="muted small">{fmtDateTime(all[0].h.start)} · <a onClick={() => go({ t: "dive", id })}>Detail mého ponoru ›</a></div>
+        <div className="cmp-align">
+          <label className="switch"><input type="checkbox" checked={!byClock} onChange={(e) => setByClock(!e.target.checked)} /> ⇆ Podle profilu</label>
+          <span className="small muted link" onClick={() => setShowClock(!showClock)}>hodiny {clockInfo.map((c) => `${c.who.split(" ")[0]} ${c.txt}`).join(" · ")}</span>
         </div>
-        {clockTxt.map((x, i) => <p key={i} className="note">{x}</p>)}
+        {showClock && <p className="note">Odchylka hodin počítače buddyho proti tvému (+ = jdou napřed), zjištěná posunem profilu hloubky. {clockInfo.some((c) => c.bad) ? "„≠ profil“ = profily se ani po posunu nekryjí (odchylka nad 3 m), nejspíš jste nebyli celou dobu spolu – pro toho potápěče se používá čas podle hodin." : ""}</p>}
         <div className="chips">{all.map((d, i) => (
           <label key={i} className="chip" style={{ borderColor: PAL[i % PAL.length], opacity: off.has(i) ? 0.45 : 1 }}>
             <input type="checkbox" checked={!off.has(i)} disabled={!off.has(i) && sel.length <= 2}
@@ -87,7 +95,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
             {i > 0 && <small className="muted"> start {((startOf(i) - startOf(0)) / 60) >= 0 ? "+" : ""}{(Math.round((startOf(i) - startOf(0)) / 6) / 10).toLocaleString("cs-CZ")} min</small>}
           </label>
         ))}</div>
-      </Card>
+      </section>
       <Card title="Závěr">
         {sections.filter((x) => x.level > 0).map((x) => (
           <div key={x.key} className={"csec l" + x.level}><b>{x.title}</b>{x.lines.map((l, i) => <p key={i}>{l}</p>)}</div>
