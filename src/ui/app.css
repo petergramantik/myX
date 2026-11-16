@@ -290,3 +290,6 @@ table.cmp td.hi { color: #ffb74d; font-weight: 700; } table.cmp td.lo { color: #
 .buddyfilter .chip:disabled { opacity: .35; }
 .datefilter { gap: 6px; margin-bottom: 8px; } .datefilter select, .datefilter input { flex: 1; min-width: 0; padding: 6px; }
 .foreign { border-top: 1px solid var(--line); padding-top: 4px; }
+i.sugg { font-weight: 500; color: var(--muted); } i.sugg small { font-size: 11px; }
+.suggest { border-top: 1px solid var(--line); padding: 6px 0; } .suggest:first-of-type { border-top: 0; }
+.kvline.wrap { flex-wrap: wrap; }

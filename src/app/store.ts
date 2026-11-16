@@ -151,11 +151,21 @@ async function saveOwnLb(lb: Logbook) {
   await db.put("kv", lb, "lb");
   await openGuest(st.guest); // znovu načíst cizí log s novými jmény a majitelem
 }
+export const ME = "__me__";
+/** Moje jméno/lokalita pro jméno z cizího logu podle přiřazení nebo shody názvu; ME = „to jsem já“, null = neznámé. */
+export function resolveForeign(kind: "buddy" | "site", name: string, lb: Logbook = ownLb()): string | null {
+  const a = lb.aliases?.[aliasKey(kind, name)];
+  if (a) return a.targetId;
+  const n = norm(name);
+  return Object.values(kind === "buddy" ? lb.buddies : lb.sites).find((x) => norm(x.name) === n)?.id ?? null;
+}
+
 /** Jména v cizím logu nahradí moje jména podle přiřazení (alias) nebo shody názvu. */
 function withAliases(g: Logbook, mine: Logbook): Logbook {
   const map = <T extends { name: string }>(kind: "buddy" | "site", items: Record<string, T>, my: Record<string, { name: string }>) =>
     Object.fromEntries(Object.entries(items).map(([k, v]) => {
       const a = mine.aliases?.[aliasKey(kind, v.name)];
+      if (a?.targetId === ME) return [k, { ...v, name: "Já" }];
       const t = a ? my[a.targetId] : undefined;
       return [k, t ? { ...v, name: t.name } : v];
     }));
@@ -186,6 +196,7 @@ export async function foreignNames(kind: "buddy" | "site"): Promise<{ name: stri
 export async function adoptForeign(kind: "buddy" | "site", name: string, targetId: string | null) {
   const lb = structuredClone(ownLb());
   let id = targetId;
+  if (!id && kind === "buddy" && norm(name) === "ja") id = ME;
   if (!id) {
     id = uid();
     if (kind === "buddy") lb.buddies[id] = { id, name, updated: Date.now() };
@@ -196,12 +207,40 @@ export async function adoptForeign(kind: "buddy" | "site", name: string, targetI
   await saveOwnLb(lb);
 }
 
+/** Návrhy od buddyů k mému ponoru: lokalita a buddy zapsaní v jejich logu u stejného ponoru. */
+export interface Suggest { who: string; site: { name: string; mine: string | null } | null; buddies: { name: string; mine: string | null }[] }
+export async function suggestionsFor(m: Meta): Promise<Suggest[]> {
+  const lb = ownLb(), note = lb.notes[m.id];
+  const out: Suggest[] = [];
+  for (const { log, metas, lb: g } of await guestIndexLoad()) {
+    const gm = nearestPair(metas, m)[0];
+    if (!gm) continue;
+    const gn = g.notes[gm.id];
+    if (!gn) continue;
+    const owner = log.serial ? lb.computers?.[log.serial]?.buddyId : undefined;
+    const site = gn.siteId && g.sites[gn.siteId] ? { name: g.sites[gn.siteId].name, mine: resolveForeign("site", g.sites[gn.siteId].name, lb) } : null;
+    const buddies = gn.buddyIds.map((b) => g.buddies[b]?.name).filter((x): x is string => !!x)
+      .map((name) => ({ name, mine: resolveForeign("buddy", name, lb) }))
+      .filter((x) => x.mine !== ME && x.mine !== owner && !(x.mine && note?.buddyIds.includes(x.mine)) && !(owner && norm(lb.buddies[owner]?.name || "") === norm(x.name)));
+    if (site || buddies.length) out.push({ who: ownerName(log) || log.name, site, buddies });
+  }
+  return out;
+}
+/** Přiřadí k mému ponoru lokalitu / buddyho z logu buddyho (neznámé jméno založí a zapamatuje). */
+export async function applySuggestion(diveId: string, kind: "site" | "buddy", name: string) {
+  let id = resolveForeign(kind, name);
+  if (!id) { await adoptForeign(kind, name, null); id = resolveForeign(kind, name); }
+  if (!id || id === ME) return;
+  const n = ownLb().notes[diveId] || { buddyIds: [], note: "", updated: 0 };
+  await setNote(diveId, kind === "site" ? { siteId: id } : { buddyIds: [...new Set([...n.buddyIds, id])] });
+}
+
 /** Načtené cizí logy s jejich ponory (pro hledání společných ponorů). */
-let guestIndex: { log: GuestLog; metas: Meta[] }[] | null = null;
-export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[] }[]> {
+let guestIndex: { log: GuestLog; metas: Meta[]; lb: Logbook }[] | null = null;
+export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[]; lb: Logbook }[]> {
   if (guestIndex) return guestIndex;
-  const out: { log: GuestLog; metas: Meta[] }[] = [];
-  for (const log of await guestLogs()) { const d = await db.get<{ metas: Meta[] }>("kv", log.id, db.GUEST); if (d) out.push({ log, metas: d.metas }); }
+  const out: { log: GuestLog; metas: Meta[]; lb: Logbook }[] = [];
+  for (const log of await guestLogs()) { const d = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", log.id, db.GUEST); if (d) out.push({ log, metas: d.metas, lb: d.lb }); }
   guestIndex = out;
   return out;
 }

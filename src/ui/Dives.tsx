@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
-import { PAIR_S, loadDive, myNum, ownMetas, setNote } from "../app/store";
+import { ME, PAIR_S, adoptForeign, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
 import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
@@ -16,11 +16,24 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const st = useStore();
   const [q, setQ] = useState("");
   const [rate, setRate] = useState<string>("");
+  const lb = st.lb;
   const [onlyCommon, setOnlyCommon] = useState(true);
   // seznam ponorů s buddym: ponory, ke kterým mám log buddyho, se otevřou rovnou jako srovnání
   const [cmp, setCmp] = useState<Map<string, Common>>(new Map());
+  const [sugSite, setSugSite] = useState<Map<string, { name: string; who: string }>>(new Map());
+  useEffect(() => {
+    if (st.guest) return;
+    (async () => {
+      const out = new Map<string, { name: string; who: string }>();
+      for (const m of st.metas) {
+        if (lb.notes[m.id]?.siteId) continue;
+        const sg = (await suggestionsFor(m)).find((x) => x.site);
+        if (sg?.site) out.set(m.id, { name: sg.site.mine ? lb.sites[sg.site.mine]?.name || sg.site.name : sg.site.name, who: sg.who });
+      }
+      setSugSite(out);
+    })();
+  }, [st.metas, st.guest, lb.notes, lb.aliases]);
   useEffect(() => { if (buddy && !st.guest) commonDives(st.metas).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [buddy, st.metas, st.guest]);
-  const lb = st.lb;
   // u cizího logu: ponory, ke kterým mám svůj ponor (začátek do ±15 min)
   const mine = st.guest ? ownMetas() : [];
   const common = (m: Meta) => mine.some((x) => Math.abs(x.start - m.start) <= PAIR_S);
@@ -60,7 +73,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
       {rows.map(({ m, no, note }) => (
         <div key={m.id} className="dive-row" onClick={() => { const c = cmp.get(m.id); go(c ? { t: "cmp", id: m.id, other: c.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); }}>
           <div className="dr-main">
-            <b>{note?.siteId ? lb.sites[note.siteId]?.name : <span className="muted">bez lokality</span>}</b>
+            <b>{note?.siteId ? lb.sites[note.siteId]?.name : sugSite.get(m.id) ? <i className="sugg">{sugSite.get(m.id)!.name} <small>· z logu {sugSite.get(m.id)!.who}</small></i> : <span className="muted">bez lokality</span>}</b>
             <small>č. {no} · {fmtDate(m.start)}{note?.buddyIds.length ? " · " + note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ") : ""}</small>
           </div>
           <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
@@ -126,6 +139,43 @@ const fmtSp = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 
 /** Značky přepnutí setpointu do grafů. */
 function spPins(d: Dive) {
   return setpointChanges(d).map((c) => ({ t: c.t, label: `SP ${fmtSp(c.to)}${c.manual ? "" : "?"}`, color: c.to >= 1 ? "#ffb74d" : c.to < 0.3 ? "#b0bec5" : "#81c784" }));
+}
+
+/** Návrhy lokality a buddyů z logu buddyho ke stejnému ponoru. */
+function SuggestCard({ meta }: { meta: Meta }) {
+  const st = useStore();
+  const [sg, setSg] = useState<Suggest[]>([]);
+  useEffect(() => { suggestionsFor(meta).then(setSg); }, [meta.id, st.lb.notes[meta.id]?.updated, st.lb.aliases]);
+  const note = st.lb.notes[meta.id];
+  const items = sg.map((x) => ({ ...x, site: !note?.siteId && x.site && x.site.mine !== note?.siteId ? x.site : null })).filter((x) => x.site || x.buddies.length);
+  if (!items.length) return null;
+  const nm = (kind: "site" | "buddy", v: { name: string; mine: string | null }) => {
+    const mine = v.mine ? (kind === "site" ? st.lb.sites[v.mine]?.name : st.lb.buddies[v.mine]?.name) : null;
+    return mine && mine !== v.name ? `${v.name} → ${mine}` : v.name;
+  };
+  return (
+    <Card title="Z logu buddyho">
+      {items.map((x) => (
+        <div key={x.who} className="suggest">
+          <small className="muted">{x.who} má u tohoto ponoru zapsáno:</small>
+          {x.site && <div className="kvline"><span>📍 <i>{nm("site", x.site)}</i></span><button className="btn small" onClick={() => applySuggestion(meta.id, "site", x.site!.name)}>Použít</button></div>}
+          {x.buddies.length > 0 && (
+            <div className="kvline wrap"><span>S kým: {x.buddies.map((b) => <i key={b.name}>{nm("buddy", b)} </i>)}</span>
+              <span className="row">
+                <button className="btn small" onClick={async () => { for (const b of x.buddies) await applySuggestion(meta.id, "buddy", b.name); }}>Přidat {x.buddies.length > 1 ? "všechny" : ""}</button>
+              </span>
+            </div>
+          )}
+          {x.buddies.length > 0 && <div className="quick">{x.buddies.map((b) => (
+            <span key={b.name} className="row">
+              <button className="btn small" onClick={() => applySuggestion(meta.id, "buddy", b.name)}>＋ {nm("buddy", b)}</button>
+              {!b.mine && <button className="btn small" onClick={() => adoptForeign("buddy", b.name, ME)}>To jsem já</button>}
+            </span>
+          ))}</div>}
+        </div>
+      ))}
+    </Card>
+  );
 }
 
 /** Lokalita, buddy a poznámka cizího logu – jen k přečtení (ze Shearwater Cloud). */
@@ -339,6 +389,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
+      {!st.guest && <SuggestCard meta={meta} />}
       {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} />}
       <GasUseCard id={id} meta={meta} note={note} />
       <BuddyDivesCard meta={meta} />

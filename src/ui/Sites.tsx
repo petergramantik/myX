@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { adoptForeign, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
+import { ME, adoptForeign, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
 import { BLSwitch, Card, KV, Picker, back, fmtDate, go, num, useStore } from "./common";
@@ -192,6 +192,7 @@ function ForeignNames({ kind }: { kind: "buddy" | "site" }) {
             <span className="row">
               <button className="btn small" onClick={async () => { await adoptForeign(kind, x.name, null); reload(); }}>Přidat k mým</button>
               <button className="btn small" onClick={() => setPick(pick === x.name ? null : x.name)}>Je to…</button>
+              {kind === "buddy" && <button className="btn small" onClick={async () => { await adoptForeign("buddy", x.name, ME); reload(); }}>To jsem já</button>}
             </span>
           </div>
           {pick === x.name && (

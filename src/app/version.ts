@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.18";
+export const APP_VERSION = "1.19";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.19", date: "16. 11. 2026", title: "Lokalita a buddy z logu buddyho",
+    items: [
+      "Ponory bez lokality ukážou lokalitu z logu buddyho (kurzívou), v detailu ji jde jedním klepnutím použít",
+      "Návrh buddyů z logu buddyho k mému ponoru (bez majitele logu a bez mě)",
+      "Jméno z cizího logu jde označit „To jsem já“ – pamatuje se",
+    ],
+  },
   {
     version: "1.18", date: "16. 11. 2026", title: "DB, filtry srovnání, jména z cizích logů",
     items: [
