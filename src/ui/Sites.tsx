@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { clockDrift, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
+import { adoptForeign, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
-import { BLSwitch, Card, KV, back, fmtDate, go, num, useStore } from "./common";
+import { BLSwitch, Card, KV, Picker, back, fmtDate, go, num, useStore } from "./common";
 import { WeatherCard } from "./Weather";
 
 const MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
@@ -30,6 +30,7 @@ export function SitesScreen() {
         <input value={name} placeholder="Nová lokalita" onChange={(e) => setName(e.target.value)} />
         <button className="btn" disabled={!name.trim()} onClick={async () => { const s = await upsertSite({ name: name.trim() }); setName(""); go({ t: "site", id: s.id }); }}>Přidat</button>
       </div>
+      <ForeignNames kind="site" />
     </div>
   );
 }
@@ -168,7 +169,39 @@ export function BuddiesScreen() {
         <input value={name} placeholder="Nový buddy" onChange={(e) => setName(e.target.value)} />
         <button className="btn" disabled={!name.trim()} onClick={async () => { await upsertBuddy({ name: name.trim() }); setName(""); }}>Přidat</button>
       </div>
+      <ForeignNames kind="buddy" />
     </div>
+  );
+}
+
+/** Jména z cizích logů: ve výchozím stavu se k mým neukládají; jde je přidat nebo přiřadit k mému záznamu. */
+function ForeignNames({ kind }: { kind: "buddy" | "site" }) {
+  const st = useStore();
+  const [list, setList] = useState<Awaited<ReturnType<typeof foreignNames>>>([]);
+  const [pick, setPick] = useState<string | null>(null);
+  const reload = () => foreignNames(kind).then(setList);
+  useEffect(() => { reload(); }, [st.lb.aliases, st.lb.buddies, st.lb.sites, st.guest]);
+  if (!list.length) return null;
+  const mine = Object.values(kind === "buddy" ? ownLb().buddies : ownLb().sites).sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  return (
+    <Card title="Z cizích logů">
+      <p className="note">{kind === "buddy" ? "Buddy" : "Lokality"} zapsané v načtených cizích logech. K tvým se neukládají, dokud je nepřidáš nebo nepřiřadíš k tvému záznamu. Přiřazení se zapamatuje i pro další logy.</p>
+      {list.map((x) => (
+        <div key={x.name} className="foreign">
+          <div className="kvline"><span><b>{x.name}</b> <small className="muted">{x.n}× · {x.logs.join(", ")}</small></span>
+            <span className="row">
+              <button className="btn small" onClick={async () => { await adoptForeign(kind, x.name, null); reload(); }}>Přidat k mým</button>
+              <button className="btn small" onClick={() => setPick(pick === x.name ? null : x.name)}>Je to…</button>
+            </span>
+          </div>
+          {pick === x.name && (
+            <Picker items={mine.map((m) => ({ id: m.id, name: m.name }))} placeholder={kind === "buddy" ? "Vyber mého buddyho" : "Vyber mou lokalitu"}
+              onPick={async (id) => { await adoptForeign(kind, x.name, id); setPick(null); reload(); }}
+              onCreate={async () => { await adoptForeign(kind, x.name, null); setPick(null); reload(); }} />
+          )}
+        </div>
+      ))}
+    </Card>
   );
 }
 

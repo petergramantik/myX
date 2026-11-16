@@ -5,7 +5,7 @@ import { setpointChanges } from "../core/analysis";
 import { conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag } from "../core/compare";
 import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, loadDive, loadGuestDive, ownerName, toast } from "../app/store";
 import { GuestCard } from "./Settings";
-import { Card, fmtDate, fmtDateTime, go, useStore } from "./common";
+import { Card, fmtDate, fmtDateTime, go, tab, useStore } from "./common";
 import { LineChart } from "./Chart";
 import type { Meta } from "../app/model";
 
@@ -74,7 +74,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   return (
     <div className="screen">
       <Card title={names.length > 2 ? `Srovnání ${names.length} potápěčů` : `Já vs. ${names[1]}`}>
-        <p className="muted">Ponor {fmtDateTime(all[0].h.start)}</p>
+        <p className="muted">Ponor {fmtDateTime(all[0].h.start)} · <a onClick={() => go({ t: "dive", id })}>Detail mého ponoru ›</a></p>
         <div className="seg filter">
           <button className={!byClock ? "on" : ""} onClick={() => setByClock(false)}>Zarovnat podle profilu</button>
           <button className={byClock ? "on" : ""} onClick={() => setByClock(true)}>Podle hodin</button>
@@ -120,39 +120,80 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   );
 }
 
-/** Záložka Srovnat: společné ponory s buddyi, cizí logy a sdílení mého logu. */
-export function CompareHub() {
+/** Společné ponory: můj ponor + nejbližší ponory buddyů z načtených cizích logů. */
+export interface Common { m: Meta; with: { id: string; who: string }[] }
+export async function commonDives(metas: Meta[]): Promise<Common[]> {
+  const ix = await guestIndexLoad();
+  const out: Common[] = [];
+  for (const m of [...metas].reverse()) {
+    const w = ix.flatMap(({ log, metas: g }) => nearestPair(g, m).map((x) => ({ id: x.id, who: ownerName(log) || log.name })));
+    if (w.length) out.push({ m, with: w });
+  }
+  return out;
+}
+
+/** Záložka DB: podkarty Srovnání (společné ponory s filtry) a Databáze (cizí logy, sdílení mého logu). */
+export function CompareHub({ sub = "cmp" }: { sub?: "cmp" | "db" }) {
   const st = useStore();
-  const [rows, setRows] = useState<{ m: Meta; with: { id: string; who: string }[] }[] | null>(null);
-  useEffect(() => {
-    if (st.guest) return;
-    guestIndexLoad().then((ix) => {
-      const out: { m: Meta; with: { id: string; who: string }[] }[] = [];
-      for (const m of [...st.metas].reverse()) {
-        const w = ix.flatMap(({ log, metas }) => nearestPair(metas, m).map((g) => ({ id: g.id, who: ownerName(log) || log.name })));
-        if (w.length) out.push({ m, with: w });
-      }
-      setRows(out);
-    });
-  }, [st.metas, st.guest, st.lb.computers]);
   return (
     <div className="screen">
-      <Card title="Společné ponory">
-        {st.guest ? <p className="muted">Zavři prohlížený cizí log – společné ponory se hledají k tvým ponorům.</p>
-          : rows == null ? <p className="muted">Hledám…</p>
-          : !rows.length ? <p className="muted">Zatím žádné. Načti log buddyho níže (nebo ho nasdílej do myX přes WhatsApp / Quick Share).</p>
-          : rows.map(({ m, with: w }) => {
-            const site = st.lb.notes[m.id]?.siteId ? st.lb.sites[st.lb.notes[m.id]!.siteId!]?.name : null;
-            return (
-              <div key={m.id} className="kvline link" onClick={() => go({ t: "cmp", id: m.id, other: w.map((x) => x.id).join(",") })}>
-                <span><b>{fmtDate(m.start)}</b>{site ? ` · ${site}` : ""} · {w.map((x) => x.who).join(", ")}</span>
-                <span className="muted">{w.length > 1 ? `Srovnat ${w.length + 1} ›` : "Srovnat ›"}</span>
-              </div>
-            );
-          })}
+      <div className="seg bl">
+        <button className={sub === "cmp" ? "on" : ""} onClick={() => tab({ t: "hub", sub: "cmp" })}>Srovnání</button>
+        <button className={sub === "db" ? "on" : ""} onClick={() => tab({ t: "hub", sub: "db" })}>Databáze</button>
+      </div>
+      {sub === "db" ? <><GuestCard /><ShareMine /></>
+        : st.guest ? <p className="muted">Zavři prohlížený cizí log – společné ponory se hledají k tvým ponorům.</p>
+        : <CommonList />}
+    </div>
+  );
+}
+
+function CommonList() {
+  const st = useStore();
+  const [rows, setRows] = useState<Common[] | null>(null);
+  const [sel, setSel] = useState<string[]>([]);
+  const [year, setYear] = useState(""), [month, setMonth] = useState(""), [day, setDay] = useState("");
+  useEffect(() => { commonDives(st.metas).then(setRows); }, [st.metas, st.lb.computers]);
+  if (rows == null) return <p className="muted">Hledám…</p>;
+  if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log buddyho v Databázi (nebo ho nasdílej do myX přes WhatsApp / Quick Share).</p>;
+  const ymd = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
+  const dateOk = (r: Common) => { const d = ymd(r.m.start); return (!year || d.startsWith(year)) && (!month || d.slice(5, 7) === month) && (!day || d === day); };
+  const has = (r: Common, who: string[]) => who.every((w) => r.with.some((x) => x.who === w));
+  const people = [...new Set(rows.flatMap((r) => r.with.map((x) => x.who)))];
+  const list = rows.filter((r) => dateOk(r) && has(r, sel));
+  const years = [...new Set(rows.map((r) => ymd(r.m.start).slice(0, 4)))].sort().reverse();
+  const months = [...new Set(rows.filter((r) => !year || ymd(r.m.start).startsWith(year)).map((r) => ymd(r.m.start).slice(5, 7)))].sort();
+  const MON = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
+  return (
+    <>
+      <div className="chips buddyfilter">
+        <button className={"chip" + (!sel.length && !year && !month && !day ? " on" : "")} onClick={() => { setSel([]); setYear(""); setMonth(""); setDay(""); }}>Vše</button>
+        {people.map((p) => {
+          const on = sel.includes(p), next = on ? sel.filter((x) => x !== p) : [...sel, p];
+          const n = rows.filter((r) => dateOk(r) && has(r, next)).length;
+          return <button key={p} className={"chip" + (on ? " on" : "")} disabled={!on && !n} onClick={() => setSel(next)}>{p} ({on ? rows.filter((r) => dateOk(r) && has(r, sel)).length : n})</button>;
+        })}
+      </div>
+      <div className="row datefilter">
+        <select value={year} onChange={(e) => { setYear(e.target.value); setMonth(""); setDay(""); }}><option value="">rok</option>{years.map((y) => <option key={y}>{y}</option>)}</select>
+        <select value={month} onChange={(e) => { setMonth(e.target.value); setDay(""); }}><option value="">měsíc</option>{months.map((m) => <option key={m} value={m}>{MON[+m - 1]}</option>)}</select>
+        <input type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+      </div>
+      <Card title={`Společné ponory (${list.length})`}>
+        {list.map((r) => <CommonRow key={r.m.id} r={r} />)}
+        {!list.length && <p className="muted">Filtru nic neodpovídá.</p>}
       </Card>
-      <GuestCard />
-      <ShareMine />
+    </>
+  );
+}
+
+export function CommonRow({ r }: { r: Common }) {
+  const st = useStore();
+  const site = st.lb.notes[r.m.id]?.siteId ? st.lb.sites[st.lb.notes[r.m.id]!.siteId!]?.name : null;
+  return (
+    <div className="kvline link" onClick={() => go({ t: "cmp", id: r.m.id, other: r.with.map((x) => x.id).join(",") })}>
+      <span><b>{fmtDate(r.m.start)}</b>{site ? ` · ${site}` : ""} · {r.with.map((x) => x.who).join(", ")}</span>
+      <span className="muted">⇄ {r.with.length + 1} ›</span>
     </div>
   );
 }

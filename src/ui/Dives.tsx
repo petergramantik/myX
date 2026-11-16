@@ -7,7 +7,7 @@ import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
-import { BuddyDivesCard } from "./Compare";
+import { BuddyDivesCard, commonDives, type Common } from "./Compare";
 import { LineChart, TissueMap } from "./Chart";
 
 const C = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#fff176", "#ef5350"];
@@ -17,6 +17,9 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const [q, setQ] = useState("");
   const [rate, setRate] = useState<string>("");
   const [onlyCommon, setOnlyCommon] = useState(true);
+  // seznam ponorů s buddym: ponory, ke kterým mám log buddyho, se otevřou rovnou jako srovnání
+  const [cmp, setCmp] = useState<Map<string, Common>>(new Map());
+  useEffect(() => { if (buddy && !st.guest) commonDives(st.metas).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [buddy, st.metas, st.guest]);
   const lb = st.lb;
   // u cizího logu: ponory, ke kterým mám svůj ponor (začátek do ±15 min)
   const mine = st.guest ? ownMetas() : [];
@@ -55,13 +58,13 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         </div>
       ))}
       {rows.map(({ m, no, note }) => (
-        <div key={m.id} className="dive-row" onClick={() => go({ t: "dive", id: m.id })}>
+        <div key={m.id} className="dive-row" onClick={() => { const c = cmp.get(m.id); go(c ? { t: "cmp", id: m.id, other: c.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); }}>
           <div className="dr-main">
             <b>{note?.siteId ? lb.sites[note.siteId]?.name : <span className="muted">bez lokality</span>}</b>
             <small>č. {no} · {fmtDate(m.start)}{note?.buddyIds.length ? " · " + note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ") : ""}</small>
           </div>
           <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
-          <div className="dr-rate">{note?.rating ? RATING[note.rating].icon : m.sum.co2Max != null && m.sum.co2Max >= lb.settings.th.co2Mbar ? <span className="badge bad">CO₂</span> : ""}</div>
+          <div className="dr-rate">{cmp.get(m.id) ? <span className="badge">⇄ {cmp.get(m.id)!.with.length + 1}</span> : note?.rating ? RATING[note.rating].icon : m.sum.co2Max != null && m.sum.co2Max >= lb.settings.th.co2Mbar ? <span className="badge bad">CO₂</span> : ""}</div>
         </div>
       ))}
       {!rows.length && !drafts.length && <p className="muted center">Žádné ponory</p>}

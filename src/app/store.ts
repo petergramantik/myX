@@ -4,7 +4,7 @@ import { injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
 import * as db from "./db";
-import { emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
+import { aliasKey, emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
 export interface Pos { lat: number; lon: number; acc: number; at: number }
@@ -149,8 +149,53 @@ async function saveOwnLb(lb: Logbook) {
   if (!st.guest) return saveLb(lb);
   own = { ...own!, lb };
   await db.put("kv", lb, "lb");
-  set({ lb: { ...st.lb, buddies: lb.buddies, computers: lb.computers, settings: lb.settings } });
+  await openGuest(st.guest); // znovu načíst cizí log s novými jmény a majitelem
 }
+/** Jména v cizím logu nahradí moje jména podle přiřazení (alias) nebo shody názvu. */
+function withAliases(g: Logbook, mine: Logbook): Logbook {
+  const map = <T extends { name: string }>(kind: "buddy" | "site", items: Record<string, T>, my: Record<string, { name: string }>) =>
+    Object.fromEntries(Object.entries(items).map(([k, v]) => {
+      const a = mine.aliases?.[aliasKey(kind, v.name)];
+      const t = a ? my[a.targetId] : undefined;
+      return [k, t ? { ...v, name: t.name } : v];
+    }));
+  return { ...g, buddies: map("buddy", g.buddies, mine.buddies), sites: map("site", g.sites, mine.sites) };
+}
+/** Jména buddyů a lokalit z cizích logů, která nemám přiřazená ani shodná s mými (počet ponorů, ve kterých se vyskytují). */
+export async function foreignNames(kind: "buddy" | "site"): Promise<{ name: string; n: number; logs: string[] }[]> {
+  const lb = ownLb(), my = new Set(Object.values(kind === "buddy" ? lb.buddies : lb.sites).map((x) => norm(x.name)));
+  const owners = new Set(Object.values(lb.computers || {}).map((c) => (c.buddyId ? norm(lb.buddies[c.buddyId]?.name || "") : "")));
+  const out = new Map<string, { name: string; n: number; logs: Set<string> }>();
+  for (const log of await guestLogs()) {
+    const d = await db.get<{ lb: Logbook }>("kv", log.id, db.GUEST);
+    if (!d) continue;
+    const items = kind === "buddy" ? d.lb.buddies : d.lb.sites;
+    for (const note of Object.values(d.lb.notes)) {
+      for (const id of kind === "buddy" ? note.buddyIds : note.siteId ? [note.siteId] : []) {
+        const name = items[id]?.name; if (!name) continue;
+        const k = norm(name);
+        if (my.has(k) || lb.aliases?.[aliasKey(kind, name)] || (kind === "buddy" && owners.has(k))) continue;
+        const e = out.get(k) || { name, n: 0, logs: new Set<string>() };
+        e.n++; e.logs.add(ownerName(log) || log.name); out.set(k, e);
+      }
+    }
+  }
+  return [...out.values()].sort((a, b) => b.n - a.n).map((x) => ({ name: x.name, n: x.n, logs: [...x.logs] }));
+}
+/** Jméno z cizího logu: založit jako mého buddyho/lokalitu (targetId = null), nebo přiřadit k existujícímu. */
+export async function adoptForeign(kind: "buddy" | "site", name: string, targetId: string | null) {
+  const lb = structuredClone(ownLb());
+  let id = targetId;
+  if (!id) {
+    id = uid();
+    if (kind === "buddy") lb.buddies[id] = { id, name, updated: Date.now() };
+    else lb.sites[id] = { id, name, updated: Date.now() };
+  }
+  const key = aliasKey(kind, name);
+  lb.aliases = { ...(lb.aliases || {}), [key]: { id: key, kind, name, targetId: id, updated: Date.now() } as Alias };
+  await saveOwnLb(lb);
+}
+
 /** Načtené cizí logy s jejich ponory (pro hledání společných ponorů). */
 let guestIndex: { log: GuestLog; metas: Meta[] }[] | null = null;
 export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[] }[]> {
@@ -275,8 +320,8 @@ export async function openGuest(log: GuestLog) {
   }
   if (!own) own = { metas: st.metas, lb: st.lb };
   diveCache.clear();
-  // nastavení (limity, objemy lahví) zůstávají vlastní, čidla a baterie cizí log nemá
-  set({ guest: log, metas: sortMetas(data.metas), lb: { ...data.lb, settings: own.lb.settings } });
+  // nastavení (limity, objemy lahví) zůstávají vlastní, čidla a baterie cizí log nemá; jména přeložit podle mých přiřazení
+  set({ guest: log, metas: sortMetas(data.metas), lb: withAliases({ ...data.lb, settings: own.lb.settings }, own.lb) });
 }
 export function closeGuest() {
   if (!own) return;

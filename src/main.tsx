@@ -19,7 +19,7 @@ import "./ui/app.css";
 
 const TABS: [Screen, string, string][] = [
   [{ t: "home" }, "Přehled", "◉"], [{ t: "dives" }, "Ponory", "≋"], [{ t: "buddies" }, "B&L", "☺"],
-  [{ t: "hub" }, "Srovnat", "⇄"], [{ t: "settings" }, "Nastavení", "⚙"],
+  [{ t: "hub" }, "DB", "⇄"], [{ t: "settings" }, "Nastavení", "⚙"],
 ];
 
 function title(s: Screen, st: ReturnType<typeof useStore>): string {
@@ -42,7 +42,7 @@ function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
     case "warn": return "Varování";
     case "co2": return "Čidlo CO₂";
     case "cmp": return "Porovnání";
-    case "hub": return "Srovnat";
+    case "hub": return s.sub === "db" ? "Databáze" : "Srovnání";
   }
 }
 
@@ -63,7 +63,7 @@ function Body({ s }: { s: Screen }) {
     case "warn": return <WarningsScreen />;
     case "co2": return <Co2Screen />;
     case "cmp": return <CompareScreen id={s.id} other={s.other} />;
-    case "hub": return <CompareHub />;
+    case "hub": return <CompareHub sub={s.sub} />;
   }
 }
 

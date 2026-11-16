@@ -4,7 +4,7 @@ import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpoi
 import { applyCloud } from "../src/app/store";
 import { diveStats, diffRows, conclusion, conclusionSections, groupConclusion, multiRows } from "../src/core/compare";
 import { gasDensity } from "../src/core/effort";
-import { mergeLogbooks, emptyLogbook } from "../src/app/model";
+import { mergeLogbooks, emptyLogbook, aliasKey } from "../src/app/model";
 import { detectCellEvents, cellStatus, cellDiveWarnings, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
 
@@ -142,6 +142,8 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(multiRows([sa, sb, sd]).find((r) => r.key === "tts")!.hi === 2, "tabulka skupiny: nejvyšší hodnota");
   const l1 = emptyLogbook(), l2 = emptyLogbook(); l2.computers = { B94F4935: { id: "B94F4935", model: "Petrel 3", buddyId: "r", updated: 5 } };
   ok(mergeLogbooks(l1, l2).computers?.B94F4935?.buddyId === "r", "majitel cizího počítače se synchronizuje");
+  l2.aliases = { "buddy:bara": { id: "buddy:bara", kind: "buddy", name: "Bára", targetId: "b1", updated: 3 } };
+  ok(mergeLogbooks(l1, l2).aliases?.["buddy:bara"]?.targetId === "b1" && aliasKey("buddy", "Bára") === "buddy:bara", "přiřazení jmen z cizích logů se synchronizuje");
 }
 
 { // hustota plynu: vzduch na hladině ~1,3 g/l, ve 20 m ~3,9 g/l

@@ -40,7 +40,11 @@ export interface Logbook {
   deleted: Record<string, number>; // id smazané/sloučené lokality nebo parťáka → čas
   settings: Settings;
   computers?: Record<string, Computer>; // sériové číslo cizího počítače → majitel (buddy)
+  aliases?: Record<string, Alias>;     // jméno buddyho/lokality z cizího logu → můj záznam
 }
+/** Jméno z cizího logu přiřazené k mému buddymu nebo lokalitě (klíč „buddy:jméno“ / „site:jméno“ v normalizované podobě). */
+export interface Alias { id: string; kind: "buddy" | "site"; name: string; targetId: string; updated: number }
+export const aliasKey = (kind: "buddy" | "site", name: string) => `${kind}:${norm(name)}`;
 /** Cizí počítač rozpoznaný podle sériového čísla v logu a jeho majitel. */
 export interface Computer { id: string; model: string; buddyId?: string; updated: number }
 
@@ -79,6 +83,7 @@ export function mergeLogbooks(a: Logbook, b: Logbook): Logbook {
     buddies: mergeMap(a.buddies, b.buddies || {}, deleted),
     notes: mergeMap(a.notes, b.notes || {}, {}),
     computers: mergeMap(a.computers || {}, b.computers || {}, {}),
+    aliases: mergeMap(a.aliases || {}, b.aliases || {}, deleted),
     deleted,
     settings: fixSettings((b.settings?.updated || 0) > a.settings.updated
       ? { ...a.settings, ...b.settings, th: { ...DEFAULT_ALL_TH, ...b.settings.th } }
