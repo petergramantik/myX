@@ -3,6 +3,7 @@ import { decodeDive } from "../src/core/shearwater";
 import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpointChanges, o2Doses, spWarnings, SP_RULES, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { applyCloud } from "../src/app/store";
 import { diveStats, diffRows, conclusion } from "../src/core/compare";
+import { gasDensity } from "../src/core/effort";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
 import { detectCellEvents, cellStatus, cellDiveWarnings, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
@@ -134,6 +135,11 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(/U potápěče R byla dekomprese delší.*hloub/.test(conclusion("já", "R", sa, sc)[0]), "závěr: delší deko kvůli hloubce");
   const l1 = emptyLogbook(), l2 = emptyLogbook(); l2.computers = { B94F4935: { id: "B94F4935", model: "Petrel 3", buddyId: "r", updated: 5 } };
   ok(mergeLogbooks(l1, l2).computers?.B94F4935?.buddyId === "r", "majitel cizího počítače se synchronizuje");
+}
+
+{ // hustota plynu: vzduch na hladině ~1,3 g/l, ve 20 m ~3,9 g/l
+  const dn = gasDensity(d).filter((x): x is number => x != null);
+  ok(Math.max(...dn) > 3.5 && Math.max(...dn) < 4.2, `hustota plynu ve 20 m (${Math.max(...dn)} g/l)`);
 }
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }

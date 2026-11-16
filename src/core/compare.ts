@@ -1,6 +1,7 @@
 // Porovnání dvou současných ponorů (můj vs. buddyho): metriky, rozdíly a stručný závěr z dat.
 import type { Dive } from "./shearwater";
 import { atStop, setpointChanges, o2Doses, summarize, type SpChange } from "./analysis";
+import { effortOf } from "./effort";
 
 const amb = (d: Dive, i: number) => (d.h.surfP || 1013) / 1000 + d.s.depth[i] * ((d.h.salinity || 1000) / 1000) * 0.0981;
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
@@ -13,6 +14,7 @@ export interface DiveStats {
   co2Max: number | null; co2Avg: number | null; co2Alarms: number; scrubLeftStart: number;
   dil: string; dosesMan: number; dosesSol: number; tempMin: number; btnN: number;
   inert: number; ambInt: number; po2Int: number; // bar·min
+  densMax: number; dens52: number; vents: number;
 }
 
 /** Metriky ponoru pro porovnání. Časově vážené průměry přes úseky ponoru (hloubka > 1,5 m). */
@@ -38,6 +40,7 @@ export function diveStats(d: Dive): DiveStats {
   const up = sp.find((c) => c.to >= 1) || null;
   const doses = o2Doses(d);
   const co2 = s.co2.filter((x): x is number => x != null);
+  const ef = effortOf(d);
   return {
     maxDepth: d.h.maxDepth, avgDepth: sum.avgDepth, durMin: d.h.diveTimeS / 60, t20: t20 / 60, t30: t30 / 60,
     descRate: tMax ? d.h.maxDepth / (tMax / 60) : 0, ascRate: tEnd > tMax ? d.h.maxDepth / ((tEnd - tMax) / 60) : 0, vMove: w ? mv / (w / 60) : 0,
@@ -48,6 +51,7 @@ export function diveStats(d: Dive): DiveStats {
     scrubLeftStart: d.h.scrubLeftStartMin, dil: sum.dilUsed.split(",")[0] || "", dosesMan: doses.filter((x) => x.kind === "man").length, dosesSol: doses.filter((x) => x.kind === "sol").length,
     tempMin: sum.tempMin, btnN: sum.btnN,
     inert: ambI - po2I, ambInt: ambI, po2Int: po2I,
+    densMax: ef.densMax, dens52: ef.densOver52, vents: ef.vents,
   };
 }
 
@@ -82,6 +86,9 @@ export function diffRows(a: DiveStats, b: DiveStats): DiffRow[] {
     { key: "move", label: "Pohyb ve vertikále", a: `${f1(a.vMove)} m/min`, b: `${f1(b.vMove)} m/min`, weight: rel(a.vMove, b.vMove, 0.5) * 0.5 },
     { key: "cns", label: "CNS na konci", a: `${a.cnsEnd} %`, b: `${b.cnsEnd} %`, weight: rel(a.cnsEnd, b.cnsEnd, 5) * 0.5 },
     { key: "dil", label: "Diluent", a: a.dil, b: b.dil, weight: a.dil !== b.dil ? 2 : 0 },
+    { key: "dens", label: "Hustota plynu max", a: `${f1(a.densMax)} g/l`, b: `${f1(b.densMax)} g/l`, weight: rel(a.densMax, b.densMax, 0.5) * 0.8 },
+    { key: "dens52", label: "Nad 5,2 g/l", a: `${f1(a.dens52, 0)} min`, b: `${f1(b.dens52, 0)} min`, weight: rel(a.dens52, b.dens52, 5) * 0.6 },
+    { key: "vents", label: "Upouštění smyčky", a: `${a.vents}×`, b: `${b.vents}×`, weight: rel(a.vents, b.vents, 3) * 0.5 },
     { key: "temp", label: "Min. teplota", a: `${a.tempMin} °C`, b: `${b.tempMin} °C`, weight: rel(a.tempMin, b.tempMin, 2) * 0.3 },
     { key: "btn", label: "Stisky tlačítek", a: `${a.btnN}`, b: `${b.btnN}`, weight: rel(a.btnN, b.btnN, 10) * 0.2 },
   ];
@@ -127,6 +134,7 @@ export function conclusion(A: string, B: string, a: DiveStats, b: DiveStats): st
     const why: string[] = [];
     if (hi.x.scrubLeftStart < hi.y.scrubLeftStart - 30) why.push(`méně zbývajícího scrubberu na začátku (${hi.x.scrubLeftStart} vs. ${hi.y.scrubLeftStart} min)`);
     if (hi.x.vMove > hi.y.vMove * 1.2) why.push(`víc pohybu ve vertikále (${f1(hi.x.vMove)} vs. ${f1(hi.y.vMove)} m/min) – nejspíš vyšší zátěž`);
+    if (hi.x.dens52 > hi.y.dens52 + 3) why.push(`delší dýchání husté směsi nad 5,2 g/l (${f1(hi.x.dens52, 0)} vs. ${f1(hi.y.dens52, 0)} min) – vyšší dechová práce`);
     if (hi.x.tempMin < hi.y.tempMin - 1) why.push(`nižší teplota (${hi.x.tempMin} vs. ${hi.y.tempMin} °C)`);
     out.push(`${hi.who} měl vyšší CO₂ (max. ${f1(hi.x.co2Max)} vs. ${f1(hi.y.co2Max)} mbar, alarmy ${hi.x.co2Alarms}× vs. ${hi.y.co2Alarms}×)` + (why.length ? `; souvisí nejspíš s: ${why.join(", ")}.` : "; z profilu ani scrubberu jasná příčina neplyne – zkontroluj sorbent a smyčku."));
   }
@@ -137,6 +145,10 @@ export function conclusion(A: string, B: string, a: DiveStats, b: DiveStats): st
   if (Math.abs(a.ascRate - b.ascRate) >= 1.5) {
     const f = a.ascRate > b.ascRate ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
     out.push(`${f.who} vystupoval rychleji (průměrně ${f1(f.x.ascRate)} vs. ${f1(f.y.ascRate)} m/min od nejhlubšího bodu).`);
+  }
+  if (Math.abs(a.vents - b.vents) >= 4) {
+    const v = a.vents > b.vents ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
+    out.push(`${v.who} častěji upouštěl smyčku nebo vyfukoval masku (${v.x.vents}× vs. ${v.y.vents}×) – může souviset s vyvážením nebo stresem.`);
   }
   if (a.dil !== b.dil) out.push(`Diluent se lišil (${a.dil} vs. ${b.dil}).`);
   return out;

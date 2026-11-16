@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.14.1";
+export const APP_VERSION = "1.15";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.15", date: "16. 11. 2026", title: "Zátěž a dechová práce",
+    items: [
+      "Graf zátěže (rychlost spotřeby O₂ ve smyčce) s CO₂ a značkami upouštění smyčky",
+      "Hustota plynu v grafu a ve V kostce (hranice 5,2 a 6,2 g/l), upozornění na hustý plyn",
+      "Souvislosti CO₂: při námaze, při husté směsi, nebo bez nich (sorbent/smyčka)",
+      "Porovnání s buddym: hustota plynu a upouštění smyčky",
+    ],
+  },
   {
     version: "1.14.1", date: "16. 11. 2026", title: "Setpoint podle průběhu hloubky",
     items: [

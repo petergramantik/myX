@@ -6,6 +6,7 @@ import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
+import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
 import { BuddyDivesCard } from "./Compare";
 import { LineChart, TissueMap } from "./Chart";
 
@@ -123,6 +124,32 @@ function GuestNote({ note }: { note: DiveNote }) {
       {buddies.length > 0 && <p>S kým: {buddies.join(", ")}</p>}
       {note.note && <p className="pre">{note.note}</p>}
       <p className="note">Cizí log je jen k prohlížení.</p>
+    </Card>
+  );
+}
+
+/** Zátěž (rychlost spotřeby O₂ ve smyčce) s CO₂ a hustota plynu. */
+function EffortCard({ d }: { d: Dive }) {
+  const s = d.s;
+  const w = useMemo(() => workloadIndex(d), [d]);
+  const dens = useMemo(() => gasDensity(d), [d]);
+  const ef = useMemo(() => effortOf(d), [d]);
+  const vents = useMemo(() => dilVents(d), [d]);
+  const hasCo2 = s.co2.some((v) => v != null && v > 0);
+  return (
+    <Card title="Zátěž a dechová práce">
+      <LineChart t={s.t} marks={vents.map((t) => ({ t, color: "#cfd8dc" }))} series={[
+        { label: "Zátěž (1 = obvyklá)", color: "#ffb74d", values: w, unit: "×", width: 2 },
+        ...(hasCo2 ? [{ label: "CO₂", color: "#ef5350", values: s.co2, unit: "mbar", right: true }] : []),
+      ]} extra={[{ label: "Hloubka", values: s.depth, unit: "m" }]} />
+      <p className="note">Zátěž = rychlost poklesu pO₂ mezi dávkami O₂ při stálé hloubce (okno 3 min), úměrná spotřebě O₂, tedy námaze. Je relativní: 1 = obvyklá úroveň v tomto ponoru, normalizovaná zvlášť pro nízký a vysoký setpoint (regulace se liší). {ef.wHighMin >= 1 ? `Nad 1,3× obvyklé úrovně ${Math.round(ef.wHighMin)} min.` : ""} Šedé čárky dole = upouštění smyčky / vyfukování masky ({vents.length}×).</p>
+      <LineChart t={s.t} height={150} series={[
+        { label: "Hustota plynu", color: "#4fc3f7", values: dens, unit: "g/l", width: 2 },
+        { label: "5,2 g/l", color: "#ffb74d", values: s.t.map(() => 5.2), unit: "g/l", dash: "4 3" },
+        { label: "6,2 g/l", color: "#ef5350", values: s.t.map(() => 6.2), unit: "g/l", dash: "4 3" },
+      ]} />
+      <p className="note">Hustota plynu ve smyčce. Nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně. Max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min.</p>
+      {ef.co2Notes.map((c, i) => <p key={i} className={"small c-" + c.level}>• {c.text}</p>)}
     </Card>
   );
 }
@@ -278,7 +305,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
     <>
       {warns.map((a, i) => <AlertBox key={i} a={a} />)}
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
-        <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > 1.6 ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > 3.5 ? "hot" : "" }} items={[
+        <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > 1.6 ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > 3.5 ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
           ["Hloubka", <Pair l={`${num(meta.h.maxDepth)} m`} ll="max" r={`${num(meta.sum.avgDepth)} m`} rl="průměr" />],
           ["Doba", <Pair l={`${Math.round(meta.h.diveTimeS / 60)} min`} ll="ponor" r={meta.sum.decoMin ? `${meta.sum.decoMin} min` : "–"} rl="deko" />],
           ["Plyny", <span className="gas-list">{meta.sum.gases.map((g) => <span key={g.mix}><b>{gasLabel(g.mix).label}</b><small>{Math.round(g.s / 60)} min</small></span>)}</span>],
@@ -292,6 +319,8 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)],
           ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
           ["Setpoint", <SpTile meta={meta} />],
+          ["Hustota plynu", <span className="use">{num(meta.sum.densMax, 1)} g/l<small>max · hranice 5,2 / 6,2</small></span>],
+          ["Upouštění smyčky", <span className="use">{meta.sum.vents}×<small>diluent bez klesání</small></span>],
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
@@ -357,6 +386,7 @@ function ChartsTab({ d }: { d: Dive }) {
           Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční.
         </p>
       </Card>
+      <EffortCard d={d} />
       <Card title="CO₂ v dýchací smyčce">
         {s.co2.some((v) => v != null && v > 0)
           ? <LineChart t={s.t} bands={d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350" }))} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
