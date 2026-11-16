@@ -1,7 +1,7 @@
 // Porovnání dvou současných ponorů (můj vs. buddyho): metriky, rozdíly a stručný závěr z dat.
 import type { Dive } from "./shearwater";
 import { atStop, setpointChanges, o2Doses, summarize, type SpChange } from "./analysis";
-import { effortOf } from "./effort";
+import { co2Plausibility, effortOf } from "./effort";
 
 const amb = (d: Dive, i: number) => (d.h.surfP || 1013) / 1000 + d.s.depth[i] * ((d.h.salinity || 1000) / 1000) * 0.0981;
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
@@ -15,7 +15,7 @@ export interface DiveStats {
   co2Max: number | null; co2Avg: number | null; co2Alarms: number; scrubLeftStart: number;
   dil: string; dosesMan: number; dosesSol: number; tempMin: number; btnN: number;
   inert: number; ambInt: number; po2Int: number; // bar·min
-  densMax: number; dens52: number; vents: number;
+  densMax: number; dens52: number; vents: number; co2Bad: boolean;
 }
 
 /** Metriky ponoru pro porovnání. Časově vážené průměry přes úseky ponoru (hloubka > 1,5 m). */
@@ -94,7 +94,7 @@ export function diveStats(d: Dive, dev: SpDev = SP_DEV): DiveStats {
     scrubLeftStart: d.h.scrubLeftStartMin, dil: sum.dilUsed.split(",")[0] || "", dosesMan: doses.filter((x) => x.kind === "man").length, dosesSol: doses.filter((x) => x.kind === "sol").length,
     tempMin: sum.tempMin, btnN: sum.btnN,
     inert: ambI - po2I, ambInt: ambI, po2Int: po2I,
-    densMax: ef.densMax, dens52: ef.densOver52, vents: ef.vents,
+    densMax: ef.densMax, dens52: ef.densOver52, vents: ef.vents, co2Bad: co2Plausibility(d)?.ok === false,
   };
 }
 
@@ -122,8 +122,8 @@ const METRICS: Metric[] = [
   { key: "above", label: "Nad setpointem (mimo deko)", v: (s) => s.offAbove, txt: (s) => `${f1(s.offAbove, 1)} min`, scale: 2, w: 0.8 },
   { key: "boost", label: "pO₂ zvýšené během deko", v: (s) => s.boostMin, txt: (s) => (s.boostMin >= 0.5 ? `${f1(s.boostMin, 0)} min, ${f1(s.boostPo2, 2)} bar` : "–"), scale: 2, w: 0.8 },
   { key: "gf", label: "GF", v: () => null, txt: (s) => s.gf, scale: 1, w: 2.5, cat: true },
-  { key: "co2", label: "Max. CO₂", v: (s) => s.co2Max ?? 0, txt: (s) => (s.co2Max != null ? `${f1(s.co2Max)} mbar` : "–"), scale: 1, w: 1 },
-  { key: "co2al", label: "Alarmy CO₂", v: (s) => s.co2Alarms, txt: (s) => `${s.co2Alarms}×`, scale: 1, w: 1 },
+  { key: "co2", label: "Max. CO₂", v: (s) => s.co2Max ?? 0, txt: (s) => (s.co2Max != null ? `${f1(s.co2Max)} mbar` : "–") + (s.co2Bad ? " (čidlo nevěrohodné)" : ""), scale: 1, w: 1 },
+  { key: "co2al", label: "Alarmy CO₂", v: (s) => s.co2Alarms, txt: (s) => `${s.co2Alarms}×` + (s.co2Bad ? " (čidlo nevěrohodné)" : ""), scale: 1, w: 1 },
   { key: "scrub", label: "Scrubber na začátku", v: (s) => s.scrubLeftStart, txt: (s) => `${s.scrubLeftStart} min`, scale: 60, w: 0.5 },
   { key: "man", label: "Ruční dávky O₂", v: (s) => s.dosesMan, txt: (s) => `${s.dosesMan}×`, scale: 3, w: 0.6 },
   { key: "sol", label: "Solenoid (odhad)", v: (s) => s.dosesSol, txt: (s) => `${s.dosesSol}×`, scale: 5, w: 0.4 },
@@ -138,11 +138,13 @@ const METRICS: Metric[] = [
   { key: "btn", label: "Stisky tlačítek", v: (s) => s.btnN, txt: (s) => `${s.btnN}`, scale: 10, w: 0.2 },
 ];
 
-export interface MultiRow { key: string; label: string; vals: string[]; weight: number; hi: number; lo: number }
+export interface MultiRow { key: string; label: string; vals: string[]; weight: number; hi: number; lo: number; muted?: boolean }
 /** Tabulka rozdílů pro 2 a více potápěčů, seřazená podle rozptylu; hi/lo = index nejvyšší a nejnižší hodnoty. */
 export function multiRows(st: DiveStats[]): MultiRow[] {
   return METRICS.map((m) => {
     const vals = st.map(m.txt);
+    // CO₂ z nevěrohodného čidla nevstupuje do řazení rozdílů
+    if ((m.key === "co2" || m.key === "co2al") && st.some((x) => x.co2Bad)) return { key: m.key, label: m.label, vals, weight: 0, hi: -1, lo: -1, muted: true };
     if (m.cat) return { key: m.key, label: m.label, vals, weight: new Set(vals).size > 1 ? m.w : 0, hi: -1, lo: -1 };
     const xs = st.map(m.v);
     const ok = xs.filter((x): x is number => x != null);
@@ -250,7 +252,12 @@ export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveSt
   // ---- CO₂
   {
     const lines: string[] = []; let level: 0 | 1 | 2 = 0;
-    if (a.co2Max != null && b.co2Max != null && (Math.abs(a.co2Max - b.co2Max) >= 1 || a.co2Alarms !== b.co2Alarms)) {
+    if (a.co2Bad || b.co2Bad) {
+      const bad = [a.co2Bad ? A : null, b.co2Bad ? B : null].filter(Boolean).join(", ");
+      lines.push(`CO₂ nelze porovnat – čidlo (${bad}) nejspíš podhodnocuje (oříznutá nula). Zkontroluj kalibraci.`);
+      lines.push(`Pro informaci: max. ${A} ${f1(a.co2Max)} mbar, ${B} ${f1(b.co2Max)} mbar.`);
+      level = 1;
+    } else if (a.co2Max != null && b.co2Max != null && (Math.abs(a.co2Max - b.co2Max) >= 1 || a.co2Alarms !== b.co2Alarms)) {
       const hi = a.co2Max > b.co2Max ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
       const why: string[] = [];
       if (hi.x.scrubLeftStart < hi.y.scrubLeftStart - 30) why.push(`méně zbývajícího scrubberu na začátku (${hi.x.scrubLeftStart} vs. ${hi.y.scrubLeftStart} min)`);
@@ -317,7 +324,8 @@ export function groupSections(names: string[], st: DiveStats[]): Section[] {
     if (s.boostMin - avg((x) => x.boostMin) >= 2) p2.push([1, `${names[i]}: během deko pO₂ zvýšené (${f1(s.boostPo2, 2)} bar, ${f1(s.boostMin, 0)} min).`]);
   });
   const c2: [number, string][] = [];
-  st.forEach((s, i) => { if (s.co2Max != null && st.every((x, j) => j === i || (x.co2Max ?? 0) + 1 <= s.co2Max!)) c2.push([s.co2Alarms > 0 || s.co2Max >= 5 ? 2 : 1, `${names[i]}: nejvyšší CO₂ (${f1(s.co2Max)} mbar, alarmy ${s.co2Alarms}×)${s.dens52 > avg((x) => x.dens52) + 3 ? ", déle dýchal hustou směs" : ""}${s.scrubLeftStart < avg((x) => x.scrubLeftStart) - 30 ? ", méně zbývajícího scrubberu" : ""}.`]); });
+  st.forEach((s, i) => { if (s.co2Bad) c2.push([1, `${names[i]}: CO₂ nelze porovnat – čidlo nejspíš podhodnocuje (oříznutá nula).`]); });
+  st.forEach((s, i) => { if (!s.co2Bad && s.co2Max != null && st.every((x, j) => j === i || x.co2Bad || (x.co2Max ?? 0) + 1 <= s.co2Max!)) c2.push([s.co2Alarms > 0 || s.co2Max >= 5 ? 2 : 1, `${names[i]}: nejvyšší CO₂ (${f1(s.co2Max)} mbar, alarmy ${s.co2Alarms}×)${s.dens52 > avg((x) => x.dens52) + 3 ? ", déle dýchal hustou směs" : ""}${s.scrubLeftStart < avg((x) => x.scrubLeftStart) - 30 ? ", méně zbývajícího scrubberu" : ""}.`]); });
   const br: [number, string][] = [];
   st.forEach((s, i) => { if (s.vents - avg((x) => x.vents) >= 3) br.push([1, `${names[i]}: častěji upouštěl smyčku (${s.vents}×).`]); if (s.densMax - avg((x) => x.densMax) >= 0.3) br.push([s.densMax > 6.2 ? 2 : 1, `${names[i]}: hustší směs (max. ${f1(s.densMax)} g/l).`]); });
   const pr: [number, string][] = [];

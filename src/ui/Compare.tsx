@@ -118,7 +118,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
       <Card title="Rozdíly (od největšího)">
         <table className="kv cmp"><thead><tr><th></th>{N.map((n, k) => <th key={k} style={{ color: C[k] }}>{n}</th>)}</tr></thead>
           <tbody>{rows.map((r) => (
-            <tr key={r.key} className={r.weight >= 1 ? "big" : r.weight > 0.2 ? "" : "small-diff"}><td>{r.label}</td>
+            <tr key={r.key} className={r.muted ? "small-diff muted-row" : r.weight >= 1 ? "big" : r.weight > 0.2 ? "" : "small-diff"}><td>{r.label}</td>
               {r.vals.map((v, k) => <td key={k} className={D.length > 2 && r.weight >= 1 ? (k === r.hi ? "hi" : k === r.lo ? "lo" : "") : ""}>{v}</td>)}</tr>
           ))}</tbody>
         </table>

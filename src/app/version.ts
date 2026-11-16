@@ -1,9 +1,16 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.21.1";
+export const APP_VERSION = "1.22";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.22", date: "16. 11. 2026", title: "Filtr buddyů a věrohodnost čidla CO₂",
+    items: [
+      "Ponory: filtr podle buddyů (všichni označení) a štítek „Bez buddyho“",
+      "Kontrola věrohodnosti čidla CO₂ (oříznutá nula); nevěrohodné CO₂ se ve srovnání nehodnotí",
+    ],
+  },
   {
     version: "1.21.1", date: "16. 11. 2026", title: "Seznam společných ponorů",
     items: ["Řádek společného ponoru: datum a lokalita (i z logu buddyho, kurzívou), bez jmen buddyů"],

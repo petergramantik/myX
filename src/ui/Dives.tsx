@@ -18,6 +18,10 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const [rate, setRate] = useState<string>("");
   const lb = st.lb;
   const [onlyCommon, setOnlyCommon] = useState(true);
+  const [bsel, setBsel] = useState<string[]>(buddy ? [buddy] : []);
+  const [noBuddy, setNoBuddy] = useState(false);
+  const [moreB, setMoreB] = useState(false);
+  useEffect(() => { setBsel(buddy ? [buddy] : []); }, [buddy]);
   // seznam ponorů s buddym: ponory, ke kterým mám log buddyho, se otevřou rovnou jako srovnání
   const [cmp, setCmp] = useState<Map<string, Common>>(new Map());
   const [sugSite, setSugSite] = useState<Map<string, { name: string; who: string }>>(new Map());
@@ -33,25 +37,40 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
       setSugSite(out);
     })();
   }, [st.metas, st.guest, lb.notes, lb.aliases]);
-  useEffect(() => { if (buddy && !st.guest) commonDives(st.metas).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [buddy, st.metas, st.guest]);
+  useEffect(() => { if (!st.guest) commonDives(st.metas).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [st.metas, st.guest, lb.computers]);
   // u cizího logu: ponory, ke kterým mám svůj ponor (začátek do ±15 min)
   const mine = st.guest ? ownMetas() : [];
   const common = (m: Meta) => mine.some((x) => Math.abs(x.start - m.start) <= PAIR_S);
   const n = norm(q);
   const match = (note: { siteId?: string; buddyIds: string[]; note: string; rating?: string } | undefined, date: number) => {
     if (site && note?.siteId !== site) return false;
-    if (buddy && !note?.buddyIds.includes(buddy)) return false;
+    if (bsel.some((b) => !note?.buddyIds.includes(b))) return false;
     if (rate && note?.rating !== rate) return false;
     if (!n) return true;
     const txt = norm([note?.siteId ? lb.sites[note.siteId]?.name : "", ...(note?.buddyIds || []).map((b) => lb.buddies[b]?.name || ""), note?.note || "", fmtDate(date)].join(" "));
     return n.split(" ").every((w) => txt.includes(w));
   };
   const rows = st.metas.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse()
-    .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)));
+    .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)) && (!noBuddy || (!note?.buddyIds.length && !cmp.has(m.id))));
+  // buddy s počtem mých ponorů (pro štítky filtru)
+  const bcount = new Map<string, number>();
+  for (const m of st.metas) for (const b of lb.notes[m.id]?.buddyIds || []) if (lb.buddies[b]) bcount.set(b, (bcount.get(b) || 0) + 1);
+  const blist = [...bcount].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  const withSel = (ids: string[]) => st.metas.filter((m) => ids.every((b) => lb.notes[m.id]?.buddyIds.includes(b))).length;
   const drafts = st.guest ? [] : Object.values(lb.drafts).filter((d) => match(d, d.created)).sort((a, b) => b.created - a.created);
   return (
     <div className="screen">
-      {(site || buddy) && <p className="muted">Filtr: {site ? lb.sites[site]?.name : lb.buddies[buddy!]?.name} · <a onClick={() => go({ t: "dives" })}>zrušit</a></p>}
+      {site && <p className="muted">Filtr: {lb.sites[site]?.name} · <a onClick={() => go({ t: "dives" })}>zrušit</a></p>}
+      {!st.guest && blist.length > 0 && (
+        <div className="chips buddyfilter">
+          {(moreB ? blist : blist.slice(0, 8)).map((b) => {
+            const on = bsel.includes(b), next = on ? bsel.filter((x) => x !== b) : [...bsel, b], n = withSel(next);
+            return <button key={b} className={"chip" + (on ? " on" : "")} disabled={!on && (!n || noBuddy)} onClick={() => setBsel(next)}>{lb.buddies[b].name} ({on ? withSel(bsel) : n})</button>;
+          })}
+          {blist.length > 8 && <button className="chip" onClick={() => setMoreB(!moreB)}>{moreB ? "méně" : "další…"}</button>}
+          <button className={"chip" + (noBuddy ? " on" : "")} disabled={bsel.length > 0} onClick={() => setNoBuddy(!noBuddy)}>Bez buddyho</button>
+        </div>
+      )}
       <input className="search" placeholder="Hledat lokalitu, buddyho, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
       {st.guest ? (
         <div className="seg filter">
@@ -71,7 +90,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         </div>
       ))}
       {rows.map(({ m, no, note }) => (
-        <div key={m.id} className="dive-row" onClick={() => { const c = cmp.get(m.id); go(c ? { t: "cmp", id: m.id, other: c.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); }}>
+        <div key={m.id} className="dive-row" onClick={() => { const c = bsel.length ? cmp.get(m.id) : undefined; go(c ? { t: "cmp", id: m.id, other: c.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); }}>
           <div className="dr-main">
             <b>{note?.siteId ? lb.sites[note.siteId]?.name : sugSite.get(m.id) ? <i className="sugg">{sugSite.get(m.id)!.name} <small>· z logu {sugSite.get(m.id)!.who}</small></i> : <span className="muted">bez lokality</span>}</b>
             <small>č. {no} · {fmtDate(m.start)}{note?.buddyIds.length ? " · " + note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ") : ""}</small>

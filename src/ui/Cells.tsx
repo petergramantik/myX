@@ -149,6 +149,7 @@ function Co2Panel() {
   const GASES = ["vzduch", "O₂", "kalibrační plyn"];
   return (
     <div className={"pcell ptile " + lvl}>
+      {x.last?.sum.co2Bad && <div className="reason warn">Čidlo nejspíš podhodnocuje – v posledním ponoru ukazovalo v hloubce přesnou nulu (oříznutá nula). Zkontroluj kalibraci, nízké hodnoty ber s rezervou.</div>}
       <div className="pcell-h"><b className={"c-" + lvl}>Čidlo CO₂</b><span className={"pill " + (x.on ? x.level : "")}>{x.on ? (x.level === "bad" ? "Vysoké" : x.level === "warn" ? "Zvýšené" : "V pořádku") : "Deaktivováno"}</span></div>
       {x.on ? <>
         <div className="kvline"><span>Max</span><b>{num(x.last.sum.co2Max!, 2)} mbar</b><span>Průměr</span><b>{num(x.last.sum.co2Avg ?? 0, 2)} mbar</b></div>

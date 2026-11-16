@@ -300,3 +300,4 @@ i.sugg { font-weight: 500; color: var(--muted); } i.sugg small { font-size: 11px
 label.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .chips label.chip input, label.switch input { width: auto; margin: 0; flex: none; }
 label.switch { white-space: nowrap; }
+tr.muted-row td { color: var(--muted); font-style: italic; }

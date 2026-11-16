@@ -37,6 +37,7 @@ export function useWarnings() {
     add("co2", "Čidlo CO₂", "bad", `Vysoké CO₂ v posledním ponoru (${fmtDate(last.start)}): maximum ${num(last.sum.co2Max, 1)} mbar.`, { t: "dive", id: last.id });
   if (last && last.sum.co2AlarmN > 0)
     add("co2", "Čidlo CO₂", "bad", `Alarm CO₂ z počítače v posledním ponoru: ${last.sum.co2AlarmN}× (celkem ${last.sum.co2AlarmS < 60 ? "pod 1 min" : Math.round(last.sum.co2AlarmS / 60) + " min"}).`, { t: "dive", id: last.id });
+  if (last?.sum.co2Bad) add("co2", "Čidlo CO₂", "warn", `Nejspíš podhodnocuje – v posledním ponoru ukazovalo v hloubce přesnou nulu (oříznutá nula). Zkontroluj kalibraci.`, { t: "co2" });
   for (const a of b.petrelAlerts) add("petrel", "Petrel – baterie", a.level, `${a.title}: ${a.text}`, { t: "bats" });
   for (const x of b.head) for (const r of x.reasons) add("head" + x.pos, `Hlava – baterie ${x.pos}`, "warn", r, { t: "bats", pos: x.pos });
   // baterie dalších počítačů (jiné sériové číslo než poslední ponor)

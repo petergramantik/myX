@@ -78,8 +78,8 @@ export function effortOf(d: Dive, co2Limit = 5): Effort {
   const wv = w.filter((x): x is number => x != null);
   const wMed = wv.length >= 10 ? 1 : null;
   const notes: Effort["co2Notes"] = [];
-  // epizody CO₂: nad polovinou limitu, vrchol a okolí
-  const thr = co2Limit * 0.5;
+  // epizody CO₂: nad polovinou limitu, vrchol a okolí (jen u věrohodného čidla)
+  const thr = co2Plausibility(d)?.ok === false ? Infinity : co2Limit * 0.5;
   for (let i = 0; i < s.t.length; i++) {
     const c = s.co2[i];
     if (c == null || c < thr || !inDive(d, i)) continue;
@@ -112,4 +112,17 @@ export function effortOf(d: Dive, co2Limit = 5): Effort {
 export function effortLevel(w: number | null, personal: number | null): "klidně" | "střední" | "vysoká" | null {
   if (w == null || !personal) return null;
   return w > personal * 1.25 ? "vysoká" : w < personal * 0.85 ? "klidně" : "střední";
+}
+
+/**
+ * Věrohodnost čidla CO₂: když čidlo měří (není celou dobu nula), ale pod 20 m ukazuje přesnou nulu víc než 30 % času,
+ * je nula nejspíš „oříznutá“ (posunutá nula / nízká citlivost) a malé skutečné hodnoty nevidí.
+ */
+export function co2Plausibility(d: Dive): { ok: boolean; zeroPct: number } | null {
+  const s = d.s;
+  const deep = s.t.map((_, i) => i).filter((i) => s.co2raw[i] != null && s.depth[i] >= 20 && s.t[i] <= d.h.diveTimeS);
+  const any = s.co2raw.some((v) => v != null && v > 0);
+  if (!any || deep.length < 20) return null;
+  const z = deep.filter((i) => s.co2raw[i] === 0).length / deep.length;
+  return { ok: z <= 0.3, zeroPct: Math.round(z * 100) };
 }
