@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.24.3";
+export const APP_VERSION = "1.24.4";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.24.4", date: "2026-11-16", title: "Kompaktní seznam ponorů", items: [
+    "Přepínač ☰ / ≡ (plné / kompaktní zobrazení) vpravo v řádku filtrů; volba se pamatuje.",
+    "Kompaktní zobrazení skryje plyn a tagy, problém naznačí červený nebo žlutý rámeček řádku.",
+  ] },
   { version: "1.24.3", date: "2026-11-16", title: "Sdružená upozornění v detailu ponoru", items: [
     "Opakovaná upozornění stejného typu jsou v jednom řádku s počtem (např. „Souvislost CO₂ – 10×“), jednotlivé popisy po rozbalení.",
   ] },

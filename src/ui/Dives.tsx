@@ -16,6 +16,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const st = useStore();
   const [q, setQ] = useState("");
   const [rate, setRate] = useState<string>("");
+  const [compact, setCompact] = useState(() => { try { return localStorage.getItem("myx-compact") === "1"; } catch { return false; } });
   const lb = st.lb;
   const [onlyCommon, setOnlyCommon] = useState(true);
   const [bsel, setBsel] = useState<string[]>(buddy ? [buddy] : []);
@@ -78,8 +79,11 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <button className={!onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(false)}>Všechny ({st.metas.length})</button>
         </div>
       ) : (
-        <div className="seg filter">
-          {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
+        <div className="filter-row">
+          <div className="seg filter">
+            {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
+          </div>
+          <button className="btn view-tg" title={compact ? "Kompaktní zobrazení" : "Plné zobrazení"} onClick={() => { setCompact(!compact); try { localStorage.setItem("myx-compact", compact ? "0" : "1"); } catch { /* */ } }}>{compact ? "≡" : "☰"}</button>
         </div>
       )}
       {drafts.map((d) => (
@@ -90,15 +94,15 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         </div>
       ))}
       {rows.map(({ m, no, note }) => (
-        <div key={m.id} className="dive-row" onClick={() => { const c = bsel.length ? cmp.get(m.id) : undefined; go(c ? { t: "cmp", id: m.id, other: c.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); }}>
+        <div key={m.id} className={"dive-row" + (compact ? " compact " + rowLevel(diveTags(m, lb.settings.th)) : "")} onClick={() => { const c = bsel.length ? cmp.get(m.id) : undefined; go(c ? { t: "cmp", id: m.id, other: c.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); }}>
           <div className="dr-main">
             <b>{note?.siteId ? lb.sites[note.siteId]?.name : sugSite.get(m.id) ? <i className="sugg">{sugSite.get(m.id)!.name} <small>· z logu {sugSite.get(m.id)!.who}</small></i> : <span className="muted">bez lokality</span>}</b>
             <small>č. {no} · {fmtDate(m.start)}{note?.buddyIds.length ? " · " + note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ") : ""}</small>
           </div>
           <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
           <div className="dr-rate">{note?.rating ? RATING[note.rating].icon : ""}{cmp.get(m.id) ? <span className="badge">⇄ {cmp.get(m.id)!.with.length + 1}</span> : ""}</div>
-          <DiveTags m={m} />
-          <DilChip m={m} />
+          {!compact && <DiveTags m={m} />}
+          {!compact && <DilChip m={m} />}
         </div>
       ))}
       {!rows.length && !drafts.length && <p className="muted center">Žádné ponory</p>}
@@ -185,7 +189,18 @@ function DilChip({ m }: { m: Meta }) {
 
 /** Tagy ponoru v seznamu (jen důležité): CO₂, nevěrohodné čidlo CO₂, vysoké a nízké pO₂, rozjetá čidla. */
 function DiveTags({ m }: { m: Meta }) {
-  const th = useStore().lb.settings.th, x = m.sum;
+  const tags = diveTags(m, useStore().lb.settings.th);
+  if (!tags.length) return null;
+  return <div className="dr-tags">{tags.map(([c, t]) => <span key={t} className={"tag " + c}>{t}</span>)}</div>;
+}
+
+/** Nejzávažnější úroveň tagů pro rámeček kompaktního řádku. */
+function rowLevel(tags: [string, string][]): string {
+  return tags.some((t) => t[0] === "bad") ? "lvl-bad" : tags.length ? "lvl-warn" : "";
+}
+
+function diveTags(m: Meta, th: { co2Mbar: number }): [string, string][] {
+  const x = m.sum;
   const tags: [string, string][] = [];
   if ((x.co2Max != null && x.co2Max >= th.co2Mbar && !x.co2Bad) || x.co2AlarmN > 0) tags.push(["bad", `CO₂ ${num(x.co2Max ?? 0, 1)}`]);
   if (x.co2Bad) tags.push(["warn", "CO₂?"]);
@@ -194,8 +209,7 @@ function DiveTags({ m }: { m: Meta }) {
   if (x.cellIssue === "wet") tags.push(["bad", "Vlhkost?"]);
   else if (x.cellIssue === "multi") tags.push(["warn", "Čidla"]);
   else if (x.cellIssue) tags.push(["warn", "Čidlo " + x.cellIssue.slice(1)]);
-  if (!tags.length) return null;
-  return <div className="dr-tags">{tags.map(([c, t]) => <span key={t} className={"tag " + c}>{t}</span>)}</div>;
+  return tags;
 }
 
 /** Návrhy lokality a buddyů z logu buddyho ke stejnému ponoru. */
