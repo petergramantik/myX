@@ -314,3 +314,8 @@ tr.muted-row td { color: var(--muted); font-style: italic; }
 .view-tg { min-width: 40px; font-size: 18px; padding: 0 10px; }
 .dive-row.compact { padding-top: 7px; padding-bottom: 7px; }
 .dive-row.compact.lvl-bad { border-color: var(--bad); } .dive-row.compact.lvl-warn { border-color: var(--warn); }
+.fn-line { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.fn-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fn-name b { font-size: 16px; } .fn-name small { font-size: 11px; }
+.fn-acts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.fn-acts .btn { font-size: 11px; padding: 2px 7px; opacity: .8; background: transparent; }

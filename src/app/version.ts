@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.24.7";
+export const APP_VERSION = "1.24.8";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.24.8", date: "2026-11-16", title: "B&L: moje nahoře, cizí pod nimi", items: [
+    "Moji buddyové a lokality jsou nahoře, karta „Z cizích logů“ pod nimi.",
+    "V kartě cizích jmen je důraz na jméno, tlačítka jsou menší.",
+  ] },
   { version: "1.24.7", date: "2026-11-16", title: "Reset logbooku", items: [
     "Nastavení → Data → Reset logbooku: smaže lokality, buddye, poznámky, hodnocení, rozpracované ponory, přiřazení jmen a cizí logy; ponory, čidla, baterie a nastavení zůstanou.",
     "Před resetem se stáhne záloha, záloha na Workeru se přepíše.",

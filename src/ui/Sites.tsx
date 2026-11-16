@@ -19,7 +19,6 @@ export function SitesScreen() {
   return (
     <div className="screen">
       <BLSwitch on="sites" />
-      <ForeignNames kind="site" />
       <input className="search" placeholder="Hledat lokalitu" value={q} onChange={(e) => setQ(e.target.value)} />
       {list.map(({ s, c, km }) => (
         <div key={s.id} className="list-item" onClick={() => go({ t: "site", id: s.id })}>
@@ -31,6 +30,7 @@ export function SitesScreen() {
         <input value={name} placeholder="Nová lokalita" onChange={(e) => setName(e.target.value)} />
         <button className="btn" disabled={!name.trim()} onClick={async () => { const s = await upsertSite({ name: name.trim() }); setName(""); go({ t: "site", id: s.id }); }}>Přidat</button>
       </div>
+      <ForeignNames kind="site" />
     </div>
   );
 }
@@ -176,7 +176,6 @@ export function BuddiesScreen() {
   return (
     <div className="screen">
       <BLSwitch on="buddies" />
-      <ForeignNames kind="buddy" />
       {list.map((b) => (
         <div key={b.id} className="list-item" onClick={() => go({ t: "buddy", id: b.id })}>
           <div className="li-main"><b>{b.name}</b><small>{counts[b.id] ? `${counts[b.id].n} ponorů · naposledy ${fmtDate(counts[b.id].last)}` : "bez ponorů"}</small></div>
@@ -187,6 +186,7 @@ export function BuddiesScreen() {
         <input value={name} placeholder="Nový buddy" onChange={(e) => setName(e.target.value)} />
         <button className="btn" disabled={!name.trim()} onClick={async () => { await upsertBuddy({ name: name.trim() }); setName(""); }}>Přidat</button>
       </div>
+      <ForeignNames kind="buddy" />
     </div>
   );
 }
@@ -219,8 +219,8 @@ function ForeignNames({ kind }: { kind: "buddy" | "site" }) {
       {open && <div className="panel-b">
         {list.map((x) => (
           <div key={x.name} className="foreign">
-            <div className="kvline"><span><b>{x.name}</b> <small className="muted">{x.n}× · {x.logs.join(", ")}</small></span>
-              <span className="row">
+            <div className="fn-line"><span className="fn-name"><b>{x.name}</b><small className="muted">{x.n}× · {x.logs.join(", ")}</small></span>
+              <span className="fn-acts">
                 <button className="btn small" onClick={() => done(x.name, null)}>Přidat k mým</button>
                 <button className="btn small" onClick={() => { setPick(pick === x.name ? null : x.name); setTarget(null); }}>Je to…</button>
                 {kind === "buddy" && <button className="btn small" onClick={() => done(x.name, ME)}>To jsem já</button>}
