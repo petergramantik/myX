@@ -157,3 +157,29 @@ export function cellDiveWarnings(series: { start: number; cells: CellDive }[], i
   }
   return out;
 }
+
+/**
+ * Sloučí upozornění, která se týkají stejného O₂ čidla (odchylka v ponoru + problém z historie čidla), do jednoho:
+ * úroveň podle nejzávažnějšího, popisy pod sebou, na závěr jedno doporučení.
+ */
+export function mergeCellAlerts<T extends { level: string; title: string; text: string }>(as: T[]): { level: string; title: string; text: string; parts?: string[] }[] {
+  const rank: Record<string, number> = { bad: 3, warn: 2, info: 1 };
+  const cellOf = (t: string) => /(?:nefunkční čidlo|s čidlem) (\d)/.exec(t)?.[1];
+  const groups = new Map<string, T[]>();
+  for (const a of as) { const c = cellOf(a.title); if (c) groups.set(c, [...(groups.get(c) || []), a]); }
+  const out: { level: string; title: string; text: string; parts?: string[] }[] = [];
+  const done = new Set<string>();
+  const strip = (t: string) => t.replace(/\s*(Vyměň čidlo|Zkontroluj nebo vyměň čidlo|Plánuj výměnu|Sleduj vývoj)\.\s*$/, "").replace(/\.$/, "") + ".";
+  for (const a of as) {
+    const c = cellOf(a.title);
+    if (!c || (groups.get(c)!.length < 2)) { out.push(a); continue; }
+    if (done.has(c)) continue;
+    done.add(c);
+    const g = [...groups.get(c)!].sort((x, y) => (rank[y.level] || 0) - (rank[x.level] || 0));
+    const level = g[0].level;
+    const parts = g.map((x) => /nefunkční čidlo/.test(x.title) ? strip(x.text.replace(/^Čidlo \d se odchyluje od ostatních – /, "V ponoru se odchyluje od ostatních – ")) : strip(x.text));
+    const rec = level === "bad" ? "Vyměň čidlo." : level === "warn" ? "Zkontroluj nebo vyměň čidlo." : "Sleduj vývoj.";
+    out.push({ level, title: level === "bad" ? `Problém s čidlem ${c}` : `Podezření na nefunkční čidlo ${c}`, text: [...parts, rec].join(" "), parts: [...parts, rec] });
+  }
+  return out;
+}

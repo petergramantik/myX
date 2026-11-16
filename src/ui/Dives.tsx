@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, cellSpread, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, adoptForeign, nearestPair, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
-import { cellDiveWarnings } from "../core/cells";
+import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
@@ -93,18 +93,32 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <div className="dr-rate">{d.rating ? RATING[d.rating].icon : ""}</div>
         </div>
       ))}
-      {rows.map(({ m, no, note }) => (
-        <div key={m.id} className={"dive-row" + (compact ? " compact " + rowLevel(diveTags(m, lb.settings.th)) : "")} onClick={() => { const c = bsel.length ? cmp.get(m.id) : undefined; go(c ? { t: "cmp", id: m.id, other: c.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); }}>
-          <div className="dr-main">
-            <b>{note?.siteId ? lb.sites[note.siteId]?.name : sugSite.get(m.id) ? <i className="sugg">{sugSite.get(m.id)!.name} <small>· z logu {sugSite.get(m.id)!.who}</small></i> : <span className="muted">bez lokality</span>}</b>
-            <small>č. {no} · {fmtDate(m.start)}{note?.buddyIds.length ? " · " + note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ") : ""}</small>
+      {rows.map(({ m, no, note }) => {
+        const siteEl = note?.siteId ? lb.sites[note.siteId]?.name : sugSite.get(m.id) ? <i className="sugg">{sugSite.get(m.id)!.name} <small>· z logu {sugSite.get(m.id)!.who}</small></i> : <span className="muted">bez lokality</span>;
+        const buds = (note?.buddyIds || []).map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ");
+        const c = cmp.get(m.id);
+        const badge = c ? <span className="badge cmpb">⇄&nbsp;{c.with.length + 1}</span> : null;
+        const rate = note?.rating ? <span className="dr-rt">{RATING[note.rating].icon}</span> : null;
+        const open = () => { const cc = bsel.length ? c : undefined; go(cc ? { t: "cmp", id: m.id, other: cc.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); };
+        if (compact) return (
+          <div key={m.id} className={"dive-row compact " + rowLevel(diveTags(m, lb.settings.th))} onClick={open}>
+            <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{buds ? " · " + buds : ""}</small></div>
+            <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
+            <div className="dr-rate">{rate}{badge}</div>
           </div>
-          <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
-          <div className="dr-rate">{note?.rating ? RATING[note.rating].icon : ""}{cmp.get(m.id) ? <span className="badge">⇄ {cmp.get(m.id)!.with.length + 1}</span> : ""}</div>
-          {!compact && <DiveTags m={m} />}
-          {!compact && <DilChip m={m} />}
-        </div>
-      ))}
+        );
+        return (
+          <div key={m.id} className="dive-row full" onClick={open}>
+            <div className="dr-top"><DilChip m={m} /><span />{rate}</div>
+            <div className="dr-mid">
+              <div className="dr-main"><b className="wrap">{siteEl}</b><small>č. {no} · {fmtDate(m.start)}</small></div>
+              <div className="dr-num col"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
+            </div>
+            {(buds || badge) && <div className="dr-bud"><span className="dr-bnames">{buds}</span>{badge}</div>}
+            <DiveTags m={m} />
+          </div>
+        );
+      })}
       {!rows.length && !drafts.length && <p className="muted center">Žádné ponory</p>}
     </div>
   );
@@ -167,16 +181,16 @@ function spPins(d: Dive) {
 }
 
 /** Sloučí upozornění se stejným nadpisem do jednoho („Nadpis – N×“), popisy pod sebe; úroveň podle nejzávažnějšího. */
-function groupAlerts<T extends { level: string; title: string; text: string }>(as: T[]): { level: string; title: string; text: string; parts?: string[] }[] {
+function groupAlerts<T extends { level: string; title: string; text: string; parts?: string[] }>(as: T[]): { level: string; title: string; text: string; parts?: string[] }[] {
   const rank: Record<string, number> = { bad: 3, warn: 2, info: 1 };
-  const m = new Map<string, { level: string; title: string; text: string; parts: string[] }>();
+  const m = new Map<string, { level: string; title: string; text: string; parts: string[]; own?: string[] }>();
   for (const a of as) {
     const g = m.get(a.title);
-    if (!g) { m.set(a.title, { level: a.level, title: a.title, text: a.text, parts: [a.text] }); continue; }
+    if (!g) { m.set(a.title, { level: a.level, title: a.title, text: a.text, parts: [a.text], own: a.parts }); continue; }
     g.parts.push(a.text);
     if ((rank[a.level] || 0) > (rank[g.level] || 0)) g.level = a.level;
   }
-  return [...m.values()].map((g) => g.parts.length > 1 ? { ...g, title: `${g.title} – ${g.parts.length}×` } : { level: g.level, title: g.title, text: g.text });
+  return [...m.values()].map((g) => g.parts.length > 1 ? { ...g, title: `${g.title} – ${g.parts.length}×` } : { level: g.level, title: g.title, text: g.text, parts: g.own });
 }
 
 /** Štítek hlavního diluentu (plyn s nejdelším časem) v pravém horním rohu řádku. */
@@ -184,7 +198,7 @@ function DilChip({ m }: { m: Meta }) {
   const g = [...(m.sum.gases || [])].sort((a, b) => b.s - a.s)[0];
   if (!g) return null;
   const l = gasLabel(g.mix);
-  return <span className={"gchip dr-gas " + l.cls}>{l.label}</span>;
+  return <span className={"gchip " + l.cls}>{l.label}</span>;
 }
 
 /** Tagy ponoru v seznamu (jen důležité): CO₂, nevěrohodné čidlo CO₂, vysoké a nízké pO₂, rozjetá čidla. */
@@ -443,7 +457,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const meta = st.metas.find((m) => m.id === id)!;
   const note = lb.notes[id] || { buddyIds: [], note: "", updated: 0 };
   const idx = st.metas.indexOf(meta);
-  const warns = [...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)];
+  const warns = mergeCellAlerts([...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)]);
   return (
     <>
       {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold />)}

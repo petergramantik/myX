@@ -233,5 +233,17 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(closed.level === "bad" && closed.reasons.includes("tlak O₂ 0 bar"), `tlak O₂ 0 → hypoxie (${closed.reasons})`);
 }
 
+// ---- sloučení upozornění ke stejnému čidlu
+{
+  const { mergeCellAlerts } = await import("../src/core/cells");
+  const r = mergeCellAlerts([
+    { level: "warn", title: "Podezření na nefunkční čidlo 1", text: "Čidlo 1 se odchyluje od ostatních – rozdíl až 0,56 bar (19. min), nad 0,3 bar celkem 18,6 min. Zkontroluj nebo vyměň čidlo." },
+    { level: "bad", title: "Problém s čidlem 1", text: "Citlivost prudce klesla o 30 %. Vyměň čidlo." },
+    { level: "warn", title: "Vysoké CO₂", text: "x" },
+  ]);
+  ok(r.length === 2 && r[0].level === "bad" && r[0].title === "Problém s čidlem 1", "upozornění ke stejnému čidlu se sloučí, červené má přednost");
+  ok(r[0].text.includes("Citlivost") && r[0].text.includes("V ponoru se odchyluje") && r[0].text.endsWith("Vyměň čidlo.") && r[0].text.split("Vyměň čidlo").length === 2, `oba popisy, jedno doporučení (${r[0].text})`);
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");
