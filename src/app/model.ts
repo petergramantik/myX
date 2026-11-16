@@ -82,7 +82,7 @@ export function mergeLogbooks(a: Logbook, b: Logbook): Logbook {
     sites: mergeMap(a.sites, b.sites || {}, deleted),
     buddies: mergeMap(a.buddies, b.buddies || {}, deleted),
     notes: mergeMap(a.notes, b.notes || {}, deleted),
-    computers: mergeMap(a.computers || {}, b.computers || {}, {}),
+    computers: mergeMap(a.computers || {}, b.computers || {}, deleted),
     aliases: mergeMap(a.aliases || {}, b.aliases || {}, deleted),
     deleted,
     settings: fixSettings((b.settings?.updated || 0) > a.settings.updated
@@ -129,4 +129,12 @@ export function cleanForeign(lb0: Logbook, ownIds: Set<string>, now = Date.now()
     delete lb.sites[id]; delete lb.buddies[id]; lb.deleted[id] = now;
   }
   return { lb, notes: bad.length, names };
+}
+
+/** Úplný reset logbooku: smaže lokality, buddye, záznamy k ponorům, rozpracované ponory, přiřazení jmen a počítače.
+ *  Čidla, baterie, odpovědi a nastavení zůstanou. Smazané id se označí, aby se nevrátily synchronizací. */
+export function resetLogbook(lb: Logbook, now = Date.now()): Logbook {
+  const deleted = { ...lb.deleted };
+  for (const m of [lb.sites, lb.buddies, lb.notes, lb.drafts || {}, lb.aliases || {}, lb.computers || {}]) for (const k of Object.keys(m)) deleted[k] = now;
+  return { ...lb, sites: {}, buddies: {}, notes: {}, drafts: {}, aliases: {}, computers: {}, deleted };
 }

@@ -4,7 +4,7 @@ import { injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
 import * as db from "./db";
-import { aliasKey, cleanForeign, emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
+import { aliasKey, cleanForeign, emptyLogbook, resetLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
 export interface Pos { lat: number; lon: number; acc: number; at: number }
@@ -769,6 +769,30 @@ export async function syncNow(): Promise<void> {
   }
 }
 
+/** Úplný reset logbooku (viz resetLogbook) + odebrání cizích logů; záloha na Workeru se přepíše. */
+export async function resetAll(): Promise<void> {
+  if (st.guest) closeGuest();
+  for (const g of await guestLogs()) await deleteGuest(g);
+  const lb = resetLogbook(st.lb);
+  set({ lb });
+  await db.put("kv", lb, "lb");
+  if (workerUrl() && syncKey()) {
+    try {
+      for (let i = 0; i < 3; i++) {
+        const r = await api("/sync");
+        if (!r.ok) throw new Error(`Worker: ${r.status}`);
+        const { ver } = (await r.json()) as { ver: number };
+        const p = await api("/sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lb, ver }) });
+        if (p.status === 409) continue;
+        if (!p.ok) throw new Error(`Worker: ${p.status}`);
+        set({ sync: { state: "idle", msg: "Synchronizováno (reset)", at: Date.now() } });
+        return;
+      }
+      throw new Error("Konflikt synchronizace");
+    } catch (e) { toast("Reset na Workeru selhal: " + (e as Error).message + " – při další synchronizaci se smazání propíše."); }
+  }
+}
+
 // ---------- záloha do souboru
 export async function exportBackup(): Promise<Blob> {
   const raws = await db.getAll<RawDive>("raw");
@@ -792,7 +816,13 @@ export async function importBackup(file: File): Promise<number> {
     pendingUpload.add(d.id);
   }
   set({ metas: sortMetas([...st.metas, ...added]) });
-  await saveLb(mergeLogbooks(st.lb, j.lb));
+  // obnovené položky mají přednost i před dřívějším smazáním (např. po resetu logbooku)
+  const now = Date.now(), b = j.lb as Logbook, del = { ...st.lb.deleted };
+  for (const k of ["sites", "buddies", "notes", "drafts", "aliases", "computers"] as const) {
+    const m = (b[k] || {}) as Record<string, { updated: number }>;
+    for (const [id, v] of Object.entries(m)) { if (del[id]) { delete del[id]; m[id] = { ...v, updated: now }; } }
+  }
+  await saveLb(mergeLogbooks({ ...st.lb, deleted: del }, { ...b, deleted: {} }));
   return added.length;
 }
 

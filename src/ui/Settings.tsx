@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
 import { DEFAULT_ALL_TH } from "../app/model";
 import { OwnerPicker } from "./Owner";
-import { closeGuest, deleteGuest, ownerName, setComputerOwner, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, type GuestLog } from "../app/store";
+import { closeGuest, deleteGuest, ownerName, setComputerOwner, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { Card, KV, fmtDate, go, tab, useStore } from "./common";
@@ -75,6 +75,14 @@ export function SettingsScreen() {
             const f = e.target.files?.[0]; e.target.value = "";
             if (f) try { toast(`Obnoveno, nových ponorů: ${await importBackup(f)}`); } catch (err) { toast((err as Error).message); }
           }} />
+          <button className="btn danger" onClick={async () => {
+            if (!confirm("Úplný reset logbooku: smaže všechny lokality, buddye, poznámky, hodnocení, rozpracované ponory, přiřazení jmen a cizí logy. Ponory, čidla, baterie a nastavení zůstanou. Pokračovat?")) return;
+            if (!confirm("Opravdu? Přepíše se i záloha na Workeru. Před resetem se stáhne záloha do souboru.")) return;
+            const b = await exportBackup();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(b); a.download = `myx-pred-resetem-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+            await resetAll(); toast("Logbook resetován");
+          }}>Reset logbooku</button>
           <button className="btn danger" onClick={async () => { if (confirm("Smazat všechna data v tomto telefonu? Data ve Workeru zůstanou.")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
         </div>
       </Card>

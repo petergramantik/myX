@@ -188,5 +188,20 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(cleanForeign(r.lb, new Set(["d1"])).notes === 0, "úklid podruhé nic nedělá");
 }
 
+// ---- úplný reset logbooku
+{
+  const { resetLogbook, emptyLogbook, mergeLogbooks } = await import("../src/app/model");
+  const lb = emptyLogbook();
+  lb.sites = { s1: { id: "s1", name: "A", updated: 1 } }; lb.buddies = { b1: { id: "b1", name: "B", updated: 1 } };
+  lb.notes = { d1: { siteId: "s1", buddyIds: ["b1"], note: "x", updated: 1 } };
+  lb.aliases = { "site:a": { id: "site:a", kind: "site", name: "A", targetId: "s1", updated: 1 } as any };
+  lb.computers = { C1: { id: "C1", model: "P3", buddyId: "b1", updated: 1 } as any };
+  lb.cells = { c1: { updated: 1 } as any };
+  const r = resetLogbook(lb, 10);
+  ok(!Object.keys(r.sites).length && !Object.keys(r.notes).length && !Object.keys(r.aliases!).length && !Object.keys(r.computers!).length && !!r.cells.c1, "reset smaže jména a záznamy, čidla nechá");
+  const m = mergeLogbooks(r, lb);
+  ok(!m.sites.s1 && !m.notes.d1 && !m.aliases!["site:a"] && !m.computers!.C1, "stará data se po resetu synchronizací nevrátí");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");
