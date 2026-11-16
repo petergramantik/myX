@@ -197,10 +197,13 @@ function CommonList({ who }: { who?: string }) {
 
 export function CommonRow({ r }: { r: Common }) {
   const st = useStore();
-  const site = st.lb.notes[r.m.id]?.siteId ? st.lb.sites[st.lb.notes[r.m.id]!.siteId!]?.name : null;
+  const sid = st.lb.notes[r.m.id]?.siteId;
+  const mine = sid ? st.lb.sites[sid]?.name : null;
+  const [from, setFrom] = useState<string | null>(null);
+  useEffect(() => { if (!mine) suggestionsFor(r.m).then((sg) => { const x = sg.find((y) => y.site); setFrom(x?.site ? (x.site.mine && st.lb.sites[x.site.mine]?.name) || x.site.name : null); }); }, [r.m.id, mine]);
   return (
     <div className="kvline link" onClick={() => go({ t: "cmp", id: r.m.id, other: r.with.map((x) => x.id).join(",") })}>
-      <span><b>{fmtDate(r.m.start)}</b>{site ? ` · ${site}` : ""} · {r.with.map((x) => x.who).join(", ")}</span>
+      <span><b>{fmtDate(r.m.start)}</b> · {mine ? mine : from ? <i className="sugg">{from}</i> : <span className="muted">bez lokality</span>}</span>
       <span className="muted">⇄ {r.with.length + 1} ›</span>
     </div>
   );
