@@ -53,13 +53,14 @@ export interface Header {
 }
 
 /** Alarm z počítače: začátek (událost 9) a konec (událost 10), čas v sekundách od začátku ponoru. */
-export interface Alarm { kind: "co2" | "po2low" | "po2high"; label: string; start: number; end: number }
+export interface Alarm { kind: "co2" | "po2low" | "po2high" | "other"; label: string; start: number; end: number }
 export interface Dive { id: string; h: Header; s: Samples; tissues: Tissue[]; events: DiveEvent[]; alarms: Alarm[]; buttons: Button[] }
 /** Bity alarmů: událost 9 nese masku spuštěných v bajtech 8–11, událost 10 masku ukončených v bajtech 12–15 (stejné rozložení). */
 const ALARM_BITS: { kind: Alarm["kind"]; label: string; byte: number; bit: number }[] = [
   { kind: "co2", label: "Alarm CO₂", byte: 2, bit: 0x20 },
   { kind: "po2low", label: "Nízké pO₂", byte: 3, bit: 0x40 },
   { kind: "po2high", label: "Vysoké pO₂", byte: 3, bit: 0x80 },
+  { kind: "other", label: "Alarm (neurčený, bit 0x20)", byte: 3, bit: 0x20 }, // význam zatím neznámý – rozklíčovat podle dalších logů
 ];
 
 const u16 = (b: Uint8Array, i: number) => (b[i] << 8) | b[i + 1];

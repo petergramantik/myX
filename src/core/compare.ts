@@ -200,6 +200,12 @@ export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveSt
     const L = a.ttsMax > b.ttsMax || (a.ttsMax === b.ttsMax && (a.decoMin > b.decoMin || (a.decoMin === b.decoMin && a.decoObl > b.decoObl))) ? { who: A, x: a, y: b, other: B } : { who: B, x: b, y: a, other: A };
     const dTts = L.x.ttsMax - L.y.ttsMax, dDeco = L.x.decoMin - L.y.decoMin;
     let level: 0 | 1 | 2 = dTts >= 4 || dDeco >= 4 ? 2 : dTts >= 2 || dDeco >= 2 ? 1 : 0;
+    const shorter = Math.abs(a.durMin - b.durMin) >= 10 && Math.min(a.durMin, b.durMin) < Math.max(a.durMin, b.durMin) * 0.6;
+    if (shorter) {
+      const s0 = a.durMin < b.durMin ? { who: A, x: a, y: b } : { who: B, x: b, y: a };
+      lines.push(`${s0.who}: ponor ukončen dříve (${f1(s0.x.durMin, 0)} vs. ${f1(s0.y.durMin, 0)} min) – rozdíl v dekompresi plyne z délky ponoru, srovnávej hlavně společnou část.`);
+      out.push(sec("deco", 1, lines));
+    } else {
     if (dTts >= 2) lines.push(`${L.who}: delší dekomprese (max. TTS ${L.x.ttsMax} vs. ${L.y.ttsMax} min, na zastávkách ${f1(L.x.decoMin, 0)} vs. ${f1(L.y.decoMin, 0)} min).`);
     else if (dDeco >= 2) lines.push(`${L.who}: delší čas na zastávkách (${f1(L.x.decoMin, 0)} vs. ${f1(L.y.decoMin, 0)} min), max. TTS podobné (${L.x.ttsMax} vs. ${L.y.ttsMax} min).`);
     else lines.push(`Dekompresní povinnost podobná (max. TTS ${a.ttsMax} vs. ${b.ttsMax} min, na zastávkách ${f1(a.decoMin, 0)} vs. ${f1(b.decoMin, 0)} min).`);
@@ -235,6 +241,7 @@ export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveSt
       }
     }
     out.push(sec("deco", level, lines));
+    }
   }
   // ---- pO₂ a setpoint
   {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, cellCalibration, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, cellCalibration, cellSpread, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, PAIR_S, adoptForeign, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
 import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
@@ -65,10 +65,10 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         <div className="chips buddyfilter">
           {(moreB ? blist : blist.slice(0, 8)).map((b) => {
             const on = bsel.includes(b), next = on ? bsel.filter((x) => x !== b) : [...bsel, b], n = withSel(next);
-            return <button key={b} className={"chip" + (on ? " on" : "")} disabled={!on && (!n || noBuddy)} onClick={() => setBsel(next)}>{lb.buddies[b].name} ({on ? withSel(bsel) : n})</button>;
+            return <button key={b} className={"chip" + (on ? " on" : "")} disabled={!on && !n} onClick={() => { setBsel(next); setNoBuddy(false); }}>{lb.buddies[b].name} ({on ? withSel(bsel) : n})</button>;
           })}
           {blist.length > 8 && <button className="chip" onClick={() => setMoreB(!moreB)}>{moreB ? "méně" : "další…"}</button>}
-          <button className={"chip" + (noBuddy ? " on" : "")} disabled={bsel.length > 0} onClick={() => setNoBuddy(!noBuddy)}>Bez buddyho</button>
+          <button className={"chip" + (noBuddy ? " on" : "")} onClick={() => { setNoBuddy(!noBuddy); setBsel([]); }}>Bez buddyho</button>
         </div>
       )}
       <input className="search" placeholder="Hledat lokalitu, buddyho, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -457,7 +457,7 @@ function ChartsTab({ d }: { d: Dive }) {
       <Card title="pO₂ a čidla" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
         {cellMode === "cal" ? (
-          <LineChart t={s.t} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={d.alarms.filter((a) => a.kind !== "co2").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" }))} series={[
+          <LineChart t={s.t} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={[...d.alarms.filter((a) => a.kind === "po2high" || a.kind === "po2low").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" })), ...(cellSpread(d)?.bands || []).map((b) => ({ ...b, to: b.to + 5, color: "#ce93d8" }))]} series={[
             { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: "Čidlo 1", color: C[1], values: cells[0], unit: "bar" },
             { label: "Čidlo 2", color: C[2], values: cells[1], unit: "bar" }, { label: "Čidlo 3", color: C[3], values: cells[2], unit: "bar" }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3" },
           ]} extra={depthExtra} />
@@ -468,7 +468,7 @@ function ChartsTab({ d }: { d: Dive }) {
         )}
         <p className="note">
           {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
-          Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční.
+          Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Fialově podbarvené úseky = čidla se rozcházejí o víc než 0,3 bar.
         </p>
       </Card>
       <EffortCard d={d} />

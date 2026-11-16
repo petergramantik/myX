@@ -191,6 +191,34 @@ function doseSummary(d: Dive) {
   return { sol: c("sol"), man: c("man"), amb: c("amb"), dil: c("dil"), manPreSw: x.filter((y) => y.preSw && y.kind === "man").length };
 }
 
+/**
+ * Rozjetá čidla: rozdíl mezi čidly (přepočtenými společnou kalibrací) nad 0,3 bar. Vrací úseky, maximum a čidla,
+ * která v těch chvílích nejčastěji zaostávala (pomalá odezva = typicky vlhkost na membráně nebo stárnutí).
+ */
+export function cellSpread(d: Dive, thr = 0.3) {
+  const s = d.s, cal = cellCalibration(d);
+  if (cal.some((c) => !c)) return null;
+  const dt = d.h.rateS || 5;
+  let max = 0, at = 0, n = 0;
+  const lag = [0, 0, 0], bands: { from: number; to: number }[] = [];
+  for (let i = 0; i < s.t.length; i++) {
+    if (s.depth[i] < 3 || s.t[i] > d.h.diveTimeS) continue;
+    const c = [s.mv1[i] * cal[0]!, s.mv2[i] * cal[1]!, s.mv3[i] * cal[2]!];
+    const sp = Math.max(...c) - Math.min(...c);
+    if (sp > max) { max = sp; at = s.t[i]; }
+    if (sp > thr) {
+      n++;
+      const mx = Math.max(...c);
+      c.forEach((v, k) => { if (mx - v > thr * 0.6) lag[k]++; });
+      const last = bands[bands.length - 1];
+      if (last && s.t[i] - last.to <= dt * 2) last.to = s.t[i]; else bands.push({ from: s.t[i], to: s.t[i] });
+    }
+  }
+  const min = n * dt / 60;
+  const slow = lag.map((x, k) => ({ k: k + 1, x })).filter((x) => x.x >= n * 0.5).map((x) => x.k);
+  return { max: round(max, 2), at, min, slow, bands };
+}
+
 /** Max. parciální tlak dusíku: (okolní tlak − pO₂) × podíl N₂ v inertní části plynu. */
 export function pn2Max(d: Dive): number {
   let mx = 0;
@@ -387,6 +415,8 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     out.push({ level: kind === "po2low" ? "info" : kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
       text: `${as.length}× (${as.map((a) => `${Math.round(a.start / 60)}.–${Math.max(Math.round(a.start / 60), Math.round(a.end / 60))}. min`).join(", ")}), celkem ${min < 1 ? "pod 1 min" : Math.round(min) + " min"}.` });
   }
+  const cs = cellSpread(d);
+  if (cs && cs.min >= 1) out.push({ level: "warn", title: "Čidla se rozjela", text: `Rozdíl mezi O₂ čidly až ${cs.max.toLocaleString("cs-CZ")} bar (${Math.round(cs.at / 60)}. min), nad 0,3 bar celkem ${cs.min.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} min.` + (cs.slow.length ? ` Pomalá odezva čidla ${cs.slow.join(" a ")}.` : "") + " Možná vlhkost na čidlech nebo stárnutí – zkontroluj hlavu a čidla." });
   const pl = co2Plausibility(d);
   if (pl && !pl.ok) out.push({ level: "warn", title: "Čidlo CO₂ nejspíš podhodnocuje", text: `Pod 20 m ukazovalo přesnou nulu ${pl.zeroPct} % času (oříznutá nula) – malé hodnoty CO₂ nevidí. Zkontroluj kalibraci; nízké hodnoty ber s rezervou.` });
   const ef = effortOf(d, th.co2Mbar);

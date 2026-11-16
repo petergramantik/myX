@@ -57,7 +57,10 @@ export function loadGuestDive(id: string): Promise<Dive> {
 
 async function metaOf(raw: RawDive): Promise<Meta> {
   const d = await decodeDive(raw);
-  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum: summarize(d), inj: injections(d).length, cells: cellsOfDive(d), v: META_V };
+  // hloubka po 30 s za prvních 30 min – pro párování společných ponorů podle profilu
+  const prof: number[] = []; let j = 0;
+  for (let t = 0; t <= 1800 && t <= d.h.diveTimeS; t += 30) { while (j + 1 < d.s.t.length && d.s.t[j] < t) j++; prof.push(Math.round(d.s.depth[j] * 10) / 10); }
+  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum: summarize(d), inj: injections(d).length, cells: cellsOfDive(d), v: META_V, prof };
 }
 
 // ---------- start
@@ -274,10 +277,26 @@ export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[]; 
   return out;
 }
 /** Hodiny počítačů se rozcházejí (i o 10 min) – bere se nejbližší ponor buddyho do ±20 min. */
-export const PAIR_S = 1200;
+export const PAIR_S = 1800;
+/** Shoda profilů v prvních 10 minutách mého ponoru (RMSE v m) při nejlepším posunu ±10 min, nebo null. */
+export function profileMatch(m: Meta, g: Meta): number | null {
+  if (!m.prof || !g.prof || m.prof.length < 6 || g.prof.length < 6) return null;
+  let best = Infinity;
+  for (let k = -20; k <= 20; k++) { // posun buddyho v krocích 30 s
+    let e = 0, n = 0;
+    for (let i = 0; i <= 20 && i < m.prof.length; i++) { const j = i + k; if (j < 0 || j >= g.prof.length) continue; e += (m.prof[i] - g.prof[j]) ** 2; n++; }
+    if (n >= 14) best = Math.min(best, Math.sqrt(e / n));
+  }
+  return isFinite(best) ? best : null;
+}
+/** Společný ponor buddyho: začátek do ±30 min (hodiny se rozcházejí) a shoda profilu v prvních 10 minutách (≤ 3 m). */
 export function nearestPair(metas: Meta[], m: Meta): Meta[] {
-  let best: Meta | null = null;
-  for (const g of metas) if (Math.abs(g.start - m.start) <= PAIR_S && (!best || Math.abs(g.start - m.start) < Math.abs(best.start - m.start))) best = g;
+  let best: Meta | null = null, bestE = Infinity;
+  for (const g of metas) {
+    if (Math.abs(g.start - m.start) > PAIR_S) continue;
+    const e = profileMatch(m, g) ?? (Math.abs(g.start - m.start) <= 1200 ? 2.9 : Infinity); // bez profilu jen podle času
+    if (e <= 3 && e < bestE) { best = g; bestE = e; }
+  }
   return best ? [best] : [];
 }
 /** Odhad odchylky hodin počítače buddyho z časů začátku společných ponorů (s, + = jdou napřed). */
