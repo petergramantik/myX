@@ -2,6 +2,7 @@
 import { decodeDive } from "../src/core/shearwater";
 import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpointChanges, o2Doses, DEFAULT_THRESHOLDS } from "../src/core/analysis";
 import { applyCloud } from "../src/app/store";
+import { diveStats, diffRows, conclusion } from "../src/core/compare";
 import { mergeLogbooks, emptyLogbook } from "../src/app/model";
 import { detectCellEvents, cellStatus, cellDiveWarnings, DEFAULT_CELL_TH, type CellDive } from "../src/core/cells";
 import { gzipSync } from "zlib";
@@ -121,6 +122,15 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   const out = applyCloud(lb, new Map([["a", { site: "Hemmoor", buddies: ["Roman", "Dan"], notes: "x" }], ["b", { site: "Lom", buddies: [], notes: "cizí" }]]), new Set(["a", "b"]));
   const sa = out.notes.a, sb = out.notes.b;
   ok(!!sa && out.sites[sa.siteId!].name === "Hemmoor" && sa.buddyIds.length === 2 && sb.note === "moje" && !!sb.siteId, "údaje ze Shearwater Cloud");
+}
+
+{ // porovnání ponorů: stejné ponory = podobná deko, rozdíly se seřadí; párování počítačů se slučuje
+  const sa = diveStats(d), sb = diveStats(d);
+  ok(conclusion("já", "R", sa, sb)[0].startsWith("Dekompresní povinnost byla podobná") && diffRows(sa, sb).every((r) => r.weight === 0), "porovnání stejných ponorů");
+  const sc = { ...sb, ttsMax: sb.ttsMax + 6, ambInt: sb.ambInt + 30, inert: sb.inert + 30 };
+  ok(/U potápěče R byla dekomprese delší.*hloub/.test(conclusion("já", "R", sa, sc)[0]), "závěr: delší deko kvůli hloubce");
+  const l1 = emptyLogbook(), l2 = emptyLogbook(); l2.computers = { B94F4935: { id: "B94F4935", model: "Petrel 3", buddyId: "r", updated: 5 } };
+  ok(mergeLogbooks(l1, l2).computers?.B94F4935?.buddyId === "r", "majitel cizího počítače se synchronizuje");
 }
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }

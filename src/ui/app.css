@@ -268,3 +268,9 @@ img.qr { display: block; margin: 12px auto 4px; background: #fff; padding: 8px; 
 /* 1.12 – cizí log */
 .guestbar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; background: #4a3b16; color: #ffe0a3; font-size: 13px; border-bottom: 1px solid #8a6d2a; }
 .pre { white-space: pre-wrap; }
+/* 1.13 – majitel cizího logu, porovnání */
+.ownerbox { margin: 8px 12px 0; padding: 10px 12px; border: 1px solid #8a6d2a; border-radius: var(--r); background: #2a2414; }
+.ownerbox .picker { margin-top: 8px; }
+table.cmp tr.big td { font-weight: 700; } table.cmp tr.big td:first-child { color: var(--warn); }
+table.cmp tr.small-diff td { color: var(--muted); }
+p.legend { display: flex; gap: 14px; }

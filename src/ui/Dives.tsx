@@ -6,6 +6,7 @@ import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
+import { BuddyDivesCard } from "./Compare";
 import { LineChart, TissueMap } from "./Chart";
 
 const C = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#fff176", "#ef5350"];
@@ -296,6 +297,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
       {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} />}
       <GasUseCard id={id} meta={meta} note={note} />
+      <BuddyDivesCard meta={meta} />
     </>
   );
 }

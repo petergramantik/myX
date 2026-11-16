@@ -276,7 +276,7 @@ export interface Alert { level: "warn" | "bad" | "info"; title: string; text: st
 export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
 
 export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number }
-export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 10 };
+export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 5 };
 
 const DAY = 86400;
 const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC" });
@@ -345,7 +345,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     out.push({ level: kind === "po2low" ? "info" : kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
       text: `${as.length}× (${as.map((a) => `${Math.round(a.start / 60)}.–${Math.max(Math.round(a.start / 60), Math.round(a.end / 60))}. min`).join(", ")}), celkem ${min < 1 ? "pod 1 min" : Math.round(min) + " min"}.` });
   }
-  out.push(...spWarnings(d, sum, th.spLateMin ?? 10));
+  out.push(...spWarnings(d, sum, th.spLateMin ?? 5));
   const mv = [d.s.mv1, d.s.mv2, d.s.mv3];
   mv.forEach((a, k) => {
     const mid = d.s.depth.map((x, i) => (x > 1.5 ? a[i] : null)).filter((x): x is number => x != null);

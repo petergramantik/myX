@@ -4,7 +4,7 @@ import { injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
 import * as db from "./db";
-import { emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
+import { emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
 export interface Pos { lat: number; lon: number; acc: number; at: number }
@@ -18,7 +18,7 @@ export interface State {
   guest: GuestLog | null;  // prohlížený cizí log (jen pro čtení); null = vlastní data
 }
 /** Cizí log uložený v samostatné databázi, nikdy se nesynchronizuje. */
-export interface GuestLog { id: string; name: string; count: number; added: number }
+export interface GuestLog { id: string; name: string; count: number; added: number; serial?: string; model?: string }
 
 let st: State = {
   ready: false, metas: [], lb: emptyLogbook(), pos: null, posErr: null,
@@ -48,6 +48,11 @@ export function loadDive(id: string): Promise<Dive> {
     diveCache.set(id, p);
   }
   return p;
+}
+
+/** Ponor z cizího logu (pro porovnání), bez ohledu na to, zda je cizí log právě otevřený. */
+export function loadGuestDive(id: string): Promise<Dive> {
+  return db.get<RawDive>("raw", id, db.GUEST).then((r) => { if (!r) throw new Error("Ponor cizího logu není v telefonu"); return decodeDive(r); });
 }
 
 async function metaOf(raw: RawDive): Promise<Meta> {
@@ -135,6 +140,60 @@ export function applyCloud(lb0: Logbook, cloud: Map<string, CloudDetail>, ids: S
 
 // ---------- cizí logy (jen k prohlížení, oddělená databáze, bez synchronizace)
 let own: { metas: Meta[]; lb: Logbook } | null = null;
+/** Vlastní logbook a ponory i během prohlížení cizího logu. */
+export const ownLb = (): Logbook => own?.lb ?? st.lb;
+export const ownMetas = (): Meta[] => own?.metas ?? st.metas;
+/** Uloží změnu vlastního logbooku i během prohlížení cizího logu (synchronizace proběhne po zavření). */
+async function saveOwnLb(lb: Logbook) {
+  if (!st.guest) return saveLb(lb);
+  own = { ...own!, lb };
+  await db.put("kv", lb, "lb");
+  set({ lb: { ...st.lb, buddies: lb.buddies, computers: lb.computers, settings: lb.settings } });
+}
+/** Načtené cizí logy s jejich ponory (pro hledání společných ponorů). */
+let guestIndex: { log: GuestLog; metas: Meta[] }[] | null = null;
+export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[] }[]> {
+  if (guestIndex) return guestIndex;
+  const out: { log: GuestLog; metas: Meta[] }[] = [];
+  for (const log of await guestLogs()) { const d = await db.get<{ metas: Meta[] }>("kv", log.id, db.GUEST); if (d) out.push({ log, metas: d.metas }); }
+  guestIndex = out;
+  return out;
+}
+/** Ponory buddyho z cizích logů, které časově odpovídají ponoru (začátek do ±15 min). */
+export async function buddyDivesFor(m: Meta): Promise<{ log: GuestLog; meta: Meta; owner: string | null }[]> {
+  const lb = ownLb();
+  return (await guestIndexLoad()).flatMap(({ log, metas }) => metas.filter((g) => Math.abs(g.start - m.start) <= 900).map((g) => {
+    const c = log.serial ? lb.computers?.[log.serial] : undefined;
+    return { log, meta: g, owner: c?.buddyId ? lb.buddies[c.buddyId]?.name ?? null : null };
+  }));
+}
+export const ownerName = (log: GuestLog): string | null => {
+  const lb = ownLb(); const c = log.serial ? lb.computers?.[log.serial] : undefined;
+  return c?.buddyId ? lb.buddies[c.buddyId]?.name ?? null : null;
+};
+/** Přiřadí cizí počítač (sériové číslo) buddymu; nové jméno založí jako buddyho. Doplní buddyho ke společným ponorům. */
+export async function setComputerOwner(log: GuestLog, buddy: { id?: string; name?: string } | null) {
+  if (!log.serial) return;
+  const lb = structuredClone(ownLb());
+  lb.computers = lb.computers || {};
+  let bid = buddy?.id;
+  if (!bid && buddy?.name) {
+    const n = norm(buddy.name);
+    bid = Object.values(lb.buddies).find((b) => norm(b.name) === n)?.id;
+    if (!bid) { bid = uid(); lb.buddies[bid] = { id: bid, name: buddy.name.trim(), updated: Date.now() }; }
+  }
+  const c: Computer = { id: log.serial, model: log.model || log.name, buddyId: bid, updated: Date.now() };
+  lb.computers[log.serial] = c;
+  if (bid) { // doplnit buddyho k mým ponorům, které se časově shodují s ponory z jeho počítače
+    const g = (await guestIndexLoad()).find((x) => x.log.id === log.id)?.metas || [];
+    for (const m of ownMetas()) {
+      if (!g.some((x) => Math.abs(x.start - m.start) <= 900)) continue;
+      const n = lb.notes[m.id] || { buddyIds: [], note: "", updated: 0 };
+      if (!n.buddyIds.includes(bid)) lb.notes[m.id] = { ...n, buddyIds: [...n.buddyIds, bid], updated: Date.now() };
+    }
+  }
+  await saveOwnLb(lb);
+}
 export async function guestLogs(): Promise<GuestLog[]> {
   return ((await db.get<GuestLog[]>("kv", "logs", db.GUEST)) || []).sort((a, b) => b.added - a.added);
 }
@@ -158,8 +217,11 @@ export async function importGuest(file: File): Promise<GuestLog | null> {
   const cloud = new Map([...readCloudDetails(buf)].map(([k, v]) => [`${id}:${k}`, v]));
   const lb = applyCloud(emptyLogbook(), cloud, new Set(metas.map((m) => m.id)));
   await db.put("kv", { metas, lb }, id, db.GUEST);
-  const log: GuestLog = { id, name: `${model}${serial ? " " + serial : ""}`, count: metas.length, added: Date.now() };
+  const log: GuestLog = { id, name: `${model}${serial ? " " + serial : ""}`, count: metas.length, added: Date.now(), serial: serial.toUpperCase() || undefined, model };
   await db.put("kv", [log, ...(await guestLogs())], "logs", db.GUEST);
+  guestIndex = null;
+  const known = log.serial ? ownLb().computers?.[log.serial] : undefined;
+  if (known?.buddyId) await setComputerOwner(log, { id: known.buddyId }); // stejný počítač už má majitele
   await openGuest(log);
   return log;
 }
@@ -182,6 +244,7 @@ export function closeGuest() {
   diveCache.clear();
   set({ guest: null, metas: own.metas, lb: own.lb });
   own = null;
+  scheduleSync();
 }
 export async function deleteGuest(log: GuestLog) {
   if (st.guest?.id === log.id) closeGuest();
@@ -189,6 +252,7 @@ export async function deleteGuest(log: GuestLog) {
   for (const m of data?.metas || []) await db.del("raw", m.id, db.GUEST);
   await db.del("kv", log.id, db.GUEST);
   await db.put("kv", (await guestLogs()).filter((l) => l.id !== log.id), "logs", db.GUEST);
+  guestIndex = null;
 }
 
 // ---------- rozpracované ponory (založené na lokalitě) a jejich spárování s logem

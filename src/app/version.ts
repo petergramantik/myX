@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.12";
+export const APP_VERSION = "1.13";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.13", date: "16. 11. 2026", title: "Porovnání ponorů s buddym",
+    items: [
+      "Cizí log jde přiřadit buddymu; počítač se pozná podle sériového čísla a příště se přiřadí sám",
+      "Společné ponory: u ponoru odkaz na ponor buddyho a buddy se doplní automaticky",
+      "Porovnání ponorů: grafy přes sebe, tabulka rozdílů a závěr (rozklad rozdílu v dekompresi na hloubku a pO₂)",
+      "Výchozí hranice pozdního přepnutí na vysoký setpoint 5 min",
+    ],
+  },
   {
     version: "1.12", date: "16. 11. 2026", title: "Cizí logy, setpoint a dávkování O₂",
     items: [

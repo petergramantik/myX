@@ -27,7 +27,7 @@ export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
 /** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
 export interface Co2Cal { date: string; gas: string }
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; motto?: boolean; cyl?: { dil: number; o2: number }; updated: number }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; motto?: boolean; cyl?: { dil: number; o2: number }; spLateSet?: boolean; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
@@ -39,7 +39,10 @@ export interface Logbook {
   notes: Record<string, DiveNote>;
   deleted: Record<string, number>; // id smazané/sloučené lokality nebo parťáka → čas
   settings: Settings;
+  computers?: Record<string, Computer>; // sériové číslo cizího počítače → majitel (buddy)
 }
+/** Cizí počítač rozpoznaný podle sériového čísla v logu a jeho majitel. */
+export interface Computer { id: string; model: string; buddyId?: string; updated: number }
 
 export const META_V = 10;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number }
@@ -61,6 +64,9 @@ function mergeMap<T extends { updated: number }>(a: Record<string, T>, b: Record
   return out;
 }
 
+/** Hranici pozdního setpointu bere z výchozí hodnoty, dokud ji uživatel sám nezměnil. */
+const fixSettings = (x: Settings): Settings => (x.spLateSet ? x : { ...x, th: { ...x.th, spLateMin: DEFAULT_ALL_TH.spLateMin } });
+
 export function mergeLogbooks(a: Logbook, b: Logbook): Logbook {
   const deleted = { ...a.deleted };
   for (const [k, t] of Object.entries(b.deleted || {})) deleted[k] = Math.max(deleted[k] || 0, t);
@@ -72,10 +78,11 @@ export function mergeLogbooks(a: Logbook, b: Logbook): Logbook {
     sites: mergeMap(a.sites, b.sites || {}, deleted),
     buddies: mergeMap(a.buddies, b.buddies || {}, deleted),
     notes: mergeMap(a.notes, b.notes || {}, {}),
+    computers: mergeMap(a.computers || {}, b.computers || {}, {}),
     deleted,
-    settings: (b.settings?.updated || 0) > a.settings.updated
+    settings: fixSettings((b.settings?.updated || 0) > a.settings.updated
       ? { ...a.settings, ...b.settings, th: { ...DEFAULT_ALL_TH, ...b.settings.th } }
-      : { ...a.settings, th: { ...DEFAULT_ALL_TH, ...a.settings.th } },
+      : { ...a.settings, th: { ...DEFAULT_ALL_TH, ...a.settings.th } }),
   };
 }
 

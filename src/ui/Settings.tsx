@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
 import { DEFAULT_ALL_TH } from "../app/model";
-import { closeGuest, deleteGuest, exportBackup, guestLogs, importBackup, importGuest, openGuest, saveSettings, syncNow, toast, wipeLocal, type GuestLog } from "../app/store";
+import { OwnerPicker } from "./Owner";
+import { closeGuest, deleteGuest, ownerName, setComputerOwner, exportBackup, guestLogs, importBackup, importGuest, openGuest, saveSettings, syncNow, toast, wipeLocal, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { Card, KV, fmtDate, go, useStore } from "./common";
@@ -39,7 +40,7 @@ export function SettingsScreen() {
 
       <Card title="Upozornění">
         <label>Scrubber – upozornit při zbytku (%)<input inputMode="decimal" defaultValue={th.scrubPct} onBlur={(e) => setTh("scrubPct", e.target.value)} /></label>
-        <label>Setpoint – upozornit na pozdní přepnutí na vysoký po (min)<input inputMode="decimal" defaultValue={th.spLateMin ?? 10} onBlur={(e) => setTh("spLateMin", e.target.value)} /></label>
+        <label>Setpoint – upozornit na pozdní přepnutí na vysoký po (min)<input inputMode="decimal" defaultValue={th.spLateMin ?? 5} onBlur={(e) => { const n = parseFloat(e.target.value.replace(",", ".")); if (!Number.isNaN(n)) saveSettings({ th: { ...th, spLateMin: n }, spLateSet: true }); }} /></label>
         <label>Scrubber – upozornit po dnech od náplně<input inputMode="decimal" defaultValue={th.scrubDays} onBlur={(e) => setTh("scrubDays", e.target.value)} /></label>
         <label>Baterie – rezerva nad prahem varování (V)<input inputMode="decimal" defaultValue={th.batMarginV} onBlur={(e) => setTh("batMarginV", e.target.value)} /></label>
         <label>Čidla – životnost, když u čidla není zadaná (měsíce)<input inputMode="decimal" defaultValue={th.cellLifeM} onBlur={(e) => setTh("cellLifeM", e.target.value)} /></label>
@@ -125,9 +126,10 @@ function GuestCard() {
   const st = useStore();
   const [logs, setLogs] = useState<GuestLog[]>([]);
   const [busy, setBusy] = useState(false);
+  const [ownerFor, setOwnerFor] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const reload = () => guestLogs().then(setLogs);
-  useEffect(() => { reload(); }, [st.guest]);
+  useEffect(() => { reload(); }, [st.guest, st.lb.computers]);
   const pick = async (f?: File) => {
     if (!f) return;
     setBusy(true);
@@ -142,11 +144,13 @@ function GuestCard() {
       <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Otevřít cizí log"}</button>
       {logs.map((l) => (
         <div key={l.id} className="kvline">
-          <span>{l.name} · {l.count} ponorů</span>
+          <span>{ownerName(l) ? <b>{ownerName(l)} · </b> : null}{l.name} · {l.count} ponorů{l.serial && <> · <a onClick={() => setOwnerFor(ownerFor === l.id ? null : l.id)}>{ownerName(l) ? "změnit majitele" : "přiřadit majitele"}</a></>}</span>
           {st.guest?.id === l.id
             ? <button className="btn small" onClick={() => closeGuest()}>Zavřít</button>
             : <button className="btn small" onClick={async () => { await openGuest(l); go({ t: "home" }); }}>Otevřít</button>}
           <button className="btn small" onClick={async () => { if (confirm(`Smazat cizí log ${l.name}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
+          {ownerFor === l.id && <div style={{ width: "100%" }}><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
+            {ownerName(l) && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení</button>}</div>}
         </div>
       ))}
     </Card>

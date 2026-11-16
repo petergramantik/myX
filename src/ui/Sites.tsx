@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getState, mergeInto, remove, toast, upsertBuddy, upsertSite, locate } from "../app/store";
+import { getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
 import { Card, KV, back, fmtDate, go, num, useStore } from "./common";
@@ -170,6 +170,18 @@ export function BuddiesScreen() {
   );
 }
 
+function BuddyComputer({ id }: { id: string }) {
+  const st = useStore();
+  const [logs, setLogs] = useState<GuestLog[]>([]);
+  useEffect(() => { guestLogs().then(setLogs); }, [st.guest]);
+  const comps = Object.values(ownLb().computers || {}).filter((c) => c.buddyId === id);
+  if (!comps.length) return <span className="muted">–</span>;
+  return <>{comps.map((c) => {
+    const log = logs.find((l) => l.serial === c.id);
+    return <div key={c.id}>{c.model} {c.id}{log && st.guest?.id !== log.id && <> · <a onClick={async () => { await openGuest(log); go({ t: "home" }); }}>Otevřít jeho log ›</a></>}</div>;
+  })}</>;
+}
+
 export function BuddyScreen({ id }: { id: string }) {
   const st = useStore();
   const b = st.lb.buddies[id];
@@ -190,6 +202,7 @@ export function BuddyScreen({ id }: { id: string }) {
           ["Společných ponorů", <a onClick={() => go({ t: "dives", buddy: id })}>{dives.length} ›</a>],
           ["Hodin spolu", num(dives.reduce((a, m) => a + m.h.diveTimeS, 0) / 3600, 1)],
           ["Naposledy", dives.length ? fmtDate(dives[dives.length - 1].start) : "–"],
+          ["Počítač", <BuddyComputer id={id} />],
           ["Lokality", Object.entries(sites).sort((a, c) => c[1] - a[1]).map(([s, n]) => `${getState().lb.sites[s]?.name} (${n})`).join(", ") || "–"],
         ]} />
       </Card>

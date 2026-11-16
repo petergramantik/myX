@@ -9,9 +9,11 @@ import { AboutScreen, SettingsScreen } from "./ui/Settings";
 import { DraftScreen } from "./ui/Draft";
 import { CellsScreen } from "./ui/Cells";
 import { BatteriesScreen } from "./ui/Batteries";
-import { closeGuest, createDraft } from "./app/store";
+import { closeGuest, createDraft, ownerName } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
 import { Co2Screen } from "./ui/Cells";
+import { CompareScreen } from "./ui/Compare";
+import { OwnerPicker } from "./ui/Owner";
 import { APP_VERSION } from "./app/version";
 import "./ui/app.css";
 
@@ -39,6 +41,7 @@ function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
     case "bats": return "Baterie";
     case "warn": return "Varování";
     case "co2": return "Čidlo CO₂";
+    case "cmp": return "Porovnání";
   }
 }
 
@@ -58,6 +61,7 @@ function Body({ s }: { s: Screen }) {
     case "bats": return <BatteriesScreen pos={s.pos} />;
     case "warn": return <WarningsScreen />;
     case "co2": return <Co2Screen />;
+    case "cmp": return <CompareScreen id={s.id} other={s.other} />;
   }
 }
 
@@ -94,10 +98,11 @@ function App() {
       </header>
       {st.guest && (
         <div className="guestbar">
-          <span>Prohlížíš cizí log · <b>{st.guest.name}</b> · {st.guest.count} ponorů</span>
+          <span>Prohlížíš log{ownerName(st.guest) ? <>: <b>{ownerName(st.guest)}</b> · {st.guest.name}</> : <> · <b>{st.guest.name}</b></>} · {st.guest.count} ponorů</span>
           <button className="btn small" onClick={() => { closeGuest(); go({ t: "home" }); }}>Zavřít</button>
         </div>
       )}
+      {st.guest && !ownerName(st.guest) && st.guest.serial && <OwnerPicker log={st.guest} />}
       <main onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className={anim} key={s.t + ("id" in s ? s.id : "")} onAnimationEnd={() => setAnim("")}>
         {st.ready ? <Body s={s} /> : <p className="muted center">Načítám…</p>}
       </main>
