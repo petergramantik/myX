@@ -96,7 +96,8 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
             <small>č. {no} · {fmtDate(m.start)}{note?.buddyIds.length ? " · " + note.buddyIds.map((b) => lb.buddies[b]?.name).filter(Boolean).join(", ") : ""}</small>
           </div>
           <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
-          <div className="dr-rate">{cmp.get(m.id) ? <span className="badge">⇄ {cmp.get(m.id)!.with.length + 1}</span> : note?.rating ? RATING[note.rating].icon : m.sum.co2Max != null && m.sum.co2Max >= lb.settings.th.co2Mbar ? <span className="badge bad">CO₂</span> : ""}</div>
+          <div className="dr-rate">{note?.rating ? RATING[note.rating].icon : ""}{cmp.get(m.id) ? <span className="badge">⇄ {cmp.get(m.id)!.with.length + 1}</span> : ""}</div>
+          <DiveTags m={m} />
         </div>
       ))}
       {!rows.length && !drafts.length && <p className="muted center">Žádné ponory</p>}
@@ -158,6 +159,19 @@ const fmtSp = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 
 /** Značky přepnutí setpointu do grafů. */
 function spPins(d: Dive) {
   return setpointChanges(d).map((c) => ({ t: c.t, label: `SP ${fmtSp(c.to)}${c.manual ? "" : "?"}`, color: c.to >= 1 ? "#ffb74d" : c.to < 0.3 ? "#b0bec5" : "#81c784" }));
+}
+
+/** Tagy ponoru v seznamu (jen důležité): CO₂, nevěrohodné čidlo CO₂, vysoké a nízké pO₂, rozjetá čidla. */
+function DiveTags({ m }: { m: Meta }) {
+  const th = useStore().lb.settings.th, x = m.sum;
+  const tags: [string, string][] = [];
+  if ((x.co2Max != null && x.co2Max >= th.co2Mbar && !x.co2Bad) || x.co2AlarmN > 0) tags.push(["bad", `CO₂ ${num(x.co2Max ?? 0, 1)}`]);
+  if (x.co2Bad) tags.push(["warn", "CO₂?"]);
+  if (x.ppo2Max > 1.6 || x.po2HiN > 0) tags.push(["bad", "pO₂ 1,6+"]);
+  if (x.po2LoN > 0) tags.push(["warn", "pO₂ nízké"]);
+  if (x.spreadMin >= 1) tags.push(["warn", "Čidla"]);
+  if (!tags.length) return null;
+  return <div className="dr-tags">{tags.map(([c, t]) => <span key={t} className={"tag " + c}>{t}</span>)}</div>;
 }
 
 /** Návrhy lokality a buddyů z logu buddyho ke stejnému ponoru. */

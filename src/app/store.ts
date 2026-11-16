@@ -72,6 +72,7 @@ export async function init() {
   for (const r of missing) { const m = await metaOf(r); fresh.push(m); await db.put("meta", m); }
   set({ ready: true, metas: sortMetas(fresh), lb: lb ? mergeLogbooks(emptyLogbook(), lb) : emptyLogbook() });
   await autoLinkDrafts();
+  propagateExisting().catch(() => {});
   if (workerUrl() && syncKey()) syncNow();
   else set({ sync: { state: "off", msg: "Synchronizace není nastavená", at: 0 } });
 }
@@ -225,7 +226,7 @@ export async function foreignNames(kind: "buddy" | "site"): Promise<{ name: stri
   return [...out.values()].sort((a, b) => b.n - a.n).map((x) => ({ name: x.name, n: x.n, logs: [...x.logs] }));
 }
 /** Jméno z cizího logu: založit jako mého buddyho/lokalitu (targetId = null), nebo přiřadit k existujícímu. */
-export async function adoptForeign(kind: "buddy" | "site", name: string, targetId: string | null) {
+export async function adoptForeign(kind: "buddy" | "site", name: string, targetId: string | null, keepName?: string): Promise<number> {
   const lb = structuredClone(ownLb());
   let id = targetId;
   if (!id && kind === "buddy" && norm(name) === "ja") id = ME;
@@ -233,10 +234,49 @@ export async function adoptForeign(kind: "buddy" | "site", name: string, targetI
     id = uid();
     if (kind === "buddy") lb.buddies[id] = { id, name, updated: Date.now() };
     else lb.sites[id] = { id, name, updated: Date.now() };
+  } else if (id !== ME && keepName && keepName.trim()) { // zvolený název po sloučení
+    const t = kind === "buddy" ? lb.buddies[id] : lb.sites[id];
+    if (t && t.name !== keepName.trim()) { t.name = keepName.trim(); t.updated = Date.now(); }
   }
   const key = aliasKey(kind, name);
   lb.aliases = { ...(lb.aliases || {}), [key]: { id: key, kind, name, targetId: id, updated: Date.now() } as Alias };
+  const n = await propagate(lb, [lb.aliases[key]]);
   await saveOwnLb(lb);
+  return n;
+}
+
+/**
+ * Propíše přiřazená jména z cizích logů do mých ponorů: lokalitu k ponorům bez lokality, buddyho ke společným ponorům
+ * (vždy můj název). Upravuje lb na místě, vrací počet změněných ponorů.
+ */
+async function propagate(lb: Logbook, aliases: Alias[]): Promise<number> {
+  const ix = await guestIndexLoad();
+  let changed = 0;
+  for (const m of ownMetas()) {
+    for (const { log, metas, lb: g } of ix) {
+      const gm = nearestPair(metas, m)[0];
+      const gn = gm && g.notes[gm.id];
+      if (!gn) continue;
+      const owner = log.serial ? lb.computers?.[log.serial]?.buddyId : undefined;
+      const note = lb.notes[m.id] || { buddyIds: [], note: "", updated: 0 };
+      let next = note;
+      for (const a of aliases) {
+        if (a.targetId === ME) continue;
+        if (a.kind === "site" && !next.siteId && gn.siteId && g.sites[gn.siteId] && norm(g.sites[gn.siteId].name) === norm(a.name)) next = { ...next, siteId: a.targetId };
+        if (a.kind === "buddy" && a.targetId !== owner && !next.buddyIds.includes(a.targetId) && gn.buddyIds.some((b) => g.buddies[b] && norm(g.buddies[b].name) === norm(a.name))) next = { ...next, buddyIds: [...next.buddyIds, a.targetId] };
+      }
+      if (next !== note) { lb.notes[m.id] = { ...next, updated: Date.now() }; changed++; }
+    }
+  }
+  return changed;
+}
+/** Jednorázově propíše už dřív provedená přiřazení (po aktualizaci aplikace). */
+export async function propagateExisting() {
+  if (st.guest || (await db.get("kv", "aliasProp1"))) return;
+  const lb = structuredClone(ownLb());
+  const n = await propagate(lb, Object.values(lb.aliases || {}));
+  if (n) { await saveLb(lb); toast(`Doplněno z logů buddyů k ${n} ponorům`); }
+  await db.put("kv", 1, "aliasProp1");
 }
 
 /** Návrhy od buddyů k mému ponoru: lokalita a buddy zapsaní v jejich logu u stejného ponoru. */
@@ -569,13 +609,21 @@ export async function upsertBuddy(b: Partial<Buddy> & { name: string }): Promise
 }
 
 /** Sloučí lokalitu/parťáka `from` do `into` (ponory se přepíšou, `from` se smaže). */
-export async function mergeInto(kind: "site" | "buddy", from: string, into: string) {
+export async function mergeInto(kind: "site" | "buddy", from: string, into: string, name?: string) {
   const lb = structuredClone(st.lb);
   const now = Date.now();
   for (const [id, n] of Object.entries(lb.notes)) {
     if (kind === "site" && n.siteId === from) lb.notes[id] = { ...n, siteId: into, updated: now };
     if (kind === "buddy" && n.buddyIds.includes(from)) lb.notes[id] = { ...n, buddyIds: [...new Set(n.buddyIds.map((b) => (b === from ? into : b)))], updated: now };
   }
+  for (const [id, dr] of Object.entries(lb.drafts)) {
+    if (kind === "site" && dr.siteId === from) lb.drafts[id] = { ...dr, siteId: into };
+    if (kind === "buddy" && dr.buddyIds.includes(from)) lb.drafts[id] = { ...dr, buddyIds: [...new Set(dr.buddyIds.map((b) => (b === from ? into : b)))] };
+  }
+  for (const [k, a] of Object.entries(lb.aliases || {})) if (a.targetId === from) lb.aliases![k] = { ...a, targetId: into, updated: now };
+  if (kind === "buddy") for (const [k, c] of Object.entries(lb.computers || {})) if (c.buddyId === from) lb.computers![k] = { ...c, buddyId: into, updated: now };
+  const target = kind === "site" ? lb.sites[into] : lb.buddies[into];
+  if (target && name && name.trim() && name.trim() !== target.name) { target.name = name.trim(); target.updated = now; }
   if (kind === "site") delete lb.sites[from]; else delete lb.buddies[from];
   lb.deleted[from] = now;
   await saveLb(lb);

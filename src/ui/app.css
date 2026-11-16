@@ -301,3 +301,8 @@ label.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 1
 .chips label.chip input, label.switch input { width: auto; margin: 0; flex: none; }
 label.switch { white-space: nowrap; }
 tr.muted-row td { color: var(--muted); font-style: italic; }
+/* 1.24 */
+.dive-row { flex-wrap: wrap; } .dr-tags { flex-basis: 100%; display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.tag { font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 6px; border: 1px solid; line-height: 16px; }
+.tag.bad { color: #ff6e66; border-color: var(--bad); } .tag.warn { color: var(--warn); border-color: var(--warn); }
+.namechoice { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }

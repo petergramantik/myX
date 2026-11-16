@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.23";
+export const APP_VERSION = "1.24";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  {
+    version: "1.24", date: "16. 11. 2026", title: "Tagy ponorů a slučování",
+    items: [
+      "Seznam ponorů: tagy CO₂, CO₂?, pO₂ 1,6+, pO₂ nízké, Čidla pod řádkem ponoru",
+      "Přiřazení lokality/buddyho z cizího logu se propíše do tvých ponorů (vždy tvůj název)",
+      "Při slučování volba názvu, který zůstane",
+      "Karta „Z cizích logů“ v B&L je rozbalovací",
+    ],
+  },
   {
     version: "1.23", date: "16. 11. 2026", title: "Rozjetá čidla a párování podle profilu",
     items: [

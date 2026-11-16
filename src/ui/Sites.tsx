@@ -110,7 +110,7 @@ export function SiteScreen({ id }: { id: string }) {
       {c && <WeatherCard lat={c.lat} lon={c.lon} />}
 
       <Card title="Úpravy">
-        <MergeRow items={others.map((x) => ({ id: x.id, name: x.name }))} onMerge={async (into) => { await mergeInto("site", id, into); back(); toast("Lokality sloučeny"); }} />
+        <MergeRow items={others.map((x) => ({ id: x.id, name: x.name }))} current={site.name} onMerge={async (into, nm) => { await mergeInto("site", id, into, nm); back(); toast("Lokality sloučeny"); }} />
         <button className="btn danger" onClick={async () => { if (confirm(`Smazat lokalitu „${s.name}“? Ponory zůstanou bez lokality.`)) { await remove("site", id); back(); } }}>Smazat lokalitu</button>
       </Card>
     </div>
@@ -136,16 +136,33 @@ function SpLinkInput({ onLink, busy }: { onLink: (id: number) => void; busy: boo
   );
 }
 
-function MergeRow({ items, onMerge }: { items: { id: string; name: string }[]; onMerge: (into: string) => void }) {
+/** Sloučení: výběr cíle a názvu, který zůstane (lze upravit). */
+function MergeRow({ items, current, onMerge }: { items: { id: string; name: string }[]; current: string; onMerge: (into: string, name: string) => void }) {
   const [sel, setSel] = useState("");
+  const [name, setName] = useState("");
   if (!items.length) return null;
+  const target = items.find((x) => x.id === sel);
   return (
-    <div className="row">
-      <select value={sel} onChange={(e) => setSel(e.target.value)}>
-        <option value="">Sloučit do…</option>
-        {[...items].sort((a, b) => a.name.localeCompare(b.name, "cs")).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-      </select>
-      <button className="btn" disabled={!sel} onClick={() => onMerge(sel)}>Sloučit</button>
+    <div>
+      <div className="row">
+        <select value={sel} onChange={(e) => { setSel(e.target.value); setName(items.find((x) => x.id === e.target.value)?.name || ""); }}>
+          <option value="">Sloučit do…</option>
+          {[...items].sort((a, b) => a.name.localeCompare(b.name, "cs")).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </select>
+        <button className="btn" disabled={!sel || !name.trim()} onClick={() => onMerge(sel, name)}>Sloučit</button>
+      </div>
+      {target && <NameChoice a={target.name} b={current} value={name} onChange={setName} />}
+    </div>
+  );
+}
+
+/** Volba názvu po sloučení: jeden ze dvou, nebo vlastní úprava. */
+export function NameChoice({ a, b, value, onChange }: { a: string; b: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="namechoice">
+      <small className="muted">Ponechat název:</small>
+      {[...new Set([a, b])].map((n) => <label key={n} className="check"><input type="radio" checked={value === n} onChange={() => onChange(n)} /> {n}</label>)}
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Vlastní název" />
     </div>
   );
 }
@@ -178,31 +195,51 @@ export function BuddiesScreen() {
 function ForeignNames({ kind }: { kind: "buddy" | "site" }) {
   const st = useStore();
   const [list, setList] = useState<Awaited<ReturnType<typeof foreignNames>>>([]);
+  const [open, setOpen] = useState(false);
   const [pick, setPick] = useState<string | null>(null);
+  const [target, setTarget] = useState<{ id: string; name: string } | null>(null);
+  const [nm, setNm] = useState("");
   const reload = () => foreignNames(kind).then(setList);
   useEffect(() => { reload(); }, [st.lb.aliases, st.lb.buddies, st.lb.sites, st.guest]);
   if (!list.length) return null;
   const mine = Object.values(kind === "buddy" ? ownLb().buddies : ownLb().sites).sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  const done = async (name: string, id: string | null, keep?: string) => {
+    const n = await adoptForeign(kind, name, id, keep);
+    setPick(null); setTarget(null); reload();
+    if (n) toast(`${kind === "site" ? "Lokalita doplněna" : "Buddy doplněn"} k ${n} ponorům`);
+  };
   return (
-    <Card title="Z cizích logů">
-      <p className="note">{kind === "buddy" ? "Buddy" : "Lokality"} zapsané v načtených cizích logech. K tvým se neukládají, dokud je nepřidáš nebo nepřiřadíš k tvému záznamu. Přiřazení se zapamatuje i pro další logy.</p>
-      {list.map((x) => (
-        <div key={x.name} className="foreign">
-          <div className="kvline"><span><b>{x.name}</b> <small className="muted">{x.n}× · {x.logs.join(", ")}</small></span>
-            <span className="row">
-              <button className="btn small" onClick={async () => { await adoptForeign(kind, x.name, null); reload(); }}>Přidat k mým</button>
-              <button className="btn small" onClick={() => setPick(pick === x.name ? null : x.name)}>Je to…</button>
-              {kind === "buddy" && <button className="btn small" onClick={async () => { await adoptForeign("buddy", x.name, ME); reload(); }}>To jsem já</button>}
-            </span>
+    <section className="panel">
+      <button className="panel-h" onClick={() => setOpen(!open)}>
+        <span className="ph-main">Z cizích logů ({list.length})</span>
+        <span className="ph-sub">{kind === "buddy" ? "Buddy" : "Lokality"} zapsané v lozích buddyů – přidej je nebo přiřaď k tvým</span>
+        <span className="ph-arrow">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && <div className="panel-b">
+        {list.map((x) => (
+          <div key={x.name} className="foreign">
+            <div className="kvline"><span><b>{x.name}</b> <small className="muted">{x.n}× · {x.logs.join(", ")}</small></span>
+              <span className="row">
+                <button className="btn small" onClick={() => done(x.name, null)}>Přidat k mým</button>
+                <button className="btn small" onClick={() => { setPick(pick === x.name ? null : x.name); setTarget(null); }}>Je to…</button>
+                {kind === "buddy" && <button className="btn small" onClick={() => done(x.name, ME)}>To jsem já</button>}
+              </span>
+            </div>
+            {pick === x.name && !target && (
+              <Picker items={mine.map((m) => ({ id: m.id, name: m.name }))} placeholder={kind === "buddy" ? "Vyber mého buddyho" : "Vyber mou lokalitu"}
+                onPick={(id) => { const t = mine.find((m) => m.id === id)!; setTarget({ id, name: t.name }); setNm(t.name); }}
+                onCreate={() => done(x.name, null)} />
+            )}
+            {pick === x.name && target && (
+              <div>
+                <NameChoice a={target.name} b={x.name} value={nm} onChange={setNm} />
+                <div className="row"><button className="btn primary" disabled={!nm.trim()} onClick={() => done(x.name, target.id, nm)}>Sloučit</button><button className="btn" onClick={() => setTarget(null)}>Zpět</button></div>
+              </div>
+            )}
           </div>
-          {pick === x.name && (
-            <Picker items={mine.map((m) => ({ id: m.id, name: m.name }))} placeholder={kind === "buddy" ? "Vyber mého buddyho" : "Vyber mou lokalitu"}
-              onPick={async (id) => { await adoptForeign(kind, x.name, id); setPick(null); reload(); }}
-              onCreate={async () => { await adoptForeign(kind, x.name, null); setPick(null); reload(); }} />
-          )}
-        </div>
-      ))}
-    </Card>
+        ))}
+      </div>}
+    </section>
   );
 }
 
@@ -253,7 +290,7 @@ export function BuddyScreen({ id }: { id: string }) {
         ]} />
       </Card>
       <Card title="Úpravy">
-        <MergeRow items={Object.values(st.lb.buddies).filter((x) => x.id !== id)} onMerge={async (into) => { await mergeInto("buddy", id, into); back(); toast("Sloučeno"); }} />
+        <MergeRow items={Object.values(st.lb.buddies).filter((x) => x.id !== id)} current={b.name} onMerge={async (into, nm) => { await mergeInto("buddy", id, into, nm); back(); toast("Sloučeno"); }} />
         <button className="btn danger" onClick={async () => { if (confirm(`Smazat buddyho „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
       </Card>
     </div>

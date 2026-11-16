@@ -5,7 +5,7 @@ import type { Dive, Header } from "./shearwater";
 export interface Summary {
   avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[]; dilUse: GasUse; o2Use: GasUse; pn2Max: number;
   btnN: number; menuN: number; offMainS: number;
-  densMax: number; vents: number; co2Bad: boolean;
+  densMax: number; vents: number; co2Bad: boolean; po2HiN: number; po2LoN: number; spreadMin: number;
   sp: SpChange[]; dose: { sol: number; man: number; amb: number; dil: number; manPreSw: number };
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
@@ -291,6 +291,10 @@ export function summarize(d: Dive): Summary {
     densMax: Math.max(0, ...gasDensity(d).filter((x): x is number => x != null)),
     vents: dilVents(d).length,
     co2Bad: co2Plausibility(d)?.ok === false,
+    po2HiN: d.alarms.filter((a) => a.kind === "po2high").length,
+    // nízké pO₂ jen pod vodou (ne na hladině) a ne při setpointu 0,19 před výstupem
+    po2LoN: d.alarms.filter((a) => { if (a.kind !== "po2low") return false; const i = d.s.t.findIndex((t) => t >= a.start); return i >= 0 && d.s.depth[i] >= 1.5 && d.s.sp[i] >= 0.3; }).length,
+    spreadMin: cellSpread(d)?.min ?? 0,
     dilUse: pressureUse(d.s.t, d.s.dil, d.s.depth, d.h.diveTimeS),
     o2Use: pressureUse(d.s.t, d.s.o2p, d.s.depth, d.h.diveTimeS),
     co2AlarmN: d.alarms.filter((a) => a.kind === "co2").length,
