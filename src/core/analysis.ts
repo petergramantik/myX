@@ -375,8 +375,8 @@ export interface Alert { level: "warn" | "bad" | "info"; title: string; text: st
 /** Minuty jako „4 h 41 min“. */
 export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
 
-export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number; spOsc?: number; spDescM?: number; spBelow?: number; spAbove?: number; po2Lo?: number; po2LoMin?: number; po2Hypo?: number; po2LoWarnS?: number; po2LoBadS?: number }
-export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 5, spOsc: 3, spDescM: 6, spBelow: 0.15, spAbove: 0.2, po2Lo: 0.4, po2LoMin: 0.3, po2Hypo: 0.21, po2LoWarnS: 30, po2LoBadS: 120 };
+export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number; spOsc?: number; spDescM?: number; spBelow?: number; spAbove?: number; po2Lo?: number; po2LoMin?: number; po2Hypo?: number; po2LoWarnS?: number; po2LoBadS?: number; pn2Hot?: number }
+export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 5, spOsc: 3, spDescM: 6, spBelow: 0.15, spAbove: 0.2, po2Lo: 0.4, po2LoMin: 0.3, po2Hypo: 0.21, po2LoWarnS: 30, po2LoBadS: 120, pn2Hot: 3.16 };
 
 const DAY = 86400;
 const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC" });

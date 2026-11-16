@@ -60,6 +60,7 @@ export function SettingsScreen() {
         <label>pO₂ při zanoření – varovat po (s pod prahem)<input inputMode="decimal" defaultValue={th.po2LoWarnS ?? 30} onBlur={(e) => setTh("po2LoWarnS", e.target.value)} /></label>
         <label>Hypoxie? – minimum pod (bar)<input inputMode="decimal" defaultValue={th.po2Hypo ?? 0.21} onBlur={(e) => setTh("po2Hypo", e.target.value)} /></label>
         <label>Hypoxie? – pod prahem déle než (s)<input inputMode="decimal" defaultValue={th.po2LoBadS ?? 120} onBlur={(e) => setTh("po2LoBadS", e.target.value)} /></label>
+        <label>pN₂ – zvýraznit nad (bar; END ≈ {Math.round(((th.pn2Hot ?? 3.16) / 0.79 - 1) * 10)} m)<input inputMode="decimal" defaultValue={th.pn2Hot ?? 3.16} onBlur={(e) => setTh("pn2Hot", e.target.value)} /></label>
         <label>CO₂ – podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
           <input type="date" value={manual ? new Date(manual * 1000).toISOString().slice(0, 10) : ""} onChange={(e) => saveSettings({ manualFill: e.target.value ? Date.parse(e.target.value + "T12:00:00Z") / 1000 : null })} />

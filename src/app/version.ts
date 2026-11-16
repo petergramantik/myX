@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.25.4";
+export const APP_VERSION = "1.25.5";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.25.5", date: "2026-11-16", title: "Hranice pN₂", items: [
+    "Max. pN₂ se zvýrazní nad 3,16 bar (END 30 m); hranice jde nastavit v Nastavení → Upozornění.",
+  ] },
   { version: "1.25.4", date: "2026-11-16", title: "Seznam ponorů – plyn, tagy a hodnocení dole", items: [
     "Plné zobrazení: nahoře lokalita s hloubkou a dobou, pak buddyové s ⇄, dole plyn, tagy a hodnocení.",
   ] },
