@@ -334,3 +334,10 @@ tr.muted-row td { color: var(--muted); font-style: italic; }
 .dive-row.compact .dr-main b { font-size: 14px; }
 .dive-row.compact .dr-num { font-size: 20px; }
 .dive-row.compact .dr-rate { width: auto; font-size: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+/* 1.25.2 */
+.dr-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.dr-chips .dr-tags { flex-basis: auto; margin: 0 0 0 6px; }
+.dr-num.col { font-size: 24px; line-height: 1.1; }
+.dr-num.fixed span { display: inline-block; text-align: right; }
+.dr-num.fixed { gap: 6px; } .dr-num.fixed span:first-child { width: 66px; } .dr-num.fixed span:last-child { width: 58px; }
+.dive-row.compact .dr-rate { width: 40px; flex: none; }
