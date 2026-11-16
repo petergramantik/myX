@@ -240,7 +240,7 @@ export async function adoptForeign(kind: "buddy" | "site", name: string, targetI
   }
   const key = aliasKey(kind, name);
   lb.aliases = { ...(lb.aliases || {}), [key]: { id: key, kind, name, targetId: id, updated: Date.now() } as Alias };
-  const n = await propagate(lb, [lb.aliases[key]]);
+  const n = await propagate(lb);
   await saveOwnLb(lb);
   return n;
 }
@@ -249,7 +249,7 @@ export async function adoptForeign(kind: "buddy" | "site", name: string, targetI
  * Propíše přiřazená jména z cizích logů do mých ponorů: lokalitu k ponorům bez lokality, buddyho ke společným ponorům
  * (vždy můj název). Upravuje lb na místě, vrací počet změněných ponorů.
  */
-async function propagate(lb: Logbook, aliases: Alias[]): Promise<number> {
+async function propagate(lb: Logbook): Promise<number> {
   const ix = await guestIndexLoad();
   let changed = 0;
   for (const m of ownMetas()) {
@@ -260,10 +260,16 @@ async function propagate(lb: Logbook, aliases: Alias[]): Promise<number> {
       const owner = log.serial ? lb.computers?.[log.serial]?.buddyId : undefined;
       const note = lb.notes[m.id] || { buddyIds: [], note: "", updated: 0 };
       let next = note;
-      for (const a of aliases) {
-        if (a.targetId === ME) continue;
-        if (a.kind === "site" && !next.siteId && gn.siteId && g.sites[gn.siteId] && norm(g.sites[gn.siteId].name) === norm(a.name)) next = { ...next, siteId: a.targetId };
-        if (a.kind === "buddy" && a.targetId !== owner && !next.buddyIds.includes(a.targetId) && gn.buddyIds.some((b) => g.buddies[b] && norm(g.buddies[b].name) === norm(a.name))) next = { ...next, buddyIds: [...next.buddyIds, a.targetId] };
+      // lokalita: přiřazení (alias) nebo přesná shoda s mojí lokalitou → vždy moje lokalita
+      const sn = gn.siteId ? g.sites[gn.siteId]?.name : undefined;
+      const sid = sn ? resolveForeign("site", sn, lb) : null;
+      if (!next.siteId && sid && sid !== ME && lb.sites[sid]) next = { ...next, siteId: sid };
+      for (const b of gn.buddyIds) {
+        const bn = g.buddies[b]?.name; if (!bn) continue;
+        const bid = resolveForeign("buddy", bn, lb);
+        if (!bid || bid === ME || bid === owner || !lb.buddies[bid] || next.buddyIds.includes(bid)) continue;
+        if (owner && norm(lb.buddies[owner]?.name || "") === norm(bn)) continue;
+        next = { ...next, buddyIds: [...next.buddyIds, bid] };
       }
       if (next !== note) { lb.notes[m.id] = { ...next, updated: Date.now() }; changed++; }
     }
@@ -272,11 +278,11 @@ async function propagate(lb: Logbook, aliases: Alias[]): Promise<number> {
 }
 /** Jednorázově propíše už dřív provedená přiřazení (po aktualizaci aplikace). */
 export async function propagateExisting() {
-  if (st.guest || (await db.get("kv", "aliasProp1"))) return;
+  if (st.guest || (await db.get("kv", "aliasProp2"))) return;
   const lb = structuredClone(ownLb());
-  const n = await propagate(lb, Object.values(lb.aliases || {}));
+  const n = await propagate(lb);
   if (n) { await saveLb(lb); toast(`Doplněno z logů buddyů k ${n} ponorům`); }
-  await db.put("kv", 1, "aliasProp1");
+  await db.put("kv", 1, "aliasProp2");
 }
 
 /** Návrhy od buddyů k mému ponoru: lokalita a buddy zapsaní v jejich logu u stejného ponoru. */
@@ -624,9 +630,14 @@ export async function mergeInto(kind: "site" | "buddy", from: string, into: stri
   if (kind === "buddy") for (const [k, c] of Object.entries(lb.computers || {})) if (c.buddyId === from) lb.computers![k] = { ...c, buddyId: into, updated: now };
   const target = kind === "site" ? lb.sites[into] : lb.buddies[into];
   if (target && name && name.trim() && name.trim() !== target.name) { target.name = name.trim(); target.updated = now; }
+  // původní název si zapamatuj jako přiřazení k cíli (jména z logů buddyů se pak propíšou sem)
+  const old = kind === "site" ? lb.sites[from] : lb.buddies[from];
+  if (old && norm(old.name) !== norm(target?.name || "")) { const key = aliasKey(kind, old.name); lb.aliases = { ...(lb.aliases || {}), [key]: { id: key, kind, name: old.name, targetId: into, updated: now } as Alias }; }
   if (kind === "site") delete lb.sites[from]; else delete lb.buddies[from];
   lb.deleted[from] = now;
+  const n = st.guest ? 0 : await propagate(lb);
   await saveLb(lb);
+  if (n) toast(`Doplněno z logů buddyů k ${n} ponorům`);
 }
 export async function remove(kind: "site" | "buddy", id: string) {
   const lb = structuredClone(st.lb);

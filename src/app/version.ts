@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.24.4";
+export const APP_VERSION = "1.24.5";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.24.5", date: "2026-11-16", title: "Oprava propisování lokalit z logů buddyů", items: [
+    "Sloučení lokalit / buddyů si zapamatuje původní název a propíše ho do společných ponorů.",
+    "Lokalita a buddy z buddyho logu se propíšou i při přesné shodě s mým názvem.",
+    "Jednorázové doplnění všech společných ponorů po aktualizaci.",
+  ] },
   { version: "1.24.4", date: "2026-11-16", title: "Kompaktní seznam ponorů", items: [
     "Přepínač ☰ / ≡ (plné / kompaktní zobrazení) vpravo v řádku filtrů; volba se pamatuje.",
     "Kompaktní zobrazení skryje plyn a tagy, problém naznačí červený nebo žlutý rámeček řádku.",
