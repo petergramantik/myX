@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, cellSpread, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
-import { ME, PAIR_S, adoptForeign, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
+import { ME, adoptForeign, nearestPair, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
 import { cellDiveWarnings } from "../core/cells";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
@@ -41,7 +41,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   useEffect(() => { if (!st.guest) commonDives(st.metas).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [st.metas, st.guest, st.guestRev, lb.computers]);
   // u cizího logu: ponory, ke kterým mám svůj ponor (začátek do ±15 min)
   const mine = st.guest ? ownMetas() : [];
-  const common = (m: Meta) => mine.some((x) => Math.abs(x.start - m.start) <= PAIR_S);
+  const common = (m: Meta) => mine.some((x) => nearestPair([m], x).length > 0);
   const n = norm(q);
   const match = (note: { siteId?: string; buddyIds: string[]; note: string; rating?: string } | undefined, date: number) => {
     if (site && note?.siteId !== site) return false;

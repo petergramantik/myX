@@ -75,7 +75,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   const sections = D.length === 2 ? conclusionSections(N[0], N[1], S[0], S[1], deeperWindow(D[0], D[1], offs[1])) : groupSections(N, S);
   const clockInfo = all.slice(1).map((_, k) => {
     const l = lags[k + 1], who = names[k + 1], diff = l.clock - l.real, a = Math.abs(diff);
-    return { who, bad: l.rmse > 3, rmse: l.rmse, txt: l.rmse > 3 ? "≠ profil" : `${diff >= 0 ? "+" : "−"}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}` };
+    return { who, bad: l.rmse > 3, rmse: l.rmse, txt: l.rmse > 3 ? "≠ profil" : `${diff >= 0 ? "+" : "−"}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}${Math.abs(a - 3600) <= 900 ? " (1 h – letní/zimní čas)" : ""}` };
   });
   const hasCo2 = D.some((d) => d.s.co2.some((v) => v != null && v > 0));
   return (

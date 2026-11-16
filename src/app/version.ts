@@ -1,9 +1,16 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.24.8";
+export const APP_VERSION = "1.24.9";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.24.9", date: "2026-11-16", title: "Párování při posunu hodin, oprava detailu lokality", items: [
+    "Oprava: detail lokality padal do prázdné obrazovky.",
+    "Při pádu obrazovky se ukáže hláška s tlačítky Zpět / Znovu načíst.",
+    "Společné ponory se párují i při posunu hodin o hodinu (letní/zimní čas), když sedí profil.",
+    "Posun o hodinu je u hodin buddyho označen.",
+    "Po aktualizaci se jednou doplní buddy a lokality k nově spárovaným ponorům.",
+  ] },
   { version: "1.24.8", date: "2026-11-16", title: "B&L: moje nahoře, cizí pod nimi", items: [
     "Moji buddyové a lokality jsou nahoře, karta „Z cizích logů“ pod nimi.",
     "V kartě cizích jmen je důraz na jméno, tlačítka jsou menší.",

@@ -266,6 +266,7 @@ async function propagate(lb: Logbook): Promise<number> {
       const owner = log.serial ? lb.computers?.[log.serial]?.buddyId : undefined;
       const note = lb.notes[m.id] || { buddyIds: [], note: "", updated: 0 };
       let next = note;
+      if (owner && owner !== ME && lb.buddies[owner] && !next.buddyIds.includes(owner)) next = { ...next, buddyIds: [...next.buddyIds, owner] };
       // lokalita: přiřazení (alias) nebo přesná shoda s mojí lokalitou → vždy moje lokalita
       const sn = gn.siteId ? g.sites[gn.siteId]?.name : undefined;
       const sid = sn ? resolveForeign("site", sn, lb) : null;
@@ -291,11 +292,11 @@ async function cleanupForeign() {
 }
 /** Jednorázově propíše už dřív provedená přiřazení (po aktualizaci aplikace). */
 export async function propagateExisting() {
-  if (st.guest || (await db.get("kv", "aliasProp2"))) return;
+  if (st.guest || (await db.get("kv", "aliasProp3"))) return;
   const lb = structuredClone(ownLb());
   const n = await propagate(lb);
   if (n) { await saveLb(lb); toast(`Doplněno z logů buddyů k ${n} ponorům`); }
-  await db.put("kv", 1, "aliasProp2");
+  await db.put("kv", 1, "aliasProp3");
 }
 
 /** Návrhy od buddyů k mému ponoru: lokalita a buddy zapsaní v jejich logu u stejného ponoru. */
@@ -335,8 +336,10 @@ export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[]; 
   guestIndex = out;
   return out;
 }
-/** Hodiny počítačů se rozcházejí (i o 10 min) – bere se nejbližší ponor buddyho do ±20 min. */
-export const PAIR_S = 1800;
+/** Max. rozdíl začátků pro spárování podle profilu – hodiny se rozcházejí o minuty a kolem změny letního času i o hodinu. */
+export const PAIR_S = 5400;
+/** Bez profilu (nelze porovnat) se páruje jen podle času do ±20 min. */
+const PAIR_TIME_S = 1200;
 /** Shoda profilů v prvních 10 minutách mého ponoru (RMSE v m) při nejlepším posunu ±10 min, nebo null. */
 export function profileMatch(m: Meta, g: Meta): number | null {
   if (!m.prof || !g.prof || m.prof.length < 6 || g.prof.length < 6) return null;
@@ -348,12 +351,13 @@ export function profileMatch(m: Meta, g: Meta): number | null {
   }
   return isFinite(best) ? best : null;
 }
-/** Společný ponor buddyho: začátek do ±30 min (hodiny se rozcházejí) a shoda profilu v prvních 10 minutách (≤ 3 m). */
+/** Společný ponor buddyho: začátek do ±90 min (posun hodin i o hodinu) a shoda profilu v prvních 10 minutách (≤ 3 m);
+ *  bez profilu jen podle času do ±20 min. Z více kandidátů vyhrává nejlepší shoda profilu. */
 export function nearestPair(metas: Meta[], m: Meta): Meta[] {
   let best: Meta | null = null, bestE = Infinity;
   for (const g of metas) {
     if (Math.abs(g.start - m.start) > PAIR_S) continue;
-    const e = profileMatch(m, g) ?? (Math.abs(g.start - m.start) <= 1200 ? 2.9 : Infinity); // bez profilu jen podle času
+    const e = profileMatch(m, g) ?? (Math.abs(g.start - m.start) <= PAIR_TIME_S ? 2.9 : Infinity); // bez profilu jen podle času
     if (e <= 3 && e < bestE) { best = g; bestE = e; }
   }
   return best ? [best] : [];
@@ -458,7 +462,7 @@ export async function takeShared(): Promise<{ log: GuestLog | null; last: Meta |
   if (!log) return { log: null, last: [...st.metas].sort((a, b) => b.start - a.start)[0] || null, mine: null, own: res.own };
   await openGuest(log);
   const last = [...st.metas].sort((a, b) => b.start - a.start)[0] || null;
-  const mine = last ? ownMetas().find((m) => Math.abs(m.start - last.start) <= PAIR_S) || null : null;
+  const mine = last ? ownMetas().find((m) => nearestPair([last], m).length > 0) || null : null;
   return { log, last, mine, own: res.own };
 }
 

@@ -203,5 +203,16 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(!m.sites.s1 && !m.notes.d1 && !m.aliases!["site:a"] && !m.computers!.C1, "stará data se po resetu synchronizací nevrátí");
 }
 
+// ---- párování při posunu hodin o hodinu (letní/zimní čas)
+{
+  const { nearestPair } = await import("../src/app/store");
+  const prof = [0, 4, 4.8, 5, 5, 4.9, 5.4, 9.8, 14.9, 15, 15.2, 14.8, 15, 15, 15, 14, 13, 12, 12, 12, 12, 12];
+  const flat = prof.map(() => 30);
+  const m: any = { id: "m", start: 100000, prof }, g1: any = { id: "g1", start: 100000 - 56 * 60, prof }, g2: any = { id: "g2", start: 100000 + 10 * 60, prof: flat };
+  ok(nearestPair([g1, g2], m)[0]?.id === "g1", "spáruje se i s posunem hodin −56 min, když sedí profil");
+  ok(nearestPair([{ id: "x", start: 100000 + 100 * 60, prof }] as any, m).length === 0, "mimo ±90 min se nepáruje");
+  ok(nearestPair([{ id: "y", start: 100000 + 40 * 60 }] as any, { id: "m", start: 100000 } as any).length === 0, "bez profilu jen do ±20 min");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

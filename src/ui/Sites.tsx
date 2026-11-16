@@ -110,7 +110,7 @@ export function SiteScreen({ id }: { id: string }) {
       {c && <WeatherCard lat={c.lat} lon={c.lon} />}
 
       <Card title="Úpravy">
-        <MergeRow items={others.map((x) => ({ id: x.id, name: x.name }))} current={site.name} onMerge={async (into, nm) => { await mergeInto("site", id, into, nm); back(); toast("Lokality sloučeny"); }} />
+        <MergeRow items={others.map((x) => ({ id: x.id, name: x.name }))} current={s.name} onMerge={async (into, nm) => { await mergeInto("site", id, into, nm); back(); toast("Lokality sloučeny"); }} />
         <button className="btn danger" onClick={async () => { if (confirm(`Smazat lokalitu „${s.name}“? Ponory zůstanou bez lokality.`)) { await remove("site", id); back(); } }}>Smazat lokalitu</button>
       </Card>
     </div>
@@ -249,7 +249,7 @@ function Drift({ serial }: { serial: string }) {
   const [d, setD] = useState<{ at: number; diff: number }[]>([]);
   useEffect(() => { clockDrift(serial).then(setD); }, [serial]);
   if (!d.length) return null;
-  const f = (s: number) => `${s >= 0 ? "+" : "−"}${Math.floor(Math.abs(s) / 60)}:${String(Math.abs(s) % 60).padStart(2, "0")}`;
+  const f = (s: number) => `${s >= 0 ? "+" : "−"}${Math.floor(Math.abs(s) / 60)}:${String(Math.abs(s) % 60).padStart(2, "0")}${Math.abs(Math.abs(s) - 3600) <= 900 ? " (1 h)" : ""}`;
   const last = d[d.length - 1];
   return <div className="small muted">Hodiny: naposledy {f(last.diff)} min ({fmtDate(last.at)}){d.length > 1 ? ` · vývoj: ${d.slice(-6).map((x) => f(x.diff)).join(" → ")}` : ""}<br />Odhad z času začátku společných ponorů; kladné = jdou napřed.</div>;
 }

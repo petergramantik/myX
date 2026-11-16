@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { init, locate, scheduleSync, syncNow, takeShared, toast } from "./app/store";
 import { back, go, tab, useScreen, useStore, type Screen } from "./ui/common";
@@ -16,6 +16,21 @@ import { CompareHub, CompareScreen } from "./ui/Compare";
 import { OwnerPicker } from "./ui/Owner";
 import { APP_VERSION } from "./app/version";
 import "./ui/app.css";
+
+/** Pád obrazovky nesmí nechat prázdnou zaseknutou stránku. */
+class Guard extends Component<{ children: ReactNode }, { err: Error | null }> {
+  state = { err: null as Error | null };
+  static getDerivedStateFromError(err: Error) { return { err }; }
+  render() {
+    const e = this.state.err;
+    if (!e) return this.props.children;
+    return (
+      <div className="screen"><div className="alert bad"><b>Něco se pokazilo</b><div className="small">{e.message}</div></div>
+        <div className="row"><button className="btn" onClick={() => { this.setState({ err: null }); back(); }}>Zpět</button><button className="btn" onClick={() => location.reload()}>Znovu načíst</button></div>
+      </div>
+    );
+  }
+}
 
 const TABS: [Screen, string, string][] = [
   [{ t: "home" }, "Přehled", "◉"], [{ t: "dives" }, "Ponory", "≋"], [{ t: "buddies" }, "B&L", "☺"],
@@ -117,7 +132,7 @@ function App() {
       )}
       {st.guest && !ownerName(st.guest) && st.guest.serial && <OwnerPicker log={st.guest} />}
       <main onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className={anim} key={s.t + ("id" in s ? s.id : "")} onAnimationEnd={() => setAnim("")}>
-        {st.ready ? <Body s={s} /> : <p className="muted center">Načítám…</p>}
+        {st.ready ? <Guard><Body s={s} /></Guard> : <p className="muted center">Načítám…</p>}
       </main>
       <nav className="tabs-bottom">
         {TABS.map(([t, l, ic]) => (
