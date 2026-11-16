@@ -81,7 +81,7 @@ export function mergeLogbooks(a: Logbook, b: Logbook): Logbook {
     answered: mergeMap(a.answered || {}, b.answered || {}, {}),
     sites: mergeMap(a.sites, b.sites || {}, deleted),
     buddies: mergeMap(a.buddies, b.buddies || {}, deleted),
-    notes: mergeMap(a.notes, b.notes || {}, {}),
+    notes: mergeMap(a.notes, b.notes || {}, deleted),
     computers: mergeMap(a.computers || {}, b.computers || {}, {}),
     aliases: mergeMap(a.aliases || {}, b.aliases || {}, deleted),
     deleted,
@@ -104,3 +104,29 @@ export function distKm(a: { lat: number; lon: number }, b: { lat: number; lon: n
 
 export const siteCoords = (s: Site): { lat: number; lon: number } | null =>
   s.lat != null && s.lon != null ? { lat: s.lat, lon: s.lon } : s.sp?.lat != null && s.sp?.lon != null ? { lat: s.sp.lat, lon: s.sp.lon } : null;
+
+/**
+ * Úklid mého logbooku od dat z cizích logů (ponory cizích logů mají id „log:ponor“): odstraní jejich záznamy
+ * a lokality / buddye, které používaly jen ony (ne ty s mým ponorem, rozpracovaným ponorem, přiřazením nebo počítačem).
+ */
+export function cleanForeign(lb0: Logbook, ownIds: Set<string>, now = Date.now()): { lb: Logbook; notes: number; names: string[] } {
+  const lb: Logbook = { ...lb0, notes: { ...lb0.notes }, sites: { ...lb0.sites }, buddies: { ...lb0.buddies }, deleted: { ...lb0.deleted } };
+  const bad = Object.keys(lb.notes).filter((id) => id.includes(":") && !ownIds.has(id));
+  if (!bad.length) return { lb: lb0, notes: 0, names: [] };
+  const susp = new Set<string>();
+  for (const id of bad) { const n = lb.notes[id]; if (n.siteId) susp.add(n.siteId); n.buddyIds.forEach((b) => susp.add(b)); delete lb.notes[id]; lb.deleted[id] = now; }
+  const used = new Set<string>();
+  for (const n of Object.values(lb.notes)) { if (n.siteId) used.add(n.siteId); n.buddyIds.forEach((b) => used.add(b)); }
+  for (const d of Object.values(lb.drafts || {})) { if (d.siteId) used.add(d.siteId); d.buddyIds.forEach((b) => used.add(b)); }
+  for (const a of Object.values(lb.aliases || {})) used.add(a.targetId);
+  for (const c of Object.values(lb.computers || {})) if (c.buddyId) used.add(c.buddyId);
+  const names: string[] = [];
+  for (const id of susp) {
+    if (used.has(id)) continue;
+    const x = lb.sites[id] || lb.buddies[id];
+    if (!x) continue;
+    names.push(x.name);
+    delete lb.sites[id]; delete lb.buddies[id]; lb.deleted[id] = now;
+  }
+  return { lb, notes: bad.length, names };
+}

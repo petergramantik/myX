@@ -37,8 +37,8 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
       }
       setSugSite(out);
     })();
-  }, [st.metas, st.guest, lb.notes, lb.aliases]);
-  useEffect(() => { if (!st.guest) commonDives(st.metas).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [st.metas, st.guest, lb.computers]);
+  }, [st.metas, st.guest, st.guestRev, lb.notes, lb.aliases]);
+  useEffect(() => { if (!st.guest) commonDives(st.metas).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [st.metas, st.guest, st.guestRev, lb.computers]);
   // u cizího logu: ponory, ke kterým mám svůj ponor (začátek do ±15 min)
   const mine = st.guest ? ownMetas() : [];
   const common = (m: Meta) => mine.some((x) => Math.abs(x.start - m.start) <= PAIR_S);
@@ -216,7 +216,7 @@ function diveTags(m: Meta, th: { co2Mbar: number }): [string, string][] {
 function SuggestCard({ meta }: { meta: Meta }) {
   const st = useStore();
   const [sg, setSg] = useState<Suggest[]>([]);
-  useEffect(() => { suggestionsFor(meta).then(setSg); }, [meta.id, st.lb.notes[meta.id]?.updated, st.lb.aliases]);
+  useEffect(() => { suggestionsFor(meta).then(setSg); }, [meta.id, st.lb.notes[meta.id]?.updated, st.lb.aliases, st.guestRev]);
   const note = st.lb.notes[meta.id];
   const items = sg.map((x) => ({ ...x, site: !note?.siteId && x.site && x.site.mine !== note?.siteId ? x.site : null })).filter((x) => x.site || x.buddies.length);
   if (!items.length) return null;
@@ -426,11 +426,11 @@ function DiveTitle({ id }: { id: string }) {
     setSug(null);
     if (site || !meta || st.guest) return;
     suggestionsFor(meta).then((x) => { const g = x.find((y) => y.site); if (g?.site) setSug({ name: g.site.mine ? lb.sites[g.site.mine]?.name || g.site.name : g.site.name, who: g.who }); });
-  }, [id, site?.id, st.guest, lb.aliases]);
+  }, [id, site?.id, st.guest, st.guestRev, lb.aliases]);
   if (!site && !sug) return null;
   return (
     <div className="dive-title">
-      {site ? <h2 onClick={() => go({ t: "site", id: site.id })}>{site.name}</h2> : <h2 className="sugg"><i>{sug!.name}</i> <small>· z logu {sug!.who}</small></h2>}
+      {site ? <h2 onClick={() => { if (!st.guest) go({ t: "site", id: site.id }); }}>{site.name}</h2> : <h2 className="sugg"><i>{sug!.name}</i> <small>· z logu {sug!.who}</small></h2>}
       <small>{meta ? fmtDate(meta.start) : ""}{buddies.length ? ` · ${buddies.join(", ")}` : ""}</small>
     </div>
   );

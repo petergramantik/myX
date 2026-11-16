@@ -1,9 +1,16 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.24.5";
+export const APP_VERSION = "1.24.6";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.24.6", date: "2026-11-16", title: "Cizí logy se už nemíchají do mých dat", items: [
+    "Oprava: synchronizace během otevírání cizího logu mohla uložit jeho lokality a buddye jako moje.",
+    "Jednorázový úklid jmen a záznamů, které se takto dostaly do mého logbooku.",
+    "B&L vždy ukazuje moje lokality a buddye; karta „Z cizích logů“ je nahoře a rozbalená.",
+    "Slučování a přiřazování funguje i při otevřeném cizím logu.",
+    "Po odebrání cizí DB zmizí všechny návrhy a společné ponory; zůstane jen skryté spárování.",
+  ] },
   { version: "1.24.5", date: "2026-11-16", title: "Oprava propisování lokalit z logů buddyů", items: [
     "Sloučení lokalit / buddyů si zapamatuje původní název a propíše ho do společných ponorů.",
     "Lokalita a buddy z buddyho logu se propíšou i při přesné shodě s mým názvem.",

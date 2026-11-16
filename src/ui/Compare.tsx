@@ -15,7 +15,7 @@ const ME = "#4fc3f7", BU = "#ffb74d";
 export function BuddyDivesCard({ meta }: { meta: Meta }) {
   const st = useStore();
   const [list, setList] = useState<Awaited<ReturnType<typeof buddyDivesFor>>>([]);
-  useEffect(() => { if (!st.guest) buddyDivesFor(meta).then(setList); }, [meta.id, st.guest, st.lb.computers]);
+  useEffect(() => { if (!st.guest) buddyDivesFor(meta).then(setList); }, [meta.id, st.guest, st.guestRev, st.lb.computers]);
   if (st.guest || !list.length) return null;
   return (
     <Card title={list.length > 1 ? "Ponory buddyů" : "Ponor buddyho"} right={list.length > 1 ? <a onClick={() => go({ t: "cmp", id: meta.id, other: list.map((x) => x.meta.id).join(",") })}>Srovnat všechny ›</a> : undefined}>
@@ -161,7 +161,7 @@ function CommonList({ who }: { who?: string }) {
   const [rows, setRows] = useState<Common[] | null>(null);
   const [sel, setSel] = useState<string[]>(who ? [who] : []);
   const [year, setYear] = useState(""), [month, setMonth] = useState(""), [day, setDay] = useState("");
-  useEffect(() => { commonDives(st.metas).then(setRows); }, [st.metas, st.lb.computers]);
+  useEffect(() => { commonDives(st.metas).then(setRows); }, [st.metas, st.guestRev, st.lb.computers]);
   if (rows == null) return <p className="muted">Hledám…</p>;
   if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log buddyho v Databázi (nebo ho nasdílej do myX přes WhatsApp / Quick Share).</p>;
   const ymd = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);

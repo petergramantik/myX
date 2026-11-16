@@ -4,7 +4,7 @@ import { injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
 import * as db from "./db";
-import { aliasKey, emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
+import { aliasKey, cleanForeign, emptyLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
 export interface Pos { lat: number; lon: number; acc: number; at: number }
@@ -16,13 +16,14 @@ export interface State {
   sync: { state: "off" | "idle" | "busy" | "error"; msg: string; at: number };
   toast: string | null;
   guest: GuestLog | null;  // prohlížený cizí log (jen pro čtení); null = vlastní data
+  guestRev: number;        // mění se při přidání / odebrání cizího logu (přenačtení návrhů)
 }
 /** Cizí log uložený v samostatné databázi, nikdy se nesynchronizuje. */
 export interface GuestLog { id: string; name: string; count: number; added: number; serial?: string; model?: string }
 
 let st: State = {
   ready: false, metas: [], lb: emptyLogbook(), pos: null, posErr: null,
-  sync: { state: "off", msg: "", at: 0 }, toast: null, guest: null,
+  sync: { state: "off", msg: "", at: 0 }, toast: null, guest: null, guestRev: 0,
 };
 const subs = new Set<() => void>();
 export const getState = () => st;
@@ -72,6 +73,7 @@ export async function init() {
   for (const r of missing) { const m = await metaOf(r); fresh.push(m); await db.put("meta", m); }
   set({ ready: true, metas: sortMetas(fresh), lb: lb ? mergeLogbooks(emptyLogbook(), lb) : emptyLogbook() });
   await autoLinkDrafts();
+  await cleanupForeign();
   propagateExisting().catch(() => {});
   if (workerUrl() && syncKey()) syncNow();
   else set({ sync: { state: "off", msg: "Synchronizace není nastavená", at: 0 } });
@@ -177,6 +179,10 @@ let own: { metas: Meta[]; lb: Logbook } | null = null;
 /** Vlastní logbook a ponory i během prohlížení cizího logu. */
 export const ownLb = (): Logbook => own?.lb ?? st.lb;
 export const ownMetas = (): Meta[] => own?.metas ?? st.metas;
+/** Změna mých dat – při otevřeném cizím logu se uloží stranou (neprojeví se v cizím zobrazení). */
+function setOwn(p: { metas?: Meta[]; lb?: Logbook }) {
+  if (own) own = { ...own, ...p }; else set(p);
+}
 /** Uloží změnu vlastního logbooku i během prohlížení cizího logu (synchronizace proběhne po zavření). */
 async function saveOwnLb(lb: Logbook) {
   if (!st.guest) return saveLb(lb);
@@ -275,6 +281,13 @@ async function propagate(lb: Logbook): Promise<number> {
     }
   }
   return changed;
+}
+/** Jednorázový úklid: data cizích logů, která se dřív omylem dostala do mého logbooku (synchronizace během otevírání cizího logu). */
+async function cleanupForeign() {
+  if (await db.get("kv", "cleanForeign1")) return;
+  const r = cleanForeign(st.lb, new Set(st.metas.map((m) => m.id)));
+  if (r.notes) { await saveLb(r.lb); toast(`Uklizeno z cizích logů: ${r.notes} záznamů${r.names.length ? `, ${r.names.length} jmen` : ""}`); }
+  await db.put("kv", 1, "cleanForeign1");
 }
 /** Jednorázově propíše už dřív provedená přiřazení (po aktualizaci aplikace). */
 export async function propagateExisting() {
@@ -420,6 +433,7 @@ async function importGuestRaws(buf: Uint8Array, raws: RawDive[], open = true): P
   for (const old of (await guestLogs()).filter((l) => log.serial && l.serial === log.serial)) await deleteGuest(old);
   await db.put("kv", [log, ...(await guestLogs())], "logs", db.GUEST);
   guestIndex = null;
+  set({ guestRev: st.guestRev + 1 });
   const known = log.serial ? ownLb().computers?.[log.serial] : undefined;
   if (known?.buddyId) await setComputerOwner(log, { id: known.buddyId }); // stejný počítač už má majitele
   if (open) await openGuest(log);
@@ -476,6 +490,7 @@ export async function deleteGuest(log: GuestLog) {
   await db.del("kv", log.id, db.GUEST);
   await db.put("kv", (await guestLogs()).filter((l) => l.id !== log.id), "logs", db.GUEST);
   guestIndex = null;
+  set({ guestRev: st.guestRev + 1 });
 }
 
 // ---------- rozpracované ponory (založené na lokalitě) a jejich spárování s logem
@@ -600,23 +615,23 @@ export function findBuddyByName(name: string): Buddy | undefined {
 }
 
 export async function upsertSite(s: Partial<Site> & { name: string }): Promise<Site> {
-  const lb = structuredClone(st.lb);
+  const lb = structuredClone(ownLb());
   const site: Site = { ...(s.id ? lb.sites[s.id] : {}), ...s, id: s.id || uid(), updated: Date.now() } as Site;
   lb.sites[site.id] = site;
-  await saveLb(lb);
+  await saveOwnLb(lb);
   return site;
 }
 export async function upsertBuddy(b: Partial<Buddy> & { name: string }): Promise<Buddy> {
-  const lb = structuredClone(st.lb);
+  const lb = structuredClone(ownLb());
   const buddy: Buddy = { ...(b.id ? lb.buddies[b.id] : {}), ...b, id: b.id || uid(), updated: Date.now() } as Buddy;
   lb.buddies[buddy.id] = buddy;
-  await saveLb(lb);
+  await saveOwnLb(lb);
   return buddy;
 }
 
 /** Sloučí lokalitu/parťáka `from` do `into` (ponory se přepíšou, `from` se smaže). */
 export async function mergeInto(kind: "site" | "buddy", from: string, into: string, name?: string) {
-  const lb = structuredClone(st.lb);
+  const lb = structuredClone(ownLb());
   const now = Date.now();
   for (const [id, n] of Object.entries(lb.notes)) {
     if (kind === "site" && n.siteId === from) lb.notes[id] = { ...n, siteId: into, updated: now };
@@ -635,12 +650,12 @@ export async function mergeInto(kind: "site" | "buddy", from: string, into: stri
   if (old && norm(old.name) !== norm(target?.name || "")) { const key = aliasKey(kind, old.name); lb.aliases = { ...(lb.aliases || {}), [key]: { id: key, kind, name: old.name, targetId: into, updated: now } as Alias }; }
   if (kind === "site") delete lb.sites[from]; else delete lb.buddies[from];
   lb.deleted[from] = now;
-  const n = st.guest ? 0 : await propagate(lb);
-  await saveLb(lb);
+  const n = await propagate(lb);
+  await saveOwnLb(lb);
   if (n) toast(`Doplněno z logů buddyů k ${n} ponorům`);
 }
 export async function remove(kind: "site" | "buddy", id: string) {
-  const lb = structuredClone(st.lb);
+  const lb = structuredClone(ownLb());
   const now = Date.now();
   for (const [did, n] of Object.entries(lb.notes)) {
     if (kind === "site" && n.siteId === id) lb.notes[did] = { ...n, siteId: undefined, updated: now };
@@ -648,7 +663,7 @@ export async function remove(kind: "site" | "buddy", id: string) {
   }
   if (kind === "site") delete lb.sites[id]; else delete lb.buddies[id];
   lb.deleted[id] = now;
-  await saveLb(lb);
+  await saveOwnLb(lb);
 }
 export async function saveSettings(p: Partial<Logbook["settings"]>) {
   const lb = structuredClone(st.lb);
@@ -708,12 +723,12 @@ export async function syncNow(): Promise<void> {
       const r = await api("/sync");
       if (!r.ok) throw new Error(`Worker: ${r.status}`);
       const remote = (await r.json()) as { lb: Logbook | null; ver: number; dives: { id: string; num: number; start: number }[] };
-      // ponory: stáhnout chybějící, nahrát nové
-      const local = new Set(st.metas.map((m) => m.id));
+      // ponory: stáhnout chybějící, nahrát nové – vždy jen moje (i kdyby se mezitím otevřel cizí log)
+      const local = new Set(ownMetas().map((m) => m.id));
       const remoteIds = new Set(remote.dives.map((d) => d.id));
       const got: Meta[] = [];
       for (const d of remote.dives) {
-        if (local.has(d.id)) continue;
+        if (local.has(d.id) || d.id.includes(":")) continue;
         const b = await api(`/dive/${encodeURIComponent(d.id)}`);
         if (!b.ok) continue;
         const raw: RawDive = { id: d.id, num: d.num, start: d.start, blob: new Uint8Array(await b.arrayBuffer()) };
@@ -722,21 +737,23 @@ export async function syncNow(): Promise<void> {
         await db.put("meta", m);
         got.push(m);
       }
-      if (got.length) { set({ metas: sortMetas([...st.metas, ...got]) }); await autoLinkDrafts(); }
-      for (const m of st.metas) {
+      if (got.length) { setOwn({ metas: sortMetas([...ownMetas(), ...got]) }); if (!st.guest) await autoLinkDrafts(); }
+      for (const m of ownMetas()) {
         if (remoteIds.has(m.id) && !pendingUpload.has(m.id)) continue;
         const raw = await db.get<RawDive>("raw", m.id);
         if (!raw) continue;
         const u = await api(`/dive/${encodeURIComponent(m.id)}`, { method: "PUT", body: raw.blob as BodyInit, headers: { "X-Num": String(raw.num), "X-Start": String(raw.start) } });
         if (u.ok) pendingUpload.delete(m.id);
       }
-      // logbook
-      const merged = remote.lb ? mergeLogbooks(st.lb, remote.lb) : st.lb;
+      // logbook – vždy můj, nikdy cizí
+      const mine = ownLb();
+      const merged = remote.lb ? mergeLogbooks(mine, remote.lb) : mine;
       const p = await api("/sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lb: merged, ver: remote.ver }) });
       if (p.status === 409) continue; // mezitím změna z jiného zařízení – znovu
       if (!p.ok) throw new Error(`Worker: ${p.status}`);
-      st = { ...st, lb: mergeLogbooks(merged, st.lb) };
-      await db.put("kv", st.lb, "lb");
+      const next = mergeLogbooks(merged, ownLb());
+      await db.put("kv", next, "lb");
+      if (own) { own = { ...own, lb: next }; if (st.guest) await openGuest(st.guest); } else st = { ...st, lb: next };
       lastSyncErr = "";
       set({ sync: { state: "idle", msg: "Synchronizováno", at: Date.now() } });
       return;

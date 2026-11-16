@@ -173,5 +173,20 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(multi.kind === "multi", `dvě čidla bez srovnání → vadná čidla (${multi.kind})`);
 }
 
+// ---- úklid dat cizích logů z mého logbooku
+{
+  const { cleanForeign, emptyLogbook, mergeLogbooks } = await import("../src/app/model");
+  const lb = emptyLogbook();
+  lb.sites = { s1: { id: "s1", name: "Lom Šifr", updated: 1 }, s2: { id: "s2", name: "Svobodné Heřmanice", updated: 1 }, s3: { id: "s3", name: "Moje bez ponorů", updated: 1 } };
+  lb.buddies = { b1: { id: "b1", name: "Radek", updated: 1 }, b2: { id: "b2", name: "Peter", updated: 1 } };
+  lb.notes = { d1: { siteId: "s1", buddyIds: ["b1"], note: "", updated: 1 }, "g:x1": { siteId: "s2", buddyIds: ["b2", "b1"], note: "", updated: 1 }, "g:x2": { siteId: "s1", buddyIds: [], note: "", updated: 1 } };
+  const r = cleanForeign(lb, new Set(["d1"]), 100);
+  ok(r.notes === 2 && !r.lb.notes["g:x1"] && !!r.lb.notes.d1, "úklid odstraní záznamy cizích ponorů");
+  ok(!r.lb.sites.s2 && !r.lb.buddies.b2 && !!r.lb.sites.s1 && !!r.lb.buddies.b1 && !!r.lb.sites.s3, `odstraní jen jména použitá výhradně cizími záznamy (${r.names})`);
+  const m = mergeLogbooks(r.lb, lb);
+  ok(!m.notes["g:x1"] && !m.sites.s2, "úklid se při synchronizaci nevrátí ze serveru");
+  ok(cleanForeign(r.lb, new Set(["d1"])).notes === 0, "úklid podruhé nic nedělá");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

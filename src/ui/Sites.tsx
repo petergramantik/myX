@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ME, adoptForeign, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
+import { ME, adoptForeign, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
 import { BLSwitch, Card, KV, Picker, back, fmtDate, go, num, useStore } from "./common";
@@ -8,17 +8,18 @@ import { WeatherCard } from "./Weather";
 const MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 
 export function SitesScreen() {
-  const st = useStore();
+  const st = useStore(), my = { lb: ownLb(), metas: ownMetas() };
   const [q, setQ] = useState("");
   const counts: Record<string, { n: number; last: number }> = {};
-  for (const m of st.metas) { const s = st.lb.notes[m.id]?.siteId; if (s) counts[s] = { n: (counts[s]?.n || 0) + 1, last: m.start }; }
-  const list = Object.values(st.lb.sites).filter((s) => !q || norm(s.name).includes(norm(q)))
+  for (const m of my.metas) { const s = my.lb.notes[m.id]?.siteId; if (s) counts[s] = { n: (counts[s]?.n || 0) + 1, last: m.start }; }
+  const list = Object.values(my.lb.sites).filter((s) => !q || norm(s.name).includes(norm(q)))
     .map((s) => ({ s, c: counts[s.id], km: st.pos && siteCoords(s) ? distKm(st.pos, siteCoords(s)!) : null }))
     .sort((a, b) => (b.c?.n || 0) - (a.c?.n || 0) || a.s.name.localeCompare(b.s.name, "cs"));
   const [name, setName] = useState("");
   return (
     <div className="screen">
       <BLSwitch on="sites" />
+      <ForeignNames kind="site" />
       <input className="search" placeholder="Hledat lokalitu" value={q} onChange={(e) => setQ(e.target.value)} />
       {list.map(({ s, c, km }) => (
         <div key={s.id} className="list-item" onClick={() => go({ t: "site", id: s.id })}>
@@ -30,14 +31,13 @@ export function SitesScreen() {
         <input value={name} placeholder="Nová lokalita" onChange={(e) => setName(e.target.value)} />
         <button className="btn" disabled={!name.trim()} onClick={async () => { const s = await upsertSite({ name: name.trim() }); setName(""); go({ t: "site", id: s.id }); }}>Přidat</button>
       </div>
-      <ForeignNames kind="site" />
     </div>
   );
 }
 
 export function SiteScreen({ id }: { id: string }) {
-  const st = useStore();
-  const s = st.lb.sites[id];
+  const st = useStore(), my = { lb: ownLb(), metas: ownMetas() };
+  const s = my.lb.sites[id];
   const [name, setName] = useState(s?.name || "");
   const [busy, setBusy] = useState(false);
   useEffect(() => setName(s?.name || ""), [id, s?.name]);
@@ -48,7 +48,7 @@ export function SiteScreen({ id }: { id: string }) {
     loadSpList().then((l) => setCands(searchSp(l, s.name))).catch(() => setCands(null));
   }, [id, s?.name, s?.spId]);
   if (!s) return <div className="screen"><p>Lokalita neexistuje.</p></div>;
-  const dives = st.metas.filter((m) => st.lb.notes[m.id]?.siteId === id);
+  const dives = my.metas.filter((m) => my.lb.notes[m.id]?.siteId === id);
   const c = siteCoords(s);
   const linkSp = async (spId: number) => {
     setBusy(true);
@@ -59,7 +59,7 @@ export function SiteScreen({ id }: { id: string }) {
     } catch (e) { toast((e as Error).message); }
     finally { setBusy(false); }
   };
-  const others = Object.values(st.lb.sites).filter((x) => x.id !== id);
+  const others = Object.values(my.lb.sites).filter((x) => x.id !== id);
   return (
     <div className="screen">
       <Card title="Lokalita">
@@ -168,14 +168,15 @@ export function NameChoice({ a, b, value, onChange }: { a: string; b: string; va
 }
 
 export function BuddiesScreen() {
-  const st = useStore();
+  const st = useStore(), my = { lb: ownLb(), metas: ownMetas() };
   const [name, setName] = useState("");
   const counts: Record<string, { n: number; last: number }> = {};
-  for (const m of st.metas) for (const b of st.lb.notes[m.id]?.buddyIds || []) counts[b] = { n: (counts[b]?.n || 0) + 1, last: m.start };
-  const list = Object.values(st.lb.buddies).sort((a, b) => (counts[b.id]?.n || 0) - (counts[a.id]?.n || 0) || a.name.localeCompare(b.name, "cs"));
+  for (const m of my.metas) for (const b of my.lb.notes[m.id]?.buddyIds || []) counts[b] = { n: (counts[b]?.n || 0) + 1, last: m.start };
+  const list = Object.values(my.lb.buddies).sort((a, b) => (counts[b.id]?.n || 0) - (counts[a.id]?.n || 0) || a.name.localeCompare(b.name, "cs"));
   return (
     <div className="screen">
       <BLSwitch on="buddies" />
+      <ForeignNames kind="buddy" />
       {list.map((b) => (
         <div key={b.id} className="list-item" onClick={() => go({ t: "buddy", id: b.id })}>
           <div className="li-main"><b>{b.name}</b><small>{counts[b.id] ? `${counts[b.id].n} ponorů · naposledy ${fmtDate(counts[b.id].last)}` : "bez ponorů"}</small></div>
@@ -186,7 +187,6 @@ export function BuddiesScreen() {
         <input value={name} placeholder="Nový buddy" onChange={(e) => setName(e.target.value)} />
         <button className="btn" disabled={!name.trim()} onClick={async () => { await upsertBuddy({ name: name.trim() }); setName(""); }}>Přidat</button>
       </div>
-      <ForeignNames kind="buddy" />
     </div>
   );
 }
@@ -200,7 +200,8 @@ function ForeignNames({ kind }: { kind: "buddy" | "site" }) {
   const [target, setTarget] = useState<{ id: string; name: string } | null>(null);
   const [nm, setNm] = useState("");
   const reload = () => foreignNames(kind).then(setList);
-  useEffect(() => { reload(); }, [st.lb.aliases, st.lb.buddies, st.lb.sites, st.guest]);
+  useEffect(() => { reload(); }, [ownLb().aliases, ownLb().buddies, ownLb().sites, st.guest, st.guestRev]);
+  useEffect(() => { if (list.length) setOpen(true); }, [list.length > 0]);
   if (!list.length) return null;
   const mine = Object.values(kind === "buddy" ? ownLb().buddies : ownLb().sites).sort((a, b) => a.name.localeCompare(b.name, "cs"));
   const done = async (name: string, id: string | null, keep?: string) => {
@@ -256,7 +257,7 @@ function Drift({ serial }: { serial: string }) {
 function BuddyComputer({ id }: { id: string }) {
   const st = useStore();
   const [logs, setLogs] = useState<GuestLog[]>([]);
-  useEffect(() => { guestLogs().then(setLogs); }, [st.guest]);
+  useEffect(() => { guestLogs().then(setLogs); }, [st.guest, st.guestRev]);
   const comps = Object.values(ownLb().computers || {}).filter((c) => c.buddyId === id);
   if (!comps.length) return <span className="muted">–</span>;
   return <>{comps.map((c) => {
@@ -266,14 +267,14 @@ function BuddyComputer({ id }: { id: string }) {
 }
 
 export function BuddyScreen({ id }: { id: string }) {
-  const st = useStore();
-  const b = st.lb.buddies[id];
+  const st = useStore(), my = { lb: ownLb(), metas: ownMetas() };
+  const b = my.lb.buddies[id];
   const [name, setName] = useState(b?.name || "");
   useEffect(() => setName(b?.name || ""), [id, b?.name]);
   if (!b) return <div className="screen"><p>Buddy neexistuje.</p></div>;
-  const dives = st.metas.filter((m) => st.lb.notes[m.id]?.buddyIds.includes(id));
+  const dives = my.metas.filter((m) => my.lb.notes[m.id]?.buddyIds.includes(id));
   const sites: Record<string, number> = {};
-  for (const m of dives) { const s = st.lb.notes[m.id]?.siteId; if (s) sites[s] = (sites[s] || 0) + 1; }
+  for (const m of dives) { const s = my.lb.notes[m.id]?.siteId; if (s) sites[s] = (sites[s] || 0) + 1; }
   return (
     <div className="screen">
       <Card title="Buddy">
@@ -290,7 +291,7 @@ export function BuddyScreen({ id }: { id: string }) {
         ]} />
       </Card>
       <Card title="Úpravy">
-        <MergeRow items={Object.values(st.lb.buddies).filter((x) => x.id !== id)} current={b.name} onMerge={async (into, nm) => { await mergeInto("buddy", id, into, nm); back(); toast("Sloučeno"); }} />
+        <MergeRow items={Object.values(my.lb.buddies).filter((x) => x.id !== id)} current={b.name} onMerge={async (into, nm) => { await mergeInto("buddy", id, into, nm); back(); toast("Sloučeno"); }} />
         <button className="btn danger" onClick={async () => { if (confirm(`Smazat buddyho „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
       </Card>
     </div>
