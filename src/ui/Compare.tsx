@@ -1,11 +1,13 @@
 // Porovnání mého ponoru s ponorem buddyho z cizího logu: grafy přes sebe, tabulka rozdílů a závěr.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { setpointChanges } from "../core/analysis";
 import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag, type MultiRow } from "../core/compare";
-import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, toast } from "../app/store";
+import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, saveSettings, toast } from "../app/store";
 import { GuestCard } from "./Settings";
 import { shareDb } from "./share";
+import { askText } from "../app/dialog";
+import { compareHtml, shareHtml } from "./cmpExport";
 import { Card, fmtDate, fmtDateTime, go, leaveY, tab, useStore } from "./common";
 import { LineChart } from "./Chart";
 import type { Meta } from "../app/model";
@@ -44,6 +46,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [twoComp, setTwoComp] = useState(false);
   const [more, setMore] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   // výška horní lišty pro „přilepenou“ hlavičku se jmény (zvětšené písmo v telefonu ji mění)
   useEffect(() => { const t = document.querySelector(".top") as HTMLElement | null; if (t) document.documentElement.style.setProperty("--toph", t.offsetHeight - 1 + "px"); });
   const st0 = useStore();
@@ -96,11 +99,23 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
     return { who, bad: l.rmse > 3, rmse: l.rmse, txt: l.rmse > 3 ? "≠ profil" : `${diff >= 0 ? "+" : "−"}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}${Math.abs(a - 3600) <= 900 ? " (1 h – letní/zimní čas)" : ""}` };
   });
   const hasCo2 = D.some((d) => d.s.co2.some((v) => v != null && v > 0));
+  const shareCmp = async () => {
+    setMore(true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const el = rootRef.current; if (!el) return;
+    const day = new Date(all[0].h.start * 1000).toISOString().slice(0, 10);
+    const title = `${site || "Ponor"} ${fmtDateTime(all[0].h.start)}`;
+    let me = st0.lb.settings.myName;
+    if (!me && !st0.guest) { me = (await askText("Tvoje jméno ve sdíleném srovnání (místo „Já“):", ""))?.trim() || undefined; if (me) await saveSettings({ myName: me }); }
+    const nm = N.map((n) => (n === "Já" && me ? me : n));
+    await shareHtml(compareHtml(el, title, `${fmtDateTime(all[0].h.start)} · ${nm.join(", ")}`, st0.guest ? undefined : me), `myX_srovnani_${day}.html`, title);
+  };
   return (
-    <div className="screen">
+    <div className="screen" ref={rootRef}>
       <section className="card cmphead">
         <h2 className="cmp-site">{site || "Lokalita nezadaná"}</h2>
-        <div className="muted small">{fmtDateTime(all[0].h.start)} · <a onClick={() => go({ t: "dive", id })}>Detail mého ponoru ›</a></div>
+        <div className="muted small">{fmtDateTime(all[0].h.start)}<span className="cmp-mine-link"> · <a onClick={() => go({ t: "dive", id })}>Detail mého ponoru ›</a></span></div>
+        <button className="btn small cmp-share" onClick={shareCmp}>⤴ Sdílet srovnání</button>
         <div className="cmp-align">
           <label className="switch"><input type="checkbox" checked={!byClock} onChange={(e) => setByClock(!e.target.checked)} /> ⇆ Podle profilu</label>
           <span className="small muted link" onClick={() => setShowClock(!showClock)}>hodiny {clockInfo.map((c) => `${c.who.split(" ")[0]} ${c.txt}`).join(" · ")}</span>

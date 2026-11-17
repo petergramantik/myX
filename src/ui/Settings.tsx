@@ -43,7 +43,9 @@ export function SettingsScreen() {
         <button className="btn" onClick={() => tab({ t: "hub", sub: "db" })}>Spravovat logy ostatních ›</button>
       </Sec>
 
-      <Sec title="Sdílení"><ShareInner /></Sec>
+      <Sec title="Sdílení"><ShareInner />
+        <label>Moje jméno ve sdíleném srovnání (místo „Já“)<input defaultValue={st.lb.settings.myName || ""} placeholder="např. Peter" onBlur={(e) => saveSettings({ myName: e.target.value.trim() || undefined })} /></label>
+      </Sec>
 
       <Sec title="Upozornění">
         <h3 className="subh">Čidla O₂</h3>

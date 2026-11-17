@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.32.3";
+export const APP_VERSION = "1.33";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.33", date: "2026-11-17", title: "Sdílení srovnání jako stránky", items: [
+    "Srovnání: tlačítko ⤴ Sdílet srovnání pošle přes WhatsApp, Messenger, mail statickou stránku .html (hlavička, závěr, grafy, rozdíly) – příjemce nepotřebuje myX, otevře ji v prohlížeči i v náhledu na iPhonu.",
+    "Bez ID počítačů a surových dat ponorů; grafy zjednodušené (~70 kB pro 3 potápěče); odkaz na myX v hlavičce i patičce.",
+    "„Já“ se ve sdílené stránce nahradí tvým jménem (Nastavení → Sdílení; zeptá se při prvním sdílení).",
+  ] },
   { version: "1.32.3", date: "2026-11-17", title: "Filtry ponorů se pamatují, křížek v hledání", items: [
     "Ponory: filtry (parťáci, hledání, hodnocení, plyny, tagy, Jen společné, výběr) a pozice v seznamu zůstanou po otevření ponoru nebo srovnání; „Vše“ u hodnocení je vynuluje.",
     "Hledání a výběr jmen / lokalit mají ✕ pro vyprázdnění.",
