@@ -1,3 +1,4 @@
+import { ask, askText } from "../app/dialog";
 import { deleteDraft, draftCandidates, linkDraft, myNum, updateDraft } from "../app/store";
 import { Card, back, fmtDate, fmtDateTime, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
@@ -21,7 +22,7 @@ export function DraftScreen({ id }: { id: string }) {
           </button>
         ))}
       </Card>
-      <button className="btn danger" onClick={async () => { if (confirm("Smazat rozpracovaný ponor?")) { await deleteDraft(id); back(); } }}>Smazat</button>
+      <button className="btn danger" onClick={async () => { if (await ask("Smazat rozpracovaný ponor?")) { await deleteDraft(id); back(); } }}>Smazat</button>
     </div>
   );
 }

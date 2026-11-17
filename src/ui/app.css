@@ -369,3 +369,7 @@ details.card.sec > summary h2 { margin: 0; }
 .comp-line { margin: 0 2px 8px; } .comp-line .pill { font-size: 11px; padding: 1px 6px; }
 .warn-t { color: var(--warn); margin: 4px 0; } .ok-t { color: var(--muted); margin: 4px 0; }
 .row.between { justify-content: space-between; align-items: center; } .own-comps { display: flex; flex-direction: column; gap: 6px; }
+.dlg-back { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 1000; padding: 20px; }
+.dlg { max-width: 420px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.dlg-msg { white-space: pre-line; margin: 0; }
+.dlg-btns { justify-content: flex-end; }

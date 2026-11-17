@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.30";
+export const APP_VERSION = "1.30.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.30.1", date: "2026-11-17", title: "Vlastní potvrzovací dialogy", items: [
+    "Potvrzení a zadání jména se zobrazují v aplikaci místo systémových oken prohlížeče (ta mohla být potlačená – tlačítka pak nic nedělala).",
+    "„To je můj počítač“ ukazuje průběh přesunu.",
+  ] },
   { version: "1.30", date: "2026-11-17", title: "Spojené ponory, porucha solenoidu, zarovnání srovnání", items: [
     "Víc záznamů počítače jako jeden ponor: stejné číslo v Shearwater Cloudu nebo povrchový interval do 30 min (Nastavení → Výbava); části jdou ručně oddělit nebo spojit.",
     "Spojený ponor: jeden řádek „N části“, grafy s vyznačeným pobytem na hladině, karta Části ponoru.",

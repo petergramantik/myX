@@ -1,3 +1,4 @@
+import { ask, askText } from "../app/dialog";
 import { useEffect, useState } from "react";
 import { ME, adoptForeign, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
@@ -111,7 +112,7 @@ export function SiteScreen({ id }: { id: string }) {
 
       <Card title="Úpravy">
         <MergeRow items={others.map((x) => ({ id: x.id, name: x.name }))} current={s.name} onMerge={async (into, nm) => { await mergeInto("site", id, into, nm); back(); toast("Lokality sloučeny"); }} />
-        <button className="btn danger" onClick={async () => { if (confirm(`Smazat lokalitu „${s.name}“? Ponory zůstanou bez lokality.`)) { await remove("site", id); back(); } }}>Smazat lokalitu</button>
+        <button className="btn danger" onClick={async () => { if (await ask(`Smazat lokalitu „${s.name}“? Ponory zůstanou bez lokality.`)) { await remove("site", id); back(); } }}>Smazat lokalitu</button>
       </Card>
     </div>
   );
@@ -292,7 +293,7 @@ export function BuddyScreen({ id }: { id: string }) {
       </Card>
       <Card title="Úpravy">
         <MergeRow items={Object.values(my.lb.buddies).filter((x) => x.id !== id)} current={b.name} onMerge={async (into, nm) => { await mergeInto("buddy", id, into, nm); back(); toast("Sloučeno"); }} />
-        <button className="btn danger" onClick={async () => { if (confirm(`Smazat buddyho „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
+        <button className="btn danger" onClick={async () => { if (await ask(`Smazat buddyho „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
       </Card>
     </div>
   );

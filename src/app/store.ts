@@ -1,4 +1,5 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
+import { ask, askText } from "./dialog";
 import { mergeDives, segGroups } from "../core/segments";
 import { decodeDive, peekHeader, readCloudDetails, readCloudNumbers, readShearwaterDb, type CloudDetail, type Dive, type RawDive } from "../core/shearwater";
 import { DEFAULT_THRESHOLDS, diveWarnings, injections, summarize } from "../core/analysis";
@@ -166,7 +167,7 @@ export async function importAny(file: File): Promise<{ own: number; guests: Gues
     const sorted = [...groups].sort((a, b) => b[1].length - a[1].length);
     mine = new Set([sorted[0][0]]);
     // první import s víc počítači: cíleně se zeptat, které jsou moje (výměna počítače)
-    for (const [k, v] of sorted.slice(1)) if (k && confirm(`V souboru je víc počítačů. Je počítač ${modelOf(v)} ${k} (${v.length} ponorů) také tvůj?\n\nOK = přidat k mým ponorům, Zrušit = načíst jako log buddyho.`)) mine.add(k);
+    for (const [k, v] of sorted.slice(1)) if (k && await ask(`V souboru je víc počítačů. Je počítač ${modelOf(v)} ${k} (${v.length} ponorů) také tvůj?`, { ok: "Je můj", cancel: "Je buddyho" })) mine.add(k);
     if (mine.size > 1) { const lb = structuredClone(st.lb); lb.computers = lb.computers || {}; for (const k of mine) if (k) lb.computers[k] = { ...lb.computers[k], id: k, model: modelOf(groups.get(k)!), mine: true, updated: Date.now() }; await saveLb(lb); }
   }
   const ownRaws = [...groups].filter(([k]) => mine.has(k) || (!k && groups.size === 1 && mine.size === 0)).flatMap(([, v]) => v);
@@ -630,9 +631,9 @@ export async function lastExport(): Promise<{ name: string; at: number; count: n
 export async function askSameOwner(logs: GuestLog[]) {
   const withSerial = logs.filter((l) => l.serial);
   if (withSerial.length < 2) return;
-  if (!confirm(`V souboru jsou ${withSerial.length} různé počítače (${withSerial.map(compLabel).join(", ")}). Patří stejnému člověku?`)) return;
+  if (!await ask(`V souboru jsou ${withSerial.length} různé počítače (${withSerial.map(compLabel).join(", ")}). Patří stejnému člověku?`)) return;
   const known = withSerial.map((l) => ownerName(l)).find(Boolean);
-  const name = prompt("Jméno majitele (buddyho):", known || "");
+  const name = await askText("Jméno majitele (buddyho):", known || "");
   if (!name?.trim()) return;
   for (const l of withSerial) await setComputerOwner(l, { name: name.trim() });
   toast(`Počítače spojeny pod majitele ${name.trim()}`);

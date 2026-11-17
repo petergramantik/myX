@@ -1,4 +1,5 @@
 import { HelpScreen } from "./ui/Help";
+import { DialogHost } from "./ui/Dialog";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { init, locate, scheduleSync, syncNow, takeShared, toast } from "./app/store";
@@ -119,6 +120,7 @@ function App() {
   const newDive = async () => { if (busy) return; setBusy(true); try { const id = await createDraft(); go({ t: "draft", id }); } finally { setBusy(false); } };
   return (
     <div className="app">
+      <DialogHost />
       <header className="top">
         {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo">X</span>}
         <h1>{title(s, st)}</h1>

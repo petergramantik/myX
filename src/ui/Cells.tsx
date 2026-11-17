@@ -1,3 +1,4 @@
+import { ask, askText } from "../app/dialog";
 import { useState } from "react";
 import { cellStatus, detectCellEvents, type CellStatus } from "../core/cells";
 import { answerCellPrompt, deleteCell, localNow, saveCell, saveSettings } from "../app/store";
@@ -360,7 +361,7 @@ function CellForm({ init, c, onDone }: { init: Partial<Cell>; c: ReturnType<type
       <div className="row">
         <button className="btn primary" disabled={!f.installed} onClick={async () => { await saveCell(f as Cell); onDone(); }}>Uložit</button>
         <button className="btn" onClick={onDone}>Zrušit</button>
-        {f.id && <button className="btn danger" onClick={async () => { if (confirm("Smazat záznam o čidle?")) { await deleteCell(f.id!); onDone(); } }}>Smazat</button>}
+        {f.id && <button className="btn danger" onClick={async () => { if (await ask("Smazat záznam o čidle?")) { await deleteCell(f.id!); onDone(); } }}>Smazat</button>}
       </div>
     </div>
   );

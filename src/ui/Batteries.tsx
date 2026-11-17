@@ -1,4 +1,5 @@
 // Baterie: Petrel (z logu) a dvě baterie v hlavě X-CCR (ruční evidence).
+import { ask, askText } from "../app/dialog";
 import { useState } from "react";
 import type { Header } from "../core/shearwater";
 import { alerts } from "../core/analysis";
@@ -182,7 +183,7 @@ function BatteryForm({ init, onDone }: { init: Partial<Battery>; onDone: () => v
       <div className="row">
         <button className="btn primary" disabled={!f.installed} onClick={async () => { await saveBattery(f as Battery); onDone(); }}>Uložit</button>
         <button className="btn" onClick={onDone}>Zrušit</button>
-        {f.id && <button className="btn danger" onClick={async () => { if (confirm("Smazat záznam o baterii?")) { await deleteBattery(f.id!); onDone(); } }}>Smazat</button>}
+        {f.id && <button className="btn danger" onClick={async () => { if (await ask("Smazat záznam o baterii?")) { await deleteBattery(f.id!); onDone(); } }}>Smazat</button>}
       </div>
     </div>
   );

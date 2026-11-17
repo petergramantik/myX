@@ -1,3 +1,4 @@
+import { ask, askText } from "../app/dialog";
 import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
 import { DEFAULT_ALL_TH } from "../app/model";
@@ -90,14 +91,14 @@ export function SettingsScreen() {
             if (f) try { toast(`Obnoveno, nových ponorů: ${await importBackup(f)}`); } catch (err) { toast((err as Error).message); }
           }} />
           <button className="btn danger" onClick={async () => {
-            if (!confirm("Úplný reset logbooku: smaže všechny lokality, buddye, poznámky, hodnocení, rozpracované ponory, přiřazení jmen a cizí logy. Ponory, čidla, baterie a nastavení zůstanou. Pokračovat?")) return;
-            if (!confirm("Opravdu? Před resetem se stáhne záloha do souboru.")) return;
+            if (!await ask("Úplný reset logbooku: smaže všechny lokality, buddye, poznámky, hodnocení, rozpracované ponory, přiřazení jmen a cizí logy. Ponory, čidla, baterie a nastavení zůstanou. Pokračovat?")) return;
+            if (!await ask("Opravdu? Před resetem se stáhne záloha do souboru.")) return;
             const b = await exportBackup();
             const a = document.createElement("a");
             a.href = URL.createObjectURL(b); a.download = `myx-pred-resetem-${new Date().toISOString().slice(0, 10)}.json`; a.click();
             await resetAll(); toast("Logbook resetován");
           }}>Reset logbooku</button>
-          <button className="btn danger" onClick={async () => { if (confirm("Smazat všechna data v tomto telefonu?")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
+          <button className="btn danger" onClick={async () => { if (await ask("Smazat všechna data v tomto telefonu?")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
         </div>
       </Sec>
 
@@ -130,7 +131,7 @@ function OwnComputers() {
       {cs.map((c) => (
         <div key={c.serial} className="row between">
           <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)}</span>
-          {cs.length > 1 && <button className="btn small" onClick={async () => { if (confirm(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako log buddyho a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
+          {cs.length > 1 && <button className="btn small" onClick={async () => { if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako log buddyho a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
         </div>
       ))}
       <p className="note">Další svůj počítač přidáš v DB → Databáze u jeho logu volbou „To je můj počítač“, nebo při prvním importu.</p>
@@ -189,6 +190,7 @@ export function GuestCard() {
   const [groups, setGroups] = useState<{ log: GuestLog; logs: GuestLog[]; counts: Record<string, number>; from: number; to: number; common: number; alts: number }[]>([]);
   const [busy, setBusy] = useState(false);
   const [ownerFor, setOwnerFor] = useState<string | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const reload = async () => {
     const raw = await guestRawIndex(), ix = await guestIndexLoad(), mine = ownMetas();
@@ -231,12 +233,14 @@ export function GuestCard() {
                 <div className="row">
                   {l.serial && <button className="btn small" onClick={() => setOwnerFor(ownerFor === l.id ? null : l.id)}>Majitel</button>}
                   {multi && k > 0 && l.serial && <button className="btn small" onClick={() => setPrimaryComputer(l.serial!)}>Nastavit jako hlavní</button>}
-                  <button className="btn small" onClick={async () => { if (confirm(`Smazat log počítače ${compLabel(l)}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
-                  <button className="btn small" onClick={async () => {
-                    if (!confirm(`Počítač ${compLabel(l)} je tvůj (např. po výměně počítače)?\n\nJeho ${g.counts[l.id]} ponorů se přesune k tvým ponorům, převezmou se lokality a buddyové z jeho Cloudu a log buddyho zmizí. Odebrat ho jde později v Nastavení → Výbava.`)) return;
-                    try { toast(`Přidáno k tvým ponorům: ${await adoptGuestAsOwn(l)}`); } catch (e) { toast((e as Error).message); }
+                  <button className="btn small" onClick={async () => { if (await ask(`Smazat log počítače ${compLabel(l)}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
+                  <button className="btn small" disabled={moving === l.id} onClick={async () => {
+                    if (!await ask(`Počítač ${compLabel(l)} je tvůj (např. po výměně počítače)?\n\nJeho ${g.counts[l.id]} ponorů se přesune k tvým ponorům, převezmou se lokality a buddyové z jeho Cloudu a log buddyho zmizí. Odebrat ho jde později v Nastavení → Výbava.`)) return;
+                    setMoving(l.id);
+                    try { toast(`Přesunuto k tvým ponorům: ${await adoptGuestAsOwn(l)}`); } catch (e) { toast((e as Error).message); }
+                    finally { setMoving(null); }
                     reload();
-                  }}>To je můj počítač</button>
+                  }}>{moving === l.id ? "Přesouvám…" : "To je můj počítač"}</button>
                 </div>
                 {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
                   {ownerName(l) && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení{multi ? " (odpojit počítač)" : ""}</button>}</div>}
