@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.32";
+export const APP_VERSION = "1.32.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.32.1", date: "2026-11-17", title: "Nápověda aktualizovaná", items: [
+    "Nápověda (?) popisuje sdílení vybraných ponorů, výběr v seznamu, aliasy, Akce v Databázi, nové srovnání, filtr společných ponorů a výměnu baterie.",
+  ] },
   { version: "1.32", date: "2026-11-17", title: "Sdílení vybraných ponorů", items: [
     "Detail ponoru: tlačítko ⤴ sdílí jen tento ponor (spojený ponor se všemi částmi); seznam ponorů: ☑ Vybrat → zaškrtnout → Sdílet. Funguje i v otevřeném cizím logu.",
     "Soubor .db ve formátu exportu Shearwater Cloud jen s vybranými ponory (záznamy beze změny) + moje lokalita a parťáci z myX; hodnocení a poznámka se nesdílí.",

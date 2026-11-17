@@ -20,16 +20,18 @@ export function HelpScreen() {
         <p><b>Android:</b> v nabídce sdílení zvol <b>myX</b>. Aplikace musí být nainstalovaná přes Chrome → ⋮ → Instalovat aplikaci. Totéž funguje, když ti parťák pošle svůj soubor .db přes WhatsApp.</p>
         <p><b>iPhone:</b> sdílení přímo do myX iOS neumí. Soubor dej Sdílet → Uložit do Souborů a v myX ho načti tlačítkem importu (Přehled nebo Nastavení → Data).</p>
         <p><b>Tvůj nebo cizí log?</b> myX pozná podle sériového čísla počítače, jestli jde o tvůj log (ponory se přidají k tvým), nebo o cizí log (uloží se zvlášť jen ke čtení). Logy různých lidí se nikdy nemíchají.</p>
-        <p>Opakovaný import stejného souboru nevadí – přidají se jen nové ponory.</p>
+        <p>Opakovaný import stejného souboru nevadí – přidají se jen nové ponory. Platí i pro cizí logy: nový export nebo jednotlivé sdílené ponory stejného počítače se k už načtenému logu přidají, nic se nenahrazuje ani nezdvojí.</p>
       </H>
 
       <H title="2. Sdílení">
         <p><b>Sdílet aplikaci:</b> Nastavení → Sdílení – odkaz nebo QR kód.</p>
         <p><b>Sdílet svůj log:</b> záložka DB → Sdílet můj log – pošle parťákovi tvůj původní export, aby si mohl ponory porovnat.</p>
+        <p><b>Sdílet jen vybrané ponory:</b> v detailu ponoru tlačítko ⤴ (spojený ponor se všemi částmi), v seznamu ponorů ☑ (v cizím logu „Vybrat“) → klepnutím vyber ponory → Sdílet. Vznikne malý soubor .db se záznamy beze změny a s tvou lokalitou a parťáky; hodnocení a poznámka se nesdílí. Jde sdílet i ponory z otevřeného cizího logu – u příjemce patří původnímu majiteli.</p>
         <p><b>Záloha:</b> Nastavení → Data → Stáhnout zálohu (lokality, parťáci, poznámky, hodnocení, čidla, baterie, nastavení). Obnova ze zálohy ji načte zpět.</p>
       </H>
 
       <H title="3. Seznam ponorů">
+        <p><b>Výběr ponorů:</b> ☑ vpravo u filtrů zapne výběr – klepnutím ponory zaškrtáváš, dole je Vše / Sdílet / ✕.</p>
         <p><b>Plné / kompaktní zobrazení:</b> přepínač ☰ / ≡ vpravo u filtrů. V kompaktním zobrazení naznačí problém barevný rámeček řádku.</p>
         <p><b>Filtry:</b> Vše / 👍 / 👎 / ❗ podle hodnocení; pod nimi plyny (AIR, TMX, NX) a problémy (pO₂, CO₂, ČIDLA, TLAK, BAT, SP). Uvnitř skupiny stačí kterýkoli, mezi skupinami platí obojí. Pod zapnutým filtrem je počet ponorů.</p>
         <p><b>Hledání:</b> lokalita, parťák, poznámka nebo datum. Parťáci jdou filtrovat i štítky, „Bez parťáka“ ukáže ponory bez parťáka.</p>
@@ -50,18 +52,21 @@ export function HelpScreen() {
         <p><b>Setpoint:</b> kdy a jak jsi přepnul (ručně v menu), pozdní přepnutí, klesání s vysokým SP, 0,19 mimo závěr.</p>
         <p><b>Plyny a lahve:</b> spotřeba onboard lahví, externí lahev, přechod z onboard na externí, nízký tlak, dávky O₂ (solenoid / ručně).</p>
         <p><b>Počítač:</b> varování na displeji a jejich potvrzení, baterie, nízké NDL.</p>
+        <p><b>Baterie Petrelu:</b> výměnu pozná sama (skok procent, u NiMH skok napětí, jiný typ) a trend počítá jen od ní; lithiovou hlídá podle procent (pod 50 % slábne, pod 25 % slabá). Po výměně po posledním ponoru skryje upozornění tlačítko „Baterii jsem vyměnil“ v panelu baterií.</p>
         <p><b>Značky jistoty:</b> ✓ potvrzeno daty, (P) pravděpodobně, (?) hypotéza – část záznamů Shearwater nedokumentuje a význam je odvozený z dat.</p>
       </H>
 
       <H title="6. Porovnání s ostatními">
         <p><b>Logy ostatních:</b> záložka DB → Načíst log (nebo sdílením souboru do myX). Cizí log jde otevřít jen ke čtení.</p>
         <p><b>Párování ponorů:</b> společné ponory se najdou podle profilu prvních 10 minut a času začátku – i když se hodiny počítačů rozcházejí o minuty nebo o hodinu (letní / zimní čas).</p>
-        <p><b>Srovnání:</b> záložka DB → Srovnání nebo ⇄ u ponoru. Ukáže profily, pO₂, CO₂, deko a závěr po sekcích (deko, pO₂, CO₂, dech, profil, plyny); jde porovnat i víc potápěčů najednou. Nevěrohodná čidla se ze srovnání vynechají.</p>
-        <p><b>Převzaté údaje:</b> když parťák má u společného ponoru lokalitu nebo jména, myX je nabídne (kurzívou). Přiřazení „Je to…“ a „To jsem já“ si aplikace pamatuje.</p>
+        <p><b>Srovnání:</b> záložka DB → Srovnání nebo ⇄ u ponoru. Ukáže profily, pO₂, CO₂, deko a závěr po sekcích (deko, pO₂, CO₂, dech, profil, plyny); jde porovnat i víc potápěčů najednou. Nevěrohodná čidla se ze srovnání vynechají. V rozdílech je každý údaj blok s hodnotami potápěčů pod sebou; ▲ červený rámeček = nejvyšší, ▼ fialový = nejnižší; méně podstatné údaje jsou pod „Další údaje“. Filtr společných ponorů zůstane i po návratu ze srovnání.</p>
+        <p><b>Převzaté údaje:</b> když má parťák u společného ponoru lokalitu nebo jména, myX je ukáže v detailu ponoru v kartě „Z logů ostatních“. U každého jména je Akce: To je… (propojit s tvým parťákem / lokalitou – vznikne alias), Přidat k ponoru, Založit nového, To jsem já. U podobného jména nabídne např. „To je Radek Patak?“.</p>
+        <p><b>Aliasy:</b> propojení platí pro všechny ponory a zůstane i po smazání nebo aktualizaci cizího logu. Zrušit jde v B&L v detailu parťáka / lokality (karta Aliasy), tvoje jména v Nastavení → Výbava → Moje aliasy.</p>
+        <p><b>Logy ostatních v DB:</b> u každého počítače tlačítko Akce (majitel, hlavní počítač, To je můj počítač, Smazat); Otevřít a Srovnání jsou u majitele. ID počítače se ukazuje jen tady, jinde jméno majitele.</p>
       </H>
 
       <H title="7. B&L – parťáci a lokality">
-        <p>Tvoje lokality a parťáci s počty ponorů. Slučování dvou jmen (s výběrem, které zůstane). Karta „Z cizích logů“ nabízí jména z logů ostatních: Přidat k mým, Je to… (přiřadit k existujícímu) nebo To jsem já.</p>
+        <p>Tvoje lokality a parťáci s počty ponorů. Slučování dvou jmen (s výběrem, které zůstane). Karta „Z cizích logů“ nabízí jména z logů ostatních: Přidat k mým, Je to… (přiřadit k existujícímu) nebo To jsem já. V detailu parťáka a lokality je karta Aliasy s jmény z cizích logů, která k nim patří (✕ zruší propojení).</p>
       </H>
 
       <H title="8. Přehled a nastavení">
