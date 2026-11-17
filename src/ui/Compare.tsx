@@ -5,7 +5,7 @@ import { setpointChanges } from "../core/analysis";
 import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag, type MultiRow } from "../core/compare";
 import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, toast } from "../app/store";
 import { GuestCard } from "./Settings";
-import { Card, fmtDate, fmtDateTime, go, tab, useStore } from "./common";
+import { Card, fmtDate, fmtDateTime, go, leaveY, tab, useStore } from "./common";
 import { LineChart } from "./Chart";
 import type { Meta } from "../app/model";
 
@@ -193,12 +193,23 @@ export function CompareHub({ sub = "cmp", who }: { sub?: "cmp" | "db"; who?: str
   );
 }
 
+/** Filtr a pozice seznamu společných ponorů – přežije otevření srovnání a návrat (do zavření aplikace). */
+const cmMemo: { who?: string; sel: string[]; year: string; month: string; day: string; y: number } = { sel: [], year: "", month: "", day: "", y: 0 };
 function CommonList({ who }: { who?: string }) {
   const st = useStore();
   const [rows, setRows] = useState<Common[] | null>(null);
-  const [sel, setSel] = useState<string[]>(who ? [who] : []);
-  const [year, setYear] = useState(""), [month, setMonth] = useState(""), [day, setDay] = useState("");
+  // nový požadavek na konkrétního člověka (z Databáze) má přednost před zapamatovaným filtrem
+  if (who && who !== cmMemo.who) Object.assign(cmMemo, { who, sel: [who], year: "", month: "", day: "", y: 0 });
+  const [sel, setSel0] = useState<string[]>(cmMemo.sel);
+  const [year, setYear0] = useState(cmMemo.year), [month, setMonth0] = useState(cmMemo.month), [day, setDay0] = useState(cmMemo.day);
+  const setSel = (v: string[]) => { cmMemo.sel = v; setSel0(v); };
+  const setYear = (v: string) => { cmMemo.year = v; setYear0(v); };
+  const setMonth = (v: string) => { cmMemo.month = v; setMonth0(v); };
+  const setDay = (v: string) => { cmMemo.day = v; setDay0(v); };
   useEffect(() => { commonDives(st.metas).then(setRows); }, [st.metas, st.guestRev, st.lb.computers]);
+  // pozice v seznamu: uložit při odchodu, obnovit po načtení
+  useEffect(() => () => { cmMemo.y = leaveY; }, []);
+  useEffect(() => { if (rows && cmMemo.y) requestAnimationFrame(() => window.scrollTo(0, cmMemo.y)); }, [rows]);
   if (rows == null) return <p className="muted">Hledám…</p>;
   if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log ostatních v Databázi (nebo ho nasdílej do myX přes WhatsApp / Quick Share).</p>;
   const ymd = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
@@ -212,7 +223,7 @@ function CommonList({ who }: { who?: string }) {
   return (
     <>
       <div className="chips buddyfilter">
-        <button className={"chip" + (!sel.length && !year && !month && !day ? " on" : "")} onClick={() => { setSel([]); setYear(""); setMonth(""); setDay(""); }}>Vše</button>
+        <button className={"chip" + (!sel.length && !year && !month && !day ? " on" : "")} onClick={() => { setSel([]); setYear(""); setMonth(""); setDay(""); cmMemo.y = 0; }}>Vše</button>
         {people.map((p) => {
           const on = sel.includes(p), next = on ? sel.filter((x) => x !== p) : [...sel, p];
           const n = rows.filter((r) => dateOk(r) && has(r, next)).length;

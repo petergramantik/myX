@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.31.1";
+export const APP_VERSION = "1.31.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.31.2", date: "2026-11-17", title: "Filtr společných ponorů se pamatuje", items: [
+    "Filtr společných ponorů (lidé, rok, měsíc, den) a pozice v seznamu zůstanou po návratu ze srovnání; vynuluje je „Vše“ nebo zavření aplikace.",
+  ] },
   { version: "1.31.1", date: "2026-11-17", title: "Přehlednější rozdíly ve srovnání", items: [
     "Rozdíly jako bloky: název přes celou šířku, pod ním hodnoty potápěčů ve sloupcích – nic nepřetéká z obrazovky.",
     "Jména potápěčů zůstávají při posouvání nahoře.",

@@ -14,8 +14,10 @@ let stack: Screen[] = [{ t: "home" }];
 const navSubs = new Set<() => void>();
 const emit = () => navSubs.forEach((f) => f());
 export const useScreen = () => useSyncExternalStore((f) => { navSubs.add(f); return () => navSubs.delete(f); }, () => stack[stack.length - 1]);
-export function go(s: Screen) { stack = [...stack, s]; history.pushState({ d: stack.length }, ""); emit(); window.scrollTo(0, 0); }
-export function tab(s: Screen) { stack = [s]; history.replaceState({ d: 1 }, ""); emit(); window.scrollTo(0, 0); }
+/** Pozice stránky v okamžiku přechodu na další obrazovku (pro obnovení po návratu). */
+export let leaveY = 0;
+export function go(s: Screen) { leaveY = window.scrollY; stack = [...stack, s]; history.pushState({ d: stack.length }, ""); emit(); window.scrollTo(0, 0); }
+export function tab(s: Screen) { leaveY = window.scrollY; stack = [s]; history.replaceState({ d: 1 }, ""); emit(); window.scrollTo(0, 0); }
 export function back() { if (stack.length > 1) history.back(); }
 window.addEventListener("popstate", () => { if (stack.length > 1) { stack = stack.slice(0, -1); emit(); } });
 
