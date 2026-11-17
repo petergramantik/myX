@@ -6,6 +6,7 @@ import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
 import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
+import { shareDives } from "./share";
 import { AlertBox, Card, KV, Picker, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
@@ -26,6 +27,9 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const [bsel, setBsel] = useState<string[]>(buddy ? [buddy] : []);
   const [noBuddy, setNoBuddy] = useState(false);
   const [moreB, setMoreB] = useState(false);
+  const [pickMode, setPickMode] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const endPick = () => { setPickMode(false); setPicked([]); };
   useEffect(() => { setBsel(buddy ? [buddy] : []); }, [buddy]);
   // seznam ponorů s buddym: ponory, ke kterým mám log buddyho, se otevřou rovnou jako srovnání
   const [cmp, setCmp] = useState<Map<string, Common>>(new Map());
@@ -87,12 +91,14 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         <div className="seg filter">
           <button className={onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(true)}>Jen společné ({st.metas.filter(common).length})</button>
           <button className={!onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(false)}>Všechny ({st.metas.length})</button>
+          <button className={pickMode ? "on" : ""} onClick={() => (pickMode ? endPick() : setPickMode(true))}>Vybrat</button>
         </div>
       ) : (<>
         <div className="filter-row">
           <div className="seg filter">
             {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
           </div>
+          <button className={"btn view-tg pick-tg" + (pickMode ? " on" : "")} title="Vybrat ponory ke sdílení" onClick={() => (pickMode ? endPick() : setPickMode(true))}>☑</button>
           <button className="btn view-tg" title={compact ? "Kompaktní zobrazení" : "Plné zobrazení"} onClick={() => { setCompact(!compact); try { localStorage.setItem("myx-compact", compact ? "0" : "1"); } catch { /* */ } }}>{compact ? "≡" : "☰"}</button>
         </div>
         {!compact && (gasAll.length > 0 || tagAll.length > 0) && <div className="cat-filter">
@@ -113,16 +119,17 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         const c = cmp.get(m.id);
         const badge = c ? <span className="badge cmpb">⇄&nbsp;{c.with.length + 1}</span> : null;
         const rate = note?.rating ? <span className="dr-rt">{RATING[note.rating].icon}</span> : null;
-        const open = () => { const cc = bsel.length ? c : undefined; go(cc ? { t: "cmp", id: m.id, other: cc.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); };
+        const isPicked = picked.includes(m.id);
+        const open = () => { if (pickMode) { setPicked(isPicked ? picked.filter((x) => x !== m.id) : [...picked, m.id]); return; } const cc = bsel.length ? c : undefined; go(cc ? { t: "cmp", id: m.id, other: cc.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); };
         if (compact) return (
-          <div key={m.id} className={"dive-row compact " + rowLevel(diveTagsOfMeta(st.metas, m, lb.settings.th))} onClick={open}>
+          <div key={m.id} className={"dive-row compact " + rowLevel(diveTagsOfMeta(st.metas, m, lb.settings.th)) + (pickMode ? " pickable" : "") + (isPicked ? " picked" : "")} onClick={open}>
             <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{m.parts ? ` · ${m.parts.length} části` : ""}{buds ? " · " + buds : ""}</small></div>
             <div className="dr-num fixed"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             <div className="dr-rate">{rate}{badge}</div>
           </div>
         );
         return (
-          <div key={m.id} className="dive-row full" onClick={open}>
+          <div key={m.id} className={"dive-row full" + (pickMode ? " pickable" : "") + (isPicked ? " picked" : "")} onClick={open}>
             <div className="dr-mid">
               <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{m.alt ? " · 2 počítače" : ""}{m.parts ? ` · ${m.parts.length} části` : ""}</small></div>
               <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
@@ -133,6 +140,12 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         );
       })}
       {!rows.length && !drafts.length && <p className="muted center">Žádné ponory</p>}
+      {pickMode && <div className="pickbar">
+        <span>{picked.length ? `Vybráno ${picked.length}` : "Klepnutím vyber ponory"}</span>
+        <button className="btn" onClick={() => setPicked(picked.length === rows.length ? [] : rows.map((r) => r.m.id))}>{picked.length === rows.length ? "Nic" : "Vše"}</button>
+        <button className="btn primary" disabled={!picked.length} onClick={async () => { await shareDives(rows.filter((r) => picked.includes(r.m.id)).map((r) => r.m)); endPick(); }}>Sdílet{picked.length ? ` (${picked.length})` : ""}</button>
+        <button className="btn" onClick={endPick}>✕</button>
+      </div>}
     </div>
   );
 }
@@ -172,6 +185,7 @@ export function DiveScreen({ id }: { id: string }) {
       <div className="dive-head">
         <button className="btn small" disabled={!prev} onClick={() => { if (prev) { setSlide("from-left"); go({ t: "dive", id: prev.id }); } }}>‹</button>
         <div><b>Ponor {myNum(id)}</b><small>{fmtDateTime(meta.start)} · v počítači #{meta.num}</small></div>
+        <button className="btn small share-btn" title="Sdílet ponor" onClick={() => shareDives([meta])}>⤴</button>
         <button className="btn small" disabled={!next} onClick={() => { if (next) { setSlide("from-right"); go({ t: "dive", id: next.id }); } }}>›</button>
       </div>
       <div className="tabs">

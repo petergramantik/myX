@@ -1,6 +1,8 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
 import { ask, askText } from "./dialog";
 import { mergeDives, segGroups } from "../core/segments";
+import { writeSqlite } from "../core/sqlitew";
+import { SqliteFile } from "../core/sqlite";
 import { decodeDive, peekHeader, readCloudDetails, readCloudNumbers, readShearwaterDb, type CloudDetail, type Dive, type RawDive } from "../core/shearwater";
 import { DEFAULT_THRESHOLDS, diveWarnings, injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
@@ -257,8 +259,8 @@ export async function removeOwnComputer(serial: string): Promise<number> {
 }
 
 async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promise<number> {
-  await db.put("kv", { name: name || "Shearwater_Cloud.db", at: Date.now(), count: raws.length, data: buf }, "orig"); // pro sdílení buddymu
-  const cloud = readCloudDetails(buf);
+  if (!isMyxShare(buf)) await db.put("kv", { name: name || "Shearwater_Cloud.db", at: Date.now(), count: raws.length, data: buf }, "orig"); // pro sdílení celého logu
+  const cloud = cloudPlus(buf);
   if (cloud.size) { const lb = applyCloud(st.lb, cloud, new Set(raws.map((r) => r.id))); if (lb !== st.lb) await saveLb(lb); }
   const have = new Set(st.metas.map((m) => m.id));
   const cnums = readCloudNumbers(buf);
@@ -492,6 +494,63 @@ export async function applySuggestion(diveId: string, kind: "site" | "buddy", na
   await setNote(diveId, kind === "site" ? { siteId: id } : { buddyIds: [...new Set([...n.buddyIds, id])] });
 }
 
+// ---------- sdílení vybraných ponorů (malý export ve formátu Shearwater Cloud)
+/** Tabulka myX v sdíleném souboru: moje lokalita a parťáci u ponoru (jen u mých ponorů). */
+const MYX_TABLE = "myx_dive";
+/** Vytvoří .db jen s vybranými ponory (vlastní nebo z otevřeného cizího logu). ids = id záznamů včetně částí spojených ponorů. */
+export async function exportDives(ids: string[]): Promise<{ name: string; data: Uint8Array; count: number }> {
+  const guest = !!st.guest;
+  const orig = guest ? undefined : await lastExport();
+  const oc = orig ? readCloudDetails(orig.data) : new Map<string, CloudDetail>();
+  const logRows: (string | number | Uint8Array | null)[][] = [], detRows: (string | number | null)[][] = [], myxRows: (string | null)[][] = [];
+  const glb = new Map<string, Logbook>();
+  let model = "", first = Infinity;
+  for (const id of ids) {
+    const raw = await db.get<RawDive>("raw", id, guest ? db.GUEST : undefined);
+    if (!raw) continue;
+    const i = id.indexOf(":"), oid = guest && i > 0 ? id.slice(i + 1) : id;
+    logRows.push([oid, raw.fn || "", raw.blob]);
+    model = model || (/^(.*?)\[/.exec(raw.fn || "")?.[1] || "").trim();
+    first = Math.min(first, raw.start || Infinity);
+    let site = "", buddy = "", notes = "";
+    if (guest) { // údaje ze Shearwater Cloud v cizím logu (bez mých aliasů)
+      const lid = id.slice(0, i);
+      if (!glb.has(lid)) glb.set(lid, (await db.get<{ lb: Logbook }>("kv", lid, db.GUEST))?.lb || emptyLogbook());
+      const g = glb.get(lid)!, n = g.notes[id];
+      if (n) { site = n.siteId ? g.sites[n.siteId]?.name || "" : ""; buddy = n.buddyIds.map((b) => g.buddies[b]?.name).filter(Boolean).join(", "); notes = n.note || ""; }
+    } else {
+      const c = oc.get(oid);
+      if (c) { site = c.site; buddy = c.buddies.join(", "); notes = c.notes; }
+      const n = st.lb.notes[id];
+      if (n) myxRows.push([oid, n.siteId ? st.lb.sites[n.siteId]?.name || null : null, n.buddyIds.filter((b) => b !== ME).map((b) => st.lb.buddies[b]?.name).filter(Boolean).join(", ") || null]);
+    }
+    detRows.push([oid, raw.cnum ?? null, site || null, buddy || null, notes || null]);
+  }
+  if (!logRows.length) throw new Error("Ponor se nepodařilo najít");
+  const tables = [
+    { name: "log_data", sql: "CREATE TABLE log_data (log_id TEXT, file_name TEXT, data_bytes_1 BLOB)", rows: logRows },
+    { name: "dive_details", sql: "CREATE TABLE dive_details (DiveId TEXT, DiveNumber INTEGER, Site TEXT, Buddy TEXT, Notes TEXT)", rows: detRows },
+    { name: MYX_TABLE, sql: `CREATE TABLE ${MYX_TABLE} (DiveId TEXT, Site TEXT, Buddies TEXT)`, rows: myxRows },
+  ];
+  const day = Number.isFinite(first) ? new Date(first * 1000).toISOString().slice(0, 10) : "ponor";
+  const name = `myX_${(model || "Petrel").replace(/\s+/g, "")}_${day}${logRows.length > 1 ? `_${logRows.length}` : ""}.db`;
+  return { name, data: writeSqlite(tables), count: logRows.length };
+}
+/** Je soubor sdílení vybraných ponorů z myX (ne celý export)? */
+const isMyxShare = (buf: Uint8Array) => { try { return new SqliteFile(buf).tables().has(MYX_TABLE); } catch { return false; } };
+/** Moje lokalita a parťáci ze sdíleného souboru – doplní se jako údaje „z Cloudu“, kde Cloud nic nemá. */
+function readMyx(buf: Uint8Array): Map<string, CloudDetail> {
+  const out = new Map<string, CloudDetail>();
+  try { for (const r of new SqliteFile(buf).rows(MYX_TABLE)) { const id = String(r["DiveId"] ?? ""); if (id) out.set(id, { site: String(r["Site"] || ""), buddies: String(r["Buddies"] || "").split(",").map((x) => x.trim()).filter(Boolean), notes: "" }); } } catch { /* */ }
+  return out;
+}
+/** Cloud údaje doplněné o údaje z myX (Cloud má přednost). */
+function cloudPlus(buf: Uint8Array): Map<string, CloudDetail> {
+  const c = readCloudDetails(buf);
+  for (const [id, m] of readMyx(buf)) { const x = c.get(id); c.set(id, { site: x?.site || m.site, buddies: x?.buddies.length ? x.buddies : m.buddies, notes: x?.notes || "" }); }
+  return c;
+}
+
 /** Načtené cizí logy s jejich ponory (pro hledání společných ponorů). */
 let guestIndex: { log: GuestLog; metas: Meta[]; lb: Logbook; alts: Meta[] }[] | null = null;
 /** Data jednoho cizího logu (jednoho počítače); přepočítá metadata po změně verze výpočtů. */
@@ -639,30 +698,48 @@ export async function importGuest(file: File): Promise<GuestLog | null> {
   if (r.guests[0]) await openGuest(r.guests[0]);
   return r.guests[0] || null;
 }
+/** Id ponorů přidaných posledním importem cizího logu (pro otevření sdíleného ponoru). */
+let lastGuestAdded = new Set<string>();
 async function importGuestRaws(buf: Uint8Array, raws: RawDive[], open = true): Promise<GuestLog | null> {
   if (!raws.length) return null;
   const fn = raws.find((r) => r.fn)?.fn || "";
   const model = (/^(.*?)\[/.exec(fn)?.[1] || "Počítač").trim();
   const serial = serialOf(fn);
-  const id = uid();
-  const metas: Meta[] = [];
+  // stejný počítač už načtený → ponory se sloučí (sdílené jednotlivé ponory i pozdější celý export dají stejný výsledek)
+  const prev = serial ? (await guestLogs()).find((l) => l.serial === serial) : undefined;
+  const id = prev?.id || uid();
+  const old = prev ? await db.get<{ metas: Meta[]; lb: Logbook }>("kv", id, db.GUEST) : undefined;
+  const metas: Meta[] = [...(old?.metas || [])];
+  const have = new Set(metas.map((m) => m.id)), haveStart = new Set(metas.map((m) => `${m.num}:${m.start}`));
   const cnums = readCloudNumbers(buf);
+  const added = new Set<string>();
+  lastGuestAdded = added;
   for (const r of raws) {
     try {
+      const rid = `${id}:${r.id}`;
+      if (have.has(rid)) continue;
       const ph = await peekHeader(r.blob);
-      const raw: RawDive = { ...r, id: `${id}:${r.id}`, num: ph.num, start: ph.start, blob: r.blob.slice(), cnum: cnums.get(r.id) };
+      if (haveStart.has(`${ph.num}:${ph.start}`)) continue;
+      const raw: RawDive = { ...r, id: rid, num: ph.num, start: ph.start, blob: r.blob.slice(), cnum: cnums.get(r.id) };
       await db.put("raw", raw, undefined, db.GUEST);
       metas.push(await metaOf(raw));
+      added.add(rid);
     } catch { /* poškozený ponor přeskočit */ }
   }
-  const ids = new Set(raws.map((r) => r.id));
-  const cloud = new Map([...readCloudDetails(buf)].filter(([k]) => ids.has(k)).map(([k, v]) => [`${id}:${k}`, v]));
-  const lb = applyCloud(emptyLogbook(), cloud, new Set(metas.map((m) => m.id)));
-  await db.put("kv", { metas, lb }, id, db.GUEST);
-  const log: GuestLog = { id, name: `${model}${serial ? " " + serial : ""}`, count: metas.length, added: Date.now(), serial: serial || undefined, model };
-  // starší log ze stejného počítače nahradit, ať se nehromadí duplicity
-  for (const old of (await guestLogs()).filter((l) => log.serial && l.serial === log.serial)) await deleteGuest(old);
-  await db.put("kv", [log, ...(await guestLogs())], "logs", db.GUEST);
+  if (prev && !added.size) {
+    // nic nového – jen doplnit případné údaje z Cloudu k už načteným ponorům
+    const cloud0 = new Map([...cloudPlus(buf)].map(([k, v]) => [`${id}:${k}`, v]));
+    const lb0 = applyCloud(old?.lb || emptyLogbook(), cloud0, have);
+    if (lb0 !== old?.lb) { await db.put("kv", { metas, lb: lb0 }, id, db.GUEST); guestIndex = null; guestRaw = null; set({ guestRev: st.guestRev + 1 }); }
+    return prev;
+  }
+  const cloud = new Map([...cloudPlus(buf)].map(([k, v]) => [`${id}:${k}`, v]));
+  const lb = applyCloud(old?.lb || emptyLogbook(), cloud, new Set(metas.map((m) => m.id)));
+  await db.put("kv", { metas: sortMetas(metas), lb }, id, db.GUEST);
+  const log: GuestLog = { ...(prev || {}), id, name: `${model}${serial ? " " + serial : ""}`, count: metas.length, added: prev?.added || Date.now(), serial: serial || undefined, model };
+  // starší duplicitní logy ze stejného počítače (z dřívějších verzí) odstranit
+  for (const dup of (await guestLogs()).filter((l) => log.serial && l.serial === log.serial && l.id !== id)) await deleteGuest(dup);
+  await db.put("kv", [log, ...(await guestLogs()).filter((l) => l.id !== id)], "logs", db.GUEST);
   guestIndex = null; guestRaw = null;
   set({ guestRev: st.guestRev + 1 });
   const known = log.serial ? ownLb().computers?.[log.serial] : undefined;
@@ -700,8 +777,11 @@ export async function takeShared(): Promise<{ log: GuestLog | null; last: Meta |
   const log = res.guests[0] || null;
   if (res.guests.length > 1) await askSameOwner(res.guests);
   if (!log) return { log: null, last: [...st.metas].sort((a, b) => b.start - a.start)[0] || null, mine: null, own: res.own };
+  const sharedIds = new Set(lastGuestAdded);
   await openGuest(log);
-  const last = [...st.metas].sort((a, b) => b.start - a.start)[0] || null;
+  // sdílené jednotlivé ponory: otevřít nejnovější z nich, ne nejnovější ponor celého logu
+  const pool = st.metas.filter((m) => sharedIds.has(m.id));
+  const last = [...(pool.length ? pool : st.metas)].sort((a, b) => b.start - a.start)[0] || null;
   const mine = last ? ownMetas().find((m) => nearestPair([last], m).length > 0) || null : null;
   return { log, last, mine, own: res.own };
 }

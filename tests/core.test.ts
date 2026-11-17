@@ -347,5 +347,14 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(/1,44 V \/ 48 % → 1,50 V \/ 100 %/.test(batSwapInfo(hs[4], hs[5])!.text), "text o výměně");
 }
 
+{ // zapisovač SQLite: zpětné čtení vlastní čtečkou (dlouhé záznamy přes přetečení, víc stránek)
+  const { writeSqlite } = await import("../src/core/sqlitew");
+  const { SqliteFile } = await import("../src/core/sqlite");
+  const rows = Array.from({ length: 120 }, (_, i) => [`id${i}`, `Petrel 3[AB]#${i}`, new Uint8Array(i % 5 ? 300 : 9000).map((_, j) => (i * 7 + j) & 255), i - 60, i / 4]);
+  const buf = writeSqlite([{ name: "log_data", sql: "CREATE TABLE log_data (log_id TEXT, file_name TEXT, data_bytes_1 BLOB, n INTEGER, f REAL)", rows }]);
+  const back = new SqliteFile(buf).rows("log_data");
+  ok(back.length === 120 && back.every((r, i) => r.log_id === rows[i][0] && r.n === rows[i][3] && r.f === rows[i][4] && (r.data_bytes_1 as Uint8Array).length === (rows[i][2] as Uint8Array).length && (r.data_bytes_1 as Uint8Array).every((v, j) => v === (rows[i][2] as Uint8Array)[j])), "SQLite zapisovač: zpětné čtení");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.31.3";
+export const APP_VERSION = "1.32";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.32", date: "2026-11-17", title: "Sdílení vybraných ponorů", items: [
+    "Detail ponoru: tlačítko ⤴ sdílí jen tento ponor (spojený ponor se všemi částmi); seznam ponorů: ☑ Vybrat → zaškrtnout → Sdílet. Funguje i v otevřeném cizím logu.",
+    "Soubor .db ve formátu exportu Shearwater Cloud jen s vybranými ponory (záznamy beze změny) + moje lokalita a parťáci z myX; hodnocení a poznámka se nesdílí.",
+    "Import stejného počítače už log nenahrazuje, ale slučuje – jednotlivé sdílené ponory a pozdější celý export dají stejný výsledek bez duplicit.",
+    "Sdílený soubor nepřepíše uložený celý export pro „Sdílet můj log“.",
+  ] },
   { version: "1.31.3", date: "2026-11-17", title: "Aliasy parťáků a lokalit", items: [
     "Detail ponoru → Z logů ostatních: každé jméno tučně s tlačítkem Akce – To je… (propojit s mým parťákem / lokalitou), Přidat k ponoru, Založit nového, To jsem já; u podobného jména nabídne „To je Radek Patak?“.",
     "Propojení (alias) platí pro všechny ponory, přežije aktualizaci i smazání cizího logu.",
