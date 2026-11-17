@@ -812,6 +812,32 @@ export async function deleteGuest(log: GuestLog) {
   set({ guestRev: st.guestRev + 1 });
 }
 
+/** Smaže vybrané ponory z cizích logů; prázdný log zmizí celý (majitel a aliasy zůstanou). Vrací počet smazaných. */
+export async function deleteGuestDives(ids: string[]): Promise<number> {
+  const byLog = new Map<string, Set<string>>();
+  for (const id of ids) { const i = id.indexOf(":"); if (i > 0) { const l = id.slice(0, i); byLog.set(l, (byLog.get(l) || new Set()).add(id)); } }
+  const open = st.guest;
+  let n = 0;
+  for (const [lid, del] of byLog) {
+    const data = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", lid, db.GUEST);
+    const log = (await guestLogs()).find((l) => l.id === lid);
+    if (!data || !log) continue;
+    const metas = data.metas.filter((m) => !del.has(m.id));
+    n += data.metas.length - metas.length;
+    if (!metas.length) { await deleteGuest(log); continue; }
+    for (const id of del) { await db.del("raw", id, db.GUEST); delete data.lb.notes[id]; }
+    await db.put("kv", { metas, lb: data.lb }, lid, db.GUEST);
+    await db.put("kv", (await guestLogs()).map((l) => (l.id === lid ? { ...l, count: metas.length } : l)), "logs", db.GUEST);
+  }
+  guestIndex = null; guestRaw = null; diveCache.clear();
+  set({ guestRev: st.guestRev + 1 });
+  if (open) {
+    const still = (await guestLogs()).find((l) => l.id === open.id || open.logs?.some((x) => x.id === l.id));
+    if (still) await openGuest(still); else closeGuest();
+  }
+  return n;
+}
+
 // ---------- rozpracované ponory (založené na lokalitě) a jejich spárování s logem
 const H = 3600;
 /** Ponory z počítače, které časově odpovídají rozpracovanému ponoru (začátek −3 h až +6 h od založení). */

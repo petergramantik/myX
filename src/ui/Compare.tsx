@@ -5,6 +5,7 @@ import { setpointChanges } from "../core/analysis";
 import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag, type MultiRow } from "../core/compare";
 import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, toast } from "../app/store";
 import { GuestCard } from "./Settings";
+import { shareDb } from "./share";
 import { Card, fmtDate, fmtDateTime, go, leaveY, tab, useStore } from "./common";
 import { LineChart } from "./Chart";
 import type { Meta } from "../app/model";
@@ -261,15 +262,7 @@ export function CommonRow({ r }: { r: Common }) {
 function ShareMine() {
   const [last, setLast] = useState<Awaited<ReturnType<typeof lastExport>>>();
   useEffect(() => { lastExport().then(setLast); }, []);
-  const share = async () => {
-    if (!last) return;
-    const f = new File([last.data], last.name.endsWith(".db") ? last.name : last.name + ".db", { type: "application/octet-stream" });
-    try {
-      if (navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: "Můj log ponorů", text: "Log ze Shearwater Cloud – otevři v myX nebo Shearwater Cloud." }); return; }
-    } catch (e) { if ((e as Error).name === "AbortError") return; }
-    const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast("Soubor uložen – pošli ho parťákovi");
-  };
+  const share = async () => { if (last) await shareDb(last.data, last.name, "Můj log"); };
   return (
     <Card title="Sdílet můj log">
       {last ? <>

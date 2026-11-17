@@ -1,5 +1,7 @@
-// Sdílení vybraných ponorů jako malý soubor .db (formát Shearwater Cloud + údaje myX).
+// Sdílení souboru .db (vybrané ponory nebo celý log): uložit jako .db, nebo poslat přes aplikace jako .txt
+// (Chrome na Androidu nedovolí sdílet z webu soubor .db, text ano; myX pozná soubor podle obsahu).
 import { exportDives, segInfo, toast } from "../app/store";
+import { choose } from "../app/dialog";
 import type { Meta } from "../app/model";
 
 /** Všechna id záznamů ponoru (spojený ponor = všechny jeho části). */
@@ -9,16 +11,35 @@ export function partIds(m: Meta): string[] {
   return p?.length ? p.map((x) => x.id) : [m.id];
 }
 
+const save = (data: Uint8Array, name: string) => {
+  const f = new File([data], name, { type: "application/octet-stream" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(`Uloženo: ${name}`);
+};
+
+/** Nabídne uložení jako .db nebo poslání přes systémové sdílení jako .txt. */
+export async function shareDb(data: Uint8Array, name: string, what: string) {
+  const db = name.endsWith(".db") ? name : name + ".db";
+  const k = await choose(`${what} – jak sdílet?`, [
+    { key: "send", label: "Poslat přes… (WhatsApp, Messenger, mail)", note: "Odejde jako .txt – příjemce ho otevře přes Sdílet → myX nebo importem v myX.", primary: true },
+    { key: "save", label: "Uložit jako .db", note: "Do Stažených souborů; otevře ho myX i Shearwater Cloud." },
+  ]);
+  if (k === "save") { save(data, db); return; }
+  if (k !== "send") return;
+  const f = new File([data], db + ".txt", { type: "text/plain" });
+  try {
+    if (!navigator.canShare?.({ files: [f] })) throw new Error("prohlížeč neumí sdílet soubory");
+    await navigator.share({ files: [f], title: what, text: `${what} z myX – otevři přes Sdílet → myX.` });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") return;
+    if (await choose(`Sdílení se nepovedlo (${(e as Error).message}). Uložit soubor jako .db?`, [{ key: "save", label: "Uložit jako .db", primary: true }])) save(data, db);
+  }
+}
+
 export async function shareDives(ms: Meta[]) {
   if (!ms.length) return;
   try {
     const r = await exportDives([...new Set(ms.flatMap(partIds))]);
-    const f = new File([r.data], r.name, { type: "application/octet-stream" });
-    const what = ms.length > 1 ? `${ms.length} ponory` : "Ponor";
-    try {
-      if (navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: what, text: `${what} z myX – otevři v myX (Sdílet → myX).` }); return; }
-    } catch (e) { if ((e as Error).name === "AbortError") return; }
-    const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast("Soubor uložen – pošli ho parťákovi");
+    await shareDb(r.data, r.name, ms.length > 1 ? `${ms.length} ponory` : "Ponor");
   } catch (e) { toast("Sdílení se nepovedlo: " + (e as Error).message); }
 }

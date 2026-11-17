@@ -409,3 +409,7 @@ details.card.sec > summary h2 { margin: 0; }
 .pickbar { position: sticky; bottom: 76px; z-index: 6; display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px; background: var(--panel2); border: 1px solid var(--accent); border-radius: var(--r); }
 .pickbar span { flex: 1; font-size: 14px; }
 .pickbar .btn { padding: 6px 10px; font-size: 15px; }
+.dlg-choices { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 4px; }
+.dlg-choices .btn { width: 100%; }
+.dlg-choices small { display: block; margin-top: 3px; font-size: 13px; }
+.guest-del { width: 100%; margin-top: 12px; }

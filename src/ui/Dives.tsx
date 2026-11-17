@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
-import { ME, adoptForeign, aliasGuess, compModel, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
+import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
 import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
-import { shareDives } from "./share";
-import { AlertBox, Card, KV, Picker, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
+import { partIds, shareDives } from "./share";
+import { ask } from "../app/dialog";
+import { AlertBox, Card, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
@@ -143,6 +144,11 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
       {pickMode && <div className="pickbar">
         <span>{picked.length ? `Vybráno ${picked.length}` : "Klepnutím vyber ponory"}</span>
         <button className="btn" onClick={() => setPicked(picked.length === rows.length ? [] : rows.map((r) => r.m.id))}>{picked.length === rows.length ? "Nic" : "Vše"}</button>
+        {st.guest && <button className="btn danger" disabled={!picked.length} onClick={async () => {
+          const ms = rows.filter((r) => picked.includes(r.m.id)).map((r) => r.m);
+          if (!await ask(`Smazat ${ms.length} ponorů z cizího logu? Při dalším importu stejného souboru se znovu přidají.`, { danger: true, ok: "Smazat" })) return;
+          toast(`Smazáno ponorů: ${await deleteGuestDives(ms.flatMap(partIds))}`); endPick();
+        }}>Smazat</button>}
         <button className="btn primary" disabled={!picked.length} onClick={async () => { await shareDives(rows.filter((r) => picked.includes(r.m.id)).map((r) => r.m)); endPick(); }}>Sdílet{picked.length ? ` (${picked.length})` : ""}</button>
         <button className="btn" onClick={endPick}>✕</button>
       </div>}
@@ -553,6 +559,10 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
       {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} />}
       <GasUseCard id={id} meta={meta} note={note} />
       <BuddyDivesCard meta={meta} />
+      {st.guest && <button className="btn danger guest-del" onClick={async () => {
+        if (!await ask("Smazat tento ponor z cizího logu? Při dalším importu stejného souboru se znovu přidá.", { danger: true, ok: "Smazat" })) return;
+        const n = await deleteGuestDives(partIds(meta)); toast(`Smazáno ponorů: ${n}`); back();
+      }}>Smazat ponor z cizího logu</button>}
     </>
   );
 }

@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.32.1";
+export const APP_VERSION = "1.32.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.32.2", date: "2026-11-17", title: "Volba sdílení a mazání cizích ponorů", items: [
+    "Sdílení (⤴, výběr ponorů, Sdílet můj log) nabídne: Poslat přes… (WhatsApp, Messenger, mail – jako .txt, Chrome .db sdílet nedovolí) nebo Uložit jako .db.",
+    "Cizí log: smazání jednotlivého ponoru v detailu nebo víc ponorů ve výběru; prázdný log zmizí, majitel a aliasy zůstanou.",
+  ] },
   { version: "1.32.1", date: "2026-11-17", title: "Nápověda aktualizovaná", items: [
     "Nápověda (?) popisuje sdílení vybraných ponorů, výběr v seznamu, aliasy, Akce v Databázi, nové srovnání, filtr společných ponorů a výměnu baterie.",
   ] },
