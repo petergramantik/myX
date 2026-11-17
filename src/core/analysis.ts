@@ -440,7 +440,29 @@ export function scrubberInfo(hs: Header[], nowLocal: number, th: Thresholds, man
 }
 
 /** Upozornění na úvodní obrazovce. hs = hlavičky ponorů, nowLocal = aktuální místní čas jako „UTC“ sekundy. */
-export function alerts(hs: Header[], nowLocal: number, th: Thresholds, manualFill?: number | null): Alert[] {
+/** Byla mezi dvěma ponory vyměněna baterie Petrelu? Jiný typ; u NiMH (procenta vždy 100) skok napětí na začátku o ≥ 0,08 V;
+ *  u lithiové a alkalické skok procent o ≥ 25 b. (napětí lithiové baterie se po odpočinku samo zvedne až o 0,15 V). */
+export function batSwapped(prev: Header, cur: Header): boolean {
+  if (prev.batTypeCode !== cur.batTypeCode) return true;
+  if (cur.batTypeCode === 3) return cur.batVStart - prev.batVEnd >= 0.08 && cur.batVStart - prev.batVStart >= 0.05;
+  return cur.batPctStart - prev.batPctEnd >= 25;
+}
+
+/** Ponory od poslední výměny baterie (seřazené podle času, včetně posledního). */
+export function batSinceSwap(sorted: Header[]): Header[] {
+  let i = sorted.length - 1;
+  while (i > 0 && !batSwapped(sorted[i - 1], sorted[i])) i--;
+  return sorted.slice(i);
+}
+
+/** Text o výměně baterie mezi předchozím a tímto ponorem, jinak null. */
+export function batSwapInfo(prev: Header | undefined, cur: Header): Alert | null {
+  if (!prev || !batSwapped(prev, cur)) return null;
+  const pct = (h: Header, v: number, p: number) => `${v.toFixed(2).replace(".", ",")} V${h.batTypeCode !== 3 ? ` / ${p} %` : ""}`;
+  return { level: "info", title: "Baterie vyměněna", kind: "battery", text: `${prev.batTypeCode !== cur.batTypeCode ? `${prev.batType} → ${cur.batType}, ` : ""}${pct(prev, prev.batVEnd, prev.batPctEnd)} → ${pct(cur, cur.batVStart, cur.batPctStart)} proti předchozímu ponoru.` };
+}
+
+export function alerts(hs: Header[], nowLocal: number, th: Thresholds, manualFill?: number | null, batSwap?: number | null): Alert[] {
   if (!hs.length) return [];
   const sorted = [...hs].sort((a, b) => a.start - b.start);
   const last = sorted[sorted.length - 1];
@@ -455,17 +477,23 @@ export function alerts(hs: Header[], nowLocal: number, th: Thresholds, manualFil
     const days = Math.floor((nowLocal - fill) / DAY);
     if (days >= th.scrubDays) out.push({ kind: "scrubber", level: "warn", title: "Sorbent příliš starý", text: `Náplň od ${fmtDate(fill)} – už ${days} dní. Zvaž výměnu i přes zbývajících ${hm(left)}.` });
   }
-  // baterie: podle posledních ponorů se stejným typem baterie
-  const same = sorted.filter((h) => h.batTypeCode === last.batTypeCode).slice(-6);
-  const vs = same.map((h) => h.batVStart);
+  // baterie: jen ponory od poslední výměny (skok napětí / procent nahoru nebo jiný typ)
+  if (batSwap != null && batSwap > last.start) return out; // ručně „Baterii jsem vyměnil“ po posledním ponoru
+  const since = batSinceSwap(sorted);
+  const vs = since.map((h) => h.batVStart);
   const warn = last.batWarn;
-  if (last.batVEnd <= warn || last.batVStart <= warn + th.batMarginV) {
-    out.push({ kind: "battery", level: last.batVEnd <= last.batCrit ? "bad" : "warn", title: "Slabá baterie", text: `Napětí na začátku ${last.batVStart.toFixed(2)} V, na konci ${last.batVEnd.toFixed(2)} V, práh varování ${warn.toFixed(2)} V (${last.batType}).` });
+  const lith = last.batTypeCode === 2 && last.batPctEnd > 0;
+  if (last.batVEnd <= warn || last.batVStart <= warn + th.batMarginV || (lith && last.batPctEnd <= 25)) {
+    out.push({ kind: "battery", level: last.batVEnd <= last.batCrit ? "bad" : "warn", title: "Slabá baterie", text: `Napětí na začátku ${last.batVStart.toFixed(2)} V, na konci ${last.batVEnd.toFixed(2)} V${lith ? `, ${last.batPctEnd} %` : ""}, práh varování ${warn.toFixed(2)} V (${last.batType}).` });
+  } else if (lith) {
+    // lithiová: napětí je ploché a pak náhle spadne – rozhodují procenta z Petrelu
+    if (last.batPctEnd < 50) out.push({ kind: "battery", level: "warn", title: "Baterie slábne", text: `Petrel hlásí ${last.batPctEnd} % (${last.batVEnd.toFixed(2)} V). U lithiové baterie napětí drží a pak rychle spadne – připrav náhradní.` });
   } else if (vs.length >= 3) {
-    const slope = (vs[vs.length - 1] - vs[0]) / (vs.length - 1);
+    const n = Math.min(vs.length, 6), w = vs.slice(-n);
+    const slope = (w[n - 1] - w[0]) / (n - 1);
     if (slope < 0) {
-      const dives = Math.floor((vs[vs.length - 1] - warn) / -slope);
-      if (dives <= 4) out.push({ kind: "battery", level: "warn", title: "Baterie slábne", text: `Napětí na začátku ponoru klesá o ${(-slope * 1000).toFixed(0)} mV na ponor (teď ${vs[vs.length - 1].toFixed(2)} V). Práh ${warn.toFixed(2)} V za zhruba ${Math.max(dives, 1)} ponor(y).` });
+      const dives = Math.floor((w[n - 1] - warn) / -slope);
+      if (dives <= 4) out.push({ kind: "battery", level: "warn", title: "Baterie slábne", text: `Napětí na začátku ponoru klesá o ${(-slope * 1000).toFixed(0)} mV na ponor (teď ${w[n - 1].toFixed(2)} V). Práh ${warn.toFixed(2)} V za zhruba ${Math.max(dives, 1)} ponor(y).` });
     }
   }
   return out;

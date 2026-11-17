@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, adoptForeign, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
@@ -666,8 +666,10 @@ function CompWarnCard({ d }: { d: Dive }) {
 }
 
 function EventsTab({ d }: { d: Dive }) {
-  const th = useStore().lb.settings.th;
-  const infos = groupAlerts(diveWarnings(d, summarize(d), th).filter((a) => a.level === "info"));
+  const st = useStore(), th = st.lb.settings.th;
+  const prevH = st.metas.filter((m) => m.h.serial === d.h.serial && m.h.start < d.h.start).pop()?.h;
+  const bsw = batSwapInfo(prevH, d.h);
+  const infos = groupAlerts([...(bsw ? [bsw] : []), ...diveWarnings(d, summarize(d), th).filter((a) => a.level === "info")]);
   return (
     <>
     {infos.length > 0 && <Card title="Informace">{infos.map((a, i) => <AlertBox key={i} a={a} fold />)}</Card>}

@@ -334,5 +334,18 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(md.s.t.join() === "0,400,450,850" && md.h.diveTimeS === 850 && md.surf[0].from === 400 && md.events[1].t === 455, "spojení dekódovaných částí s posunem času");
 }
 
+{ // výměna baterie Petrelu
+  const { batSwapped, batSinceSwap, batSwapInfo } = await import("../src/core/analysis");
+  const b = (start: number, v0: number, v1: number, p0: number, p1: number, type = 2) => ({ start, batTypeCode: type, batType: type === 2 ? "Lithiová 1,5 V" : "NiMH", batVStart: v0, batVEnd: v1, batPctStart: p0, batPctEnd: p1, batWarn: 1.37, batCrit: 1.3, scrubTotalMin: 180, scrubLeftEndMin: 180 }) as any;
+  const hs = [b(1, 1.64, 1.6, 90, 85), b(2, 1.55, 1.5, 75, 70), b(3, 1.48, 1.45, 64, 60), b(4, 1.44, 1.42, 58, 55), b(5, 1.45, 1.44, 50, 48), b(6, 1.50, 1.50, 100, 100)];
+  ok(batSwapped(hs[4], hs[5]) && !batSwapped(hs[3], hs[4]), "výměna baterie podle skoku napětí a procent");
+  ok(batSinceSwap(hs).length === 1, "ponory od výměny");
+  ok(!alerts(hs, 10, DEFAULT_THRESHOLDS).some((a) => a.kind === "battery"), "po výměně žádné „Baterie slábne“");
+  ok(alerts(hs.slice(0, 5), 10, DEFAULT_THRESHOLDS).some((a) => a.title === "Baterie slábne"), "lithiová pod 50 % slábne");
+  ok(!alerts(hs.slice(0, 5), 10, DEFAULT_THRESHOLDS, null, 6).some((a) => a.kind === "battery"), "ruční výměna skryje upozornění");
+  ok(alerts(hs.slice(0, 5), 10, DEFAULT_THRESHOLDS, null, 4).some((a) => a.kind === "battery"), "ruční výměna před posledním ponorem neplatí");
+  ok(/1,44 V \/ 48 % → 1,50 V \/ 100 %/.test(batSwapInfo(hs[4], hs[5])!.text), "text o výměně");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

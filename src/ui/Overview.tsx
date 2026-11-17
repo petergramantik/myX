@@ -98,7 +98,7 @@ export function OverviewScreen() {
   for (const m of st.metas) bySerial.set(m.h.serial, [...(bySerial.get(m.h.serial) || []), m]);
   const multi = bySerial.size > 1;
   const lastSer = st.metas[st.metas.length - 1]?.h.serial;
-  const batAl = [...bySerial].filter(([ser]) => ser !== lastSer).flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null)
+  const batAl = [...bySerial].filter(([ser]) => ser !== lastSer).flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null, lb.settings.batSwap?.[String(ser)])
     .filter((a) => a.kind !== "scrubber").map((a) => (multi ? { ...a, title: `${a.title} (počítač ${ser.toString(16).toUpperCase()})` } : a)));
   const drafts = Object.values(lb.drafts).sort((a, b) => b.created - a.created);
   const last = st.metas[st.metas.length - 1];

@@ -2,8 +2,8 @@
 import { ask, askText } from "../app/dialog";
 import { useState } from "react";
 import type { Header } from "../core/shearwater";
-import { alerts } from "../core/analysis";
-import { deleteBattery, localNow, saveBattery } from "../app/store";
+import { alerts, batSinceSwap } from "../core/analysis";
+import { deleteBattery, localNow, saveBattery, setBatSwap } from "../app/store";
 import type { Battery } from "../app/model";
 import { AlertBox, Card, fmtDate, go, hm, num, useStore } from "./common";
 import { LineChart } from "./Chart";
@@ -19,7 +19,7 @@ export function useBatteries() {
   const th = st.lb.settings.th;
   const last = st.metas[st.metas.length - 1];
   const petrel = last ? st.metas.filter((m) => m.h.serial === last.h.serial) : [];
-  const petrelAlerts = petrel.length ? alerts(petrel.map((m) => m.h), now, th, null).filter((a) => a.kind === "battery") : [];
+  const petrelAlerts = petrel.length ? alerts(petrel.map((m) => m.h), now, th, null, last ? st.lb.settings.batSwap?.[String(last.h.serial)] : null).filter((a) => a.kind === "battery") : [];
   const head = ([1, 2] as const).map((pos) => {
     const all = Object.values(st.lb.batteries).filter((b) => b.pos === pos).sort((a, b) => b.installed.localeCompare(a.installed));
     const cur = all.find((b) => !b.removed);
@@ -31,7 +31,9 @@ export function useBatteries() {
     if (cur && th.headBatMonths > 0 && months != null && months >= th.headBatMonths) reasons.push(`${Math.floor(months)} měsíců od výměny (limit ${th.headBatMonths})`);
     return { pos, all, cur, dives: since.length, minutes, months, reasons };
   });
-  return { petrel, petrelAlerts, head, last, th };
+  const sw = last ? st.lb.settings.batSwap?.[String(last.h.serial)] : undefined;
+  const swapped = !!(last && sw != null && sw > last.h.start);
+  return { petrel, petrelAlerts, head, last, th, swapped, guest: !!st.guest };
 }
 
 /** Procenta baterie Petrelu: u NiMH je v logu vždy 100 %, proto odhad z napětí mezi kritickým prahem a plnou baterií. */
@@ -83,8 +85,9 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
   const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem(K_OPEN, v ? "1" : "0"); } catch { /* */ } };
   const h = b.last!.h;
   const pp = petrelPct(h);
-  const prev = b.petrel.filter((m) => m.h.batTypeCode === h.batTypeCode).slice(-4, -1);
-  const trend = prev.length ? h.batVStart - prev[0].h.batVStart : 0;
+  const since = batSinceSwap(b.petrel.map((m) => m.h)); // ponory od poslední výměny baterie
+  const prev = since.slice(-4, -1);
+  const trend = prev.length ? h.batVStart - prev[0].batVStart : 0;
   const headTxt = (x: (typeof b.head)[number]) => !x.cur ? "–" : b.th.headBatHours > 0 ? `${Math.max(0, Math.round(100 - (x.minutes / 60 / b.th.headBatHours) * 100))} %` : `${num(x.minutes / 60, 1)} h`;
   const bad = b.petrelAlerts.some((a) => a.level === "bad");
   const warn = b.petrelAlerts.length > 0 || b.head.some((x) => x.reasons.length);
@@ -102,7 +105,8 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
             <div className="pcell-h"><b className={"c-" + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>Petrel</b><span className={"pill " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{bad ? "Vyměnit" : b.petrelAlerts.length ? "Varování" : "V pořádku"}</span></div>
             <div className="kvline"><span>Typ</span><b>{h.batType}</b><span>Trend</span><b>{trend > 0.005 ? "↗" : trend < -0.005 ? "↘" : "→"} {trend >= 0 ? "+" : ""}{Math.round(trend * 1000)} mV</b></div>
             <small>{h.batVStart.toFixed(2).replace(".", ",")} → {h.batVEnd.toFixed(2).replace(".", ",")} V v posledním ponoru · {pp.est ? `odhad z napětí ${pp.pct} % (NiMH procenta Petrel neukládá)` : `${pp.pct} % podle Petrelu`}</small>
-            {b.petrelAlerts.length ? b.petrelAlerts.map((a, i) => <div key={i} className={"reason " + a.level}>{a.text}</div>) : <div className="reason ok">✓ v pořádku</div>}
+            {b.petrelAlerts.length ? b.petrelAlerts.map((a, i) => <div key={i} className={"reason " + a.level}>{a.text}</div>) : <div className="reason ok">✓ v pořádku{b.swapped ? " · výměna baterie zadaná ručně, platí do dalšího ponoru" : ""}</div>}
+            {!b.guest && (b.petrelAlerts.length > 0 || b.swapped) && <button className="btn small" onClick={() => setBatSwap(h.serial, !b.swapped)}>{b.swapped ? "Zrušit „Baterii jsem vyměnil“" : "Baterii jsem vyměnil"}</button>}
           </div>
           {b.head.map((x) => (
             <div key={x.pos} className={"pcell ptile " + (x.reasons.length ? "warn" : x.cur ? "ok" : "none")}>

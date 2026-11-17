@@ -44,7 +44,7 @@ export function useWarnings() {
   const lastSer = st.metas[st.metas.length - 1]?.h.serial;
   const bySer = new Map<number, typeof st.metas>();
   for (const m of st.metas) if (m.h.serial !== lastSer) bySer.set(m.h.serial, [...(bySer.get(m.h.serial) || []), m]);
-  for (const [ser, ms] of bySer) for (const a of alerts(ms.map((m) => m.h), localNow(), th, null).filter((a) => a.kind === "battery"))
+  for (const [ser, ms] of bySer) for (const a of alerts(ms.map((m) => m.h), localNow(), th, null, st.lb.settings.batSwap?.[String(ser)]).filter((a) => a.kind === "battery"))
     add("pc" + ser, `Počítač ${ser.toString(16).toUpperCase()} – baterie`, a.level, `${a.title}: ${a.text}`);
   const list = [...groups.values()].sort((x, y) => RANK[x.level] - RANK[y.level]);
   return { list, count: list.length, worst: list[0]?.level ?? null };

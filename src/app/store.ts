@@ -97,6 +97,15 @@ export async function setSegOverride(id: string, v: boolean | null) {
   if (st.guest) set({ lb: { ...st.lb, settings: { ...st.lb.settings, segOv: ov } } });
 }
 
+/** „Baterii jsem vyměnil“ – skryje upozornění na baterii počítače do dalšího ponoru (null = zrušit). */
+export async function setBatSwap(serial: number, on: boolean) {
+  const lb = structuredClone(ownLb());
+  const m = { ...(lb.settings.batSwap || {}) };
+  if (on) m[String(serial)] = localNow(); else delete m[String(serial)];
+  lb.settings = { ...lb.settings, batSwap: m, updated: Date.now() };
+  await saveOwnLb(lb);
+}
+
 /** Ponor z cizího logu (pro porovnání), bez ohledu na to, zda je cizí log právě otevřený. */
 export function loadGuestDive(id: string): Promise<Dive> {
   return db.get<RawDive>("raw", id, db.GUEST).then((r) => { if (!r) throw new Error("Ponor cizího logu není v telefonu"); return decodeDive(r); });

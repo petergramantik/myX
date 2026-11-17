@@ -27,7 +27,7 @@ export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
 /** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
 export interface Co2Cal { date: string; gas: string }
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; motto?: boolean; cyl?: { dil: number; o2: number }; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; updated: number }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; motto?: boolean; cyl?: { dil: number; o2: number }; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;

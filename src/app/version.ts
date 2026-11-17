@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.30.1";
+export const APP_VERSION = "1.30.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.30.2", date: "2026-11-17", title: "Výměna baterie Petrelu", items: [
+    "Aplikace pozná výměnu baterie (skok procent, u NiMH skok napětí, jiný typ) a trend počítá jen od ní – po výměně už nehlásí „Baterie slábne“.",
+    "Lithiová baterie se hlídá podle procent z Petrelu: pod 50 % „slábne“, pod 25 % „slabá“.",
+    "V Událostech ponoru informace „Baterie vyměněna“ s napětím a procenty před a po.",
+    "Tlačítko „Baterii jsem vyměnil“ u baterie Petrelu skryje upozornění do dalšího ponoru.",
+  ] },
   { version: "1.30.1", date: "2026-11-17", title: "Vlastní potvrzovací dialogy", items: [
     "Potvrzení a zadání jména se zobrazují v aplikaci místo systémových oken prohlížeče (ta mohla být potlačená – tlačítka pak nic nedělala).",
     "„To je můj počítač“ ukazuje průběh přesunu.",
