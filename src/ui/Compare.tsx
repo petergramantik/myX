@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { setpointChanges } from "../core/analysis";
-import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag } from "../core/compare";
+import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag, type MultiRow } from "../core/compare";
 import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, toast } from "../app/store";
 import { GuestCard } from "./Settings";
 import { Card, fmtDate, fmtDateTime, go, tab, useStore } from "./common";
@@ -42,6 +42,9 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   const [showClock, setShowClock] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [twoComp, setTwoComp] = useState(false);
+  const [more, setMore] = useState(false);
+  // výška horní lišty pro „přilepenou“ hlavičku se jmény (zvětšené písmo v telefonu ji mění)
+  useEffect(() => { const t = document.querySelector(".top") as HTMLElement | null; if (t) document.documentElement.style.setProperty("--toph", t.offsetHeight - 1 + "px"); });
   const st0 = useStore();
   useEffect(() => {
     const m = st0.metas.find((x) => x.id === id), sid = st0.lb.notes[id]?.siteId;
@@ -134,15 +137,30 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
       </Card>
       {hasCo2 && <Card title="CO₂"><LineChart t={T} series={ser((d) => d.s.co2, "CO₂", "mbar")} /></Card>}
       <Card title="Rozdíly (od největšího)">
-        {D.length > 2 && <p className="note cmp-legend"><span className="hi">▲ nejvyšší</span> <span className="lo">▼ nejnižší</span> hodnota v řádcích s výrazným rozdílem</p>}
-        <table className="kv cmp"><thead><tr><th></th>{N.map((n, k) => <th key={k} style={{ color: C[k] }}>{n}</th>)}</tr></thead>
-          <tbody>{rows.map((r) => (
-            <tr key={r.key} className={r.muted ? "small-diff muted-row" : r.weight >= 1 ? "big" : r.weight > 0.2 ? "" : "small-diff"}><td>{r.label}</td>
-              {r.vals.map((v, k) => { const m = D.length > 2 && r.weight >= 1 ? (k === r.hi ? "hi" : k === r.lo ? "lo" : "") : "";
-                return <td key={k} className={m}>{m === "hi" ? "▲\u00a0" : m === "lo" ? "▼\u00a0" : ""}{String(v).replace(/(\d) (?=[^\d\s])/g, "$1\u00a0")}</td>; })}</tr>
-          ))}</tbody>
-        </table>
+        {D.length > 2 && <p className="note cmp-legend"><span className="hi">▲ nejvyšší</span> <span className="lo">▼ nejnižší</span> hodnota u výrazných rozdílů</p>}
+        <div className="cmpb">
+          <div className="cmpb-h" style={{ gridTemplateColumns: `repeat(${N.length}, minmax(0, 1fr))` }}>{N.map((n, k) => <span key={k} style={{ color: C[k] }}>{n.split(" ")[0]}</span>)}</div>
+          {rows.filter((r) => !r.muted && r.weight > 0.2).map((r) => <DiffBlock key={r.key} r={r} n={N.length} hl={D.length > 2 && r.weight >= 1} />)}
+          {(() => { const rest = rows.filter((r) => r.muted || r.weight <= 0.2); return rest.length > 0 && <>
+            <button className="cmpb-more" onClick={() => setMore(!more)}>Další údaje ({rest.length}) {more ? "▴" : "▾"}</button>
+            {more && rest.map((r) => <DiffBlock key={r.key} r={r} n={N.length} hl={false} />)}
+          </>; })()}
+        </div>
       </Card>
+    </div>
+  );
+}
+
+/** Jeden ukazatel srovnání: název přes celou šířku, pod ním hodnoty potápěčů ve sloupcích. */
+function DiffBlock({ r, n, hl }: { r: MultiRow; n: number; hl: boolean }) {
+  const cls = r.muted ? "muted" : r.weight >= 1 ? "hot" : r.weight > 0.2 ? "" : "small";
+  return (
+    <div className={"cmpb-r " + cls}>
+      <div className="cmpb-l">{r.label}</div>
+      <div className="cmpb-v" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
+        {r.vals.map((v, k) => { const m = hl ? (k === r.hi ? "hi" : k === r.lo ? "lo" : "") : "";
+          return <span key={k} className={m}>{m === "hi" ? "▲ " : m === "lo" ? "▼ " : ""}{v}</span>; })}
+      </div>
     </div>
   );
 }

@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.31";
+export const APP_VERSION = "1.31.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.31.1", date: "2026-11-17", title: "Přehlednější rozdíly ve srovnání", items: [
+    "Rozdíly jako bloky: název přes celou šířku, pod ním hodnoty potápěčů ve sloupcích – nic nepřetéká z obrazovky.",
+    "Jména potápěčů zůstávají při posouvání nahoře.",
+    "Nejvyšší / nejnižší hodnota jen tenkým červeným ▲ / fialovým ▼ rámečkem.",
+    "Menší písmo (oprava: řádky s výrazným rozdílem omylem dostaly 18 px), méně podstatné údaje sbalené pod „Další údaje“.",
+  ] },
   { version: "1.31", date: "2026-11-17", title: "Logy ostatních, bez ID počítačů, přehlednější rozdíly", items: [
     "Databáze: „Logy ostatních“; u každého počítače jedno tlačítko Akce (majitel, hlavní počítač, To je můj počítač, Smazat), Otevřít a Srovnání zůstávají u majitele.",
     "Místo skloňovaného „buddy“ se v textech používá parťák / ostatní.",
