@@ -277,8 +277,13 @@ table.cmp tr.small-diff td { color: var(--muted); }
 p.legend { display: flex; gap: 14px; }
 /* 1.16 */
 .seg.bl { display: flex; margin-bottom: 10px; } .seg.bl button { flex: 1; }
-table.cmp td.hi { color: #ffb74d; font-weight: 700; } table.cmp td.lo { color: #4fc3f7; font-weight: 700; }
-.note .hi { color: #ffb74d; } .note .lo { color: #4fc3f7; }
+table.cmp { font-size: 14px; } table.cmp th { font-size: 13px; font-weight: 600; }
+table.cmp tr.big td { font-size: 15px; } table.cmp tr.small-diff td { font-size: 13px; }
+table.cmp td { padding: 5px 4px; } table.cmp td:first-child { width: 34%; }
+table.cmp td.hi, table.cmp td.lo { color: var(--fg); font-weight: 700; border-radius: 6px; }
+table.cmp td.hi { background: rgba(239, 83, 80, 0.30); } table.cmp td.lo { background: rgba(149, 117, 205, 0.36); }
+.cmp-legend { margin-top: 0; } .cmp-legend .hi, .cmp-legend .lo { color: var(--fg); padding: 1px 6px; border-radius: 6px; margin-right: 4px; }
+.cmp-legend .hi { background: rgba(239, 83, 80, 0.30); } .cmp-legend .lo { background: rgba(149, 117, 205, 0.36); }
 .chips label.chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid; }
 .csec { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; }
 .csec.l2 { border-left-color: var(--warn); } .csec.l1 { border-left-color: var(--accent); }
@@ -373,3 +378,10 @@ details.card.sec > summary h2 { margin: 0; }
 .dlg { max-width: 420px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
 .dlg-msg { white-space: pre-line; margin: 0; }
 .dlg-btns { justify-content: flex-end; }
+.lt-comp-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.lt-comp-h .btn.act { padding: 3px 10px; font-size: 14px; flex: none; }
+.lt-comp-h .btn.act.on { border-color: var(--accent); color: var(--accent); }
+.actmenu { display: flex; flex-direction: column; margin: 6px 0 2px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.actmenu button { background: transparent; color: var(--fg, #e6edf3); border: 0; border-top: 1px solid var(--line); text-align: left; padding: 10px 12px; font-size: 16px; }
+.actmenu button:first-child { border-top: 0; }
+.actmenu button.danger { color: var(--bad, #ef5350); }

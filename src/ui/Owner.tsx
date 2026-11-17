@@ -14,7 +14,7 @@ export function OwnerPicker({ log, onDone }: { log: GuestLog; onDone?: () => voi
     <div className="ownerbox">
       <b>Čí je to log? </b><small className="muted">{log.name} – zapamatuje se pro další logy z tohoto počítače</small>
       {top.length > 0 && <div className="quick">{top.map((id) => <button key={id} className="btn small" onClick={() => done({ id })}>{lb.buddies[id].name}</button>)}</div>}
-      <Picker items={buddies.map((b) => ({ id: b.id, name: b.name }))} placeholder="Vyber buddyho nebo napiš jméno" onPick={(id) => done({ id })} onCreate={(name) => done({ name })} />
+      <Picker items={buddies.map((b) => ({ id: b.id, name: b.name }))} placeholder="Vyber parťáka nebo napiš jméno" onPick={(id) => done({ id })} onCreate={(name) => done({ name })} />
     </div>
   );
 }

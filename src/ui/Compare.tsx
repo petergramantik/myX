@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { setpointChanges } from "../core/analysis";
 import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag } from "../core/compare";
-import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, ownerName, toast } from "../app/store";
+import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, toast } from "../app/store";
 import { GuestCard } from "./Settings";
 import { Card, fmtDate, fmtDateTime, go, tab, useStore } from "./common";
 import { LineChart } from "./Chart";
@@ -18,10 +18,10 @@ export function BuddyDivesCard({ meta }: { meta: Meta }) {
   useEffect(() => { if (!st.guest) buddyDivesFor(meta).then(setList); }, [meta.id, st.guest, st.guestRev, st.lb.computers]);
   if (st.guest || !list.length) return null;
   return (
-    <Card title={list.length > 1 ? "Ponory buddyů" : "Ponor buddyho"} right={list.length > 1 ? <a onClick={() => go({ t: "cmp", id: meta.id, other: list.map((x) => x.meta.id).join(",") })}>Srovnat všechny ›</a> : undefined}>
+    <Card title={list.length > 1 ? "Ponory ostatních" : "Ponor z cizího logu"} right={list.length > 1 ? <a onClick={() => go({ t: "cmp", id: meta.id, other: list.map((x) => x.meta.id).join(",") })}>Srovnat všechny ›</a> : undefined}>
       {list.map((x) => (
         <div key={x.meta.id} className="kvline link" onClick={() => go({ t: "cmp", id: meta.id, other: x.meta.id })}>
-          <span><b>{x.owner || x.log.name}</b> · začátek {fmtDateTime(x.meta.start).split(" ").pop()} · {Math.round(x.meta.h.diveTimeS / 60)} min · {x.meta.h.maxDepth.toLocaleString("cs-CZ")} m</span>
+          <span><b>{x.owner || x.log.model || "Cizí log"}</b> · začátek {fmtDateTime(x.meta.start).split(" ").pop()} · {Math.round(x.meta.h.diveTimeS / 60)} min · {x.meta.h.maxDepth.toLocaleString("cs-CZ")} m</span>
           <span className="muted">Porovnat ›</span>
         </div>
       ))}
@@ -29,7 +29,8 @@ export function BuddyDivesCard({ meta }: { meta: Meta }) {
   );
 }
 
-const PAL = ["#4fc3f7", "#ffb74d", "#81c784", "#f06292", "#ba68c8", "#fff176"];
+// barvy potápěčů – bez červené a fialové (ty značí nejvyšší / nejnižší hodnotu v tabulce rozdílů)
+const PAL = ["#4fc3f7", "#ffb74d", "#81c784", "#fff176", "#4db6ac", "#bcaaa4"];
 
 /** Srovnání mého ponoru s ponory buddyů (other = id ponorů z cizích logů oddělená čárkou). */
 export function CompareScreen({ id, other }: { id: string; other: string }) {
@@ -50,16 +51,17 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   useEffect(() => {
     Promise.all([loadDive(id), ...ids.map((x) => loadGuestDive(x))]).then(setDives).catch((e) => setErr(e.message));
     guestIndexLoad().then((ix) => {
-      // jméno účastníka; u víc počítačů jednoho majitele i počítač
+      const grp = (x: string) => ix.findIndex((y) => y.metas.some((m) => m.id === x) || y.alts.some((m) => m.id === x));
+      const same = ids.length === 1 && grp(id) >= 0 && grp(id) === grp(ids[0]);
+      // jméno účastníka (bez ID počítače); jen u srovnání dvou počítačů jednoho člověka i počítač
       const nm = (x: string) => {
-        const g = ix.find((y) => y.metas.some((m) => m.id === x) || y.alts.some((m) => m.id === x));
+        const g = ix[grp(x)];
         if (!g) return null;
         const m = [...g.metas, ...g.alts].find((q) => q.id === x);
-        return (ownerName(g.log) || g.log.name) + (m?.comp ? ` (${m.comp})` : "");
+        return (ownerName(g.log) || g.log.model || "parťák") + (same && m?.comp ? ` (${m.comp})` : "");
       };
-      setNames([st0.guest ? nm(id) || "buddy" : "Já", ...ids.map((x) => nm(x) || "buddy")]);
-      const grp = (x: string) => ix.findIndex((y) => y.metas.some((m) => m.id === x) || y.alts.some((m) => m.id === x));
-      setTwoComp(ids.length === 1 && grp(id) >= 0 && grp(id) === grp(ids[0]));
+      setNames([st0.guest ? nm(id) || "parťák" : "Já", ...ids.map((x) => nm(x) || "parťák")]);
+      setTwoComp(same);
     });
   }, [id, other]);
   const all = dives.filter((d): d is Dive => !!d);
@@ -99,7 +101,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
           <label className="switch"><input type="checkbox" checked={!byClock} onChange={(e) => setByClock(!e.target.checked)} /> ⇆ Podle profilu</label>
           <span className="small muted link" onClick={() => setShowClock(!showClock)}>hodiny {clockInfo.map((c) => `${c.who.split(" ")[0]} ${c.txt}`).join(" · ")}</span>
         </div>
-        {showClock && <p className="note">Odchylka hodin počítače buddyho proti tvému (+ = jdou napřed), zjištěná posunem profilu hloubky. {clockInfo.some((c) => c.bad) ? "„≠ profil“ = profily se ani po posunu nekryjí (odchylka nad 3 m), nejspíš jste nebyli celou dobu spolu – pro toho potápěče se používá čas podle hodin." : ""}</p>}
+        {showClock && <p className="note">Odchylka hodin cizího počítače proti tvému (+ = jdou napřed), zjištěná posunem profilu hloubky. {clockInfo.some((c) => c.bad) ? "„≠ profil“ = profily se ani po posunu nekryjí (odchylka nad 3 m), nejspíš jste nebyli celou dobu spolu – pro toho potápěče se používá čas podle hodin." : ""}</p>}
         <div className="chips">{all.map((d, i) => (
           <label key={i} className="chip" style={{ borderColor: PAL[i % PAL.length], opacity: off.has(i) ? 0.45 : 1 }}>
             <input type="checkbox" checked={!off.has(i)} disabled={!off.has(i) && sel.length <= 2}
@@ -132,13 +134,14 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
       </Card>
       {hasCo2 && <Card title="CO₂"><LineChart t={T} series={ser((d) => d.s.co2, "CO₂", "mbar")} /></Card>}
       <Card title="Rozdíly (od největšího)">
+        {D.length > 2 && <p className="note cmp-legend"><span className="hi">▲ nejvyšší</span> <span className="lo">▼ nejnižší</span> hodnota v řádcích s výrazným rozdílem</p>}
         <table className="kv cmp"><thead><tr><th></th>{N.map((n, k) => <th key={k} style={{ color: C[k] }}>{n}</th>)}</tr></thead>
           <tbody>{rows.map((r) => (
             <tr key={r.key} className={r.muted ? "small-diff muted-row" : r.weight >= 1 ? "big" : r.weight > 0.2 ? "" : "small-diff"}><td>{r.label}</td>
-              {r.vals.map((v, k) => <td key={k} className={D.length > 2 && r.weight >= 1 ? (k === r.hi ? "hi" : k === r.lo ? "lo" : "") : ""}>{v}</td>)}</tr>
+              {r.vals.map((v, k) => { const m = D.length > 2 && r.weight >= 1 ? (k === r.hi ? "hi" : k === r.lo ? "lo" : "") : "";
+                return <td key={k} className={m}>{m === "hi" ? "▲\u00a0" : m === "lo" ? "▼\u00a0" : ""}{String(v).replace(/(\d) (?=[^\d\s])/g, "$1\u00a0")}</td>; })}</tr>
           ))}</tbody>
         </table>
-        {D.length > 2 && <p className="note">V řádcích s výrazným rozdílem: <span className="hi">nejvyšší</span> a <span className="lo">nejnižší</span> hodnota.</p>}
       </Card>
     </div>
   );
@@ -150,7 +153,7 @@ export async function commonDives(metas: Meta[]): Promise<Common[]> {
   const ix = await guestIndexLoad();
   const out: Common[] = [];
   for (const m of [...metas].reverse()) {
-    const w = ix.flatMap(({ log, metas: g }) => nearestPair(g, m).map((x) => ({ id: x.id, who: ownerName(log) || log.name })));
+    const w = ix.flatMap(({ log, metas: g }) => nearestPair(g, m).map((x) => ({ id: x.id, who: logName(log) })));
     if (w.length) out.push({ m, with: w });
   }
   return out;
@@ -179,7 +182,7 @@ function CommonList({ who }: { who?: string }) {
   const [year, setYear] = useState(""), [month, setMonth] = useState(""), [day, setDay] = useState("");
   useEffect(() => { commonDives(st.metas).then(setRows); }, [st.metas, st.guestRev, st.lb.computers]);
   if (rows == null) return <p className="muted">Hledám…</p>;
-  if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log buddyho v Databázi (nebo ho nasdílej do myX přes WhatsApp / Quick Share).</p>;
+  if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log ostatních v Databázi (nebo ho nasdílej do myX přes WhatsApp / Quick Share).</p>;
   const ymd = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
   const dateOk = (r: Common) => { const d = ymd(r.m.start); return (!year || d.startsWith(year)) && (!month || d.slice(5, 7) === month) && (!day || d === day); };
   const has = (r: Common, who: string[]) => who.every((w) => r.with.some((x) => x.who === w));
@@ -236,13 +239,13 @@ function ShareMine() {
       if (navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: "Můj log ponorů", text: "Log ze Shearwater Cloud – otevři v myX nebo Shearwater Cloud." }); return; }
     } catch (e) { if ((e as Error).name === "AbortError") return; }
     const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast("Soubor uložen – pošli ho buddymu");
+    toast("Soubor uložen – pošli ho parťákovi");
   };
   return (
     <Card title="Sdílet můj log">
       {last ? <>
         <button className="btn primary" onClick={share}>Sdílet můj log</button>
-        <p className="note">Původní export Shearwater Cloud z posledního importu ({new Date(last.at).toLocaleDateString("cs-CZ")}, {last.count} ponorů). Buddy ho otevře v myX i ve Shearwater Cloud. Lokality a poznámky z myX v něm nejsou.</p>
+        <p className="note">Původní export Shearwater Cloud z posledního importu ({new Date(last.at).toLocaleDateString("cs-CZ")}, {last.count} ponorů). Parťák ho otevře v myX i ve Shearwater Cloud. Lokality a poznámky z myX v něm nejsou.</p>
       </> : <p className="muted">Zatím tu není žádný import. Po příštím načtení exportu ze Shearwater Cloud půjde sdílet.</p>}
     </Card>
   );

@@ -11,7 +11,7 @@ import { AboutScreen, SettingsScreen } from "./ui/Settings";
 import { DraftScreen } from "./ui/Draft";
 import { CellsScreen } from "./ui/Cells";
 import { BatteriesScreen } from "./ui/Batteries";
-import { closeGuest, createDraft, ownerName } from "./app/store";
+import { closeGuest, createDraft, logName, ownerName } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
 import { Co2Screen } from "./ui/Cells";
 import { CompareHub, CompareScreen } from "./ui/Compare";
@@ -98,7 +98,7 @@ function App() {
       const r = await takeShared().catch(() => null);
       if (!r) { toast("Sdílený soubor se nepodařilo načíst"); return; }
       if (!r.log) { if (r.last) go({ t: "dive", id: r.last.id }); toast(r.own ? `Načten tvůj log: ${r.own} nových ponorů` : "Tvůj log je aktuální – žádné nové ponory"); return; }
-      const who = ownerName(r.log) || r.log.name;
+      const who = logName(r.log);
       if (r.mine && r.last) { closeGuest(); go({ t: "cmp", id: r.mine.id, other: r.last.id }); toast(`Načten log: ${who} – porovnání s tvým ponorem`); }
       else if (r.last) { go({ t: "dive", id: r.last.id }); toast(`Načten log: ${who}. Porovnání nabídnu, až stáhneš svůj ponor.`); }
     });
@@ -132,7 +132,7 @@ function App() {
       </header>
       {st.guest && (
         <div className="guestbar">
-          <span>Prohlížíš log{ownerName(st.guest) ? <>: <b>{ownerName(st.guest)}</b> · {st.guest.name}</> : <> · <b>{st.guest.name}</b></>} · {st.guest.count} ponorů</span>
+          <span>Prohlížíš log: <b>{logName(st.guest)}</b> · {st.guest.count} ponorů</span>
           <button className="btn small" onClick={() => { closeGuest(); go({ t: "home" }); }}>Zavřít</button>
         </div>
       )}

@@ -1,6 +1,6 @@
 // Okno Varování: všechna upozornění seskupená podle objektu (scrubber, čidla, CO₂, baterie, dotazy na výměnu čidla).
 import { alerts, scrubberInfo } from "../core/analysis";
-import { localNow } from "../app/store";
+import { compName, localNow } from "../app/store";
 import { CellPrompt, useCells, useCo2 } from "./Cells";
 import { useBatteries } from "./Batteries";
 import { fmtDate, go, num, useStore, type Screen } from "./common";
@@ -45,7 +45,7 @@ export function useWarnings() {
   const bySer = new Map<number, typeof st.metas>();
   for (const m of st.metas) if (m.h.serial !== lastSer) bySer.set(m.h.serial, [...(bySer.get(m.h.serial) || []), m]);
   for (const [ser, ms] of bySer) for (const a of alerts(ms.map((m) => m.h), localNow(), th, null, st.lb.settings.batSwap?.[String(ser)]).filter((a) => a.kind === "battery"))
-    add("pc" + ser, `Počítač ${ser.toString(16).toUpperCase()} – baterie`, a.level, `${a.title}: ${a.text}`);
+    add("pc" + ser, `Baterie – ${compName(ser)}`, a.level, `${a.title}: ${a.text}`);
   const list = [...groups.values()].sort((x, y) => RANK[x.level] - RANK[y.level]);
   return { list, count: list.length, worst: list[0]?.level ?? null };
 }

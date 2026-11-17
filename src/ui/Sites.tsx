@@ -214,7 +214,7 @@ function ForeignNames({ kind }: { kind: "buddy" | "site" }) {
     <section className="panel">
       <button className="panel-h" onClick={() => setOpen(!open)}>
         <span className="ph-main">Z cizích logů ({list.length})</span>
-        <span className="ph-sub">{kind === "buddy" ? "Buddy" : "Lokality"} zapsané v lozích buddyů – přidej je nebo přiřaď k tvým</span>
+        <span className="ph-sub">{kind === "buddy" ? "Buddy" : "Lokality"} zapsané v lozích ostatních – přidej je nebo přiřaď k tvým</span>
         <span className="ph-arrow">{open ? "▴" : "▾"}</span>
       </button>
       {open && <div className="panel-b">
@@ -228,7 +228,7 @@ function ForeignNames({ kind }: { kind: "buddy" | "site" }) {
               </span>
             </div>
             {pick === x.name && !target && (
-              <Picker items={mine.map((m) => ({ id: m.id, name: m.name }))} placeholder={kind === "buddy" ? "Vyber mého buddyho" : "Vyber mou lokalitu"}
+              <Picker items={mine.map((m) => ({ id: m.id, name: m.name }))} placeholder={kind === "buddy" ? "Vyber mého parťáka" : "Vyber mou lokalitu"}
                 onPick={(id) => { const t = mine.find((m) => m.id === id)!; setTarget({ id, name: t.name }); setNm(t.name); }}
                 onCreate={() => done(x.name, null)} />
             )}
@@ -293,7 +293,7 @@ export function BuddyScreen({ id }: { id: string }) {
       </Card>
       <Card title="Úpravy">
         <MergeRow items={Object.values(my.lb.buddies).filter((x) => x.id !== id)} current={b.name} onMerge={async (into, nm) => { await mergeInto("buddy", id, into, nm); back(); toast("Sloučeno"); }} />
-        <button className="btn danger" onClick={async () => { if (await ask(`Smazat buddyho „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
+        <button className="btn danger" onClick={async () => { if (await ask(`Smazat parťáka „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>
       </Card>
     </div>
   );

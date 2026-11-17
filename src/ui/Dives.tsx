@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
-import { ME, adoptForeign, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
+import { ME, adoptForeign, compModel, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
 import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
@@ -79,10 +79,10 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
             return <button key={b} className={"chip" + (on ? " on" : "")} disabled={!on && !n} onClick={() => { setBsel(next); setNoBuddy(false); }}>{lb.buddies[b].name} ({on ? withSel(bsel) : n})</button>;
           })}
           {blist.length > 8 && <button className="chip" onClick={() => setMoreB(!moreB)}>{moreB ? "méně" : "další…"}</button>}
-          <button className={"chip" + (noBuddy ? " on" : "")} onClick={() => { setNoBuddy(!noBuddy); setBsel([]); }}>Bez buddyho</button>
+          <button className={"chip" + (noBuddy ? " on" : "")} onClick={() => { setNoBuddy(!noBuddy); setBsel([]); }}>Bez parťáka</button>
         </div>
       )}
-      <input className="search" placeholder="Hledat lokalitu, buddyho, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="search" placeholder="Hledat lokalitu, parťáka, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
       {st.guest ? (
         <div className="seg filter">
           <button className={onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(true)}>Jen společné ({st.metas.filter(common).length})</button>
@@ -124,7 +124,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         return (
           <div key={m.id} className="dive-row full" onClick={open}>
             <div className="dr-mid">
-              <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{m.comp ? ` · ${m.comp.split(" ")[0]}` : ""}{m.alt ? " · 2 počítače" : ""}{m.parts ? ` · ${m.parts.length} části` : ""}</small></div>
+              <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{m.alt ? " · 2 počítače" : ""}{m.parts ? ` · ${m.parts.length} části` : ""}</small></div>
               <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             </div>
             {(buds || badge) && <div className="dr-bud"><span className="dr-bnames">{buds}</span>{badge}</div>}
@@ -257,7 +257,7 @@ function SuggestCard({ meta }: { meta: Meta }) {
     return mine && mine !== v.name ? `${v.name} → ${mine}` : v.name;
   };
   return (
-    <Card title="Z logu buddyho">
+    <Card title="Z logů ostatních">
       {items.map((x) => (
         <div key={x.who} className="suggest">
           <small className="muted">{x.who} má u tohoto ponoru zapsáno:</small>
@@ -500,7 +500,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const warns = mergeCellAlerts([...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)]);
   return (
     <>
-      {meta.comp && <div className="comp-line small muted">Z počítače {meta.comp}{meta.alt && <> · <span className="pill">2 počítače</span> <a onClick={() => go({ t: "cmp", id: meta.id, other: meta.alt! })}>Srovnání počítačů ›</a></>}</div>}
+      {meta.comp && <div className="comp-line small muted">Z počítače {compModel(meta.comp)}{meta.alt && <> · <span className="pill">2 počítače</span> <a onClick={() => go({ t: "cmp", id: meta.id, other: meta.alt! })}>Srovnání počítačů ›</a></>}</div>}
       {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold />)}
       <PartsCard meta={meta} />
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>

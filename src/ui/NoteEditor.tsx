@@ -35,7 +35,7 @@ export function NoteEditor({ note, onChange, pos }: { note: DiveNote; onChange: 
       </Card>
       <Card title="S kým">
         <div className="chips">{note.buddyIds.map((b) => lb.buddies[b] && <Chip key={b} onClick={() => go({ t: "buddy", id: b })} onX={() => onChange({ buddyIds: note.buddyIds.filter((x) => x !== b) })}>{lb.buddies[b].name}</Chip>)}</div>
-        <Picker items={buddyItems} placeholder="Přidat buddyho" onPick={(bid) => onChange({ buddyIds: [...note.buddyIds, bid] })}
+        <Picker items={buddyItems} placeholder="Přidat parťáka" onPick={(bid) => onChange({ buddyIds: [...note.buddyIds, bid] })}
           onCreate={async (name) => { const b = findBuddyByName(name) || (await upsertBuddy({ name })); onChange({ buddyIds: [...new Set([...note.buddyIds, b.id])] }); }} />
         {topBuddies.length > 0 && <div className="quick">{topBuddies.map((id) => <button key={id} className="btn small" onClick={() => onChange({ buddyIds: [...note.buddyIds, id] })}>＋ {lb.buddies[id].name}</button>)}</div>}
       </Card>

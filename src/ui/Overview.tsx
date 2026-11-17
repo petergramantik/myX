@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { alerts, scrubberInfo } from "../core/analysis";
-import { createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
+import { compName, createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { CellTiles, useCells } from "./Cells";
 import { hasExt } from "./Dives";
@@ -99,7 +99,7 @@ export function OverviewScreen() {
   const multi = bySerial.size > 1;
   const lastSer = st.metas[st.metas.length - 1]?.h.serial;
   const batAl = [...bySerial].filter(([ser]) => ser !== lastSer).flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null, lb.settings.batSwap?.[String(ser)])
-    .filter((a) => a.kind !== "scrubber").map((a) => (multi ? { ...a, title: `${a.title} (počítač ${ser.toString(16).toUpperCase()})` } : a)));
+    .filter((a) => a.kind !== "scrubber").map((a) => (multi ? { ...a, title: `${a.title} (${compName(ser)})` } : a)));
   const drafts = Object.values(lb.drafts).sort((a, b) => b.created - a.created);
   const last = st.metas[st.metas.length - 1];
   const lastNote = last ? lb.notes[last.id] : undefined;

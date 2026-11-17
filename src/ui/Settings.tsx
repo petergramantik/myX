@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
 import { DEFAULT_ALL_TH } from "../app/model";
 import { OwnerPicker } from "./Owner";
-import { closeGuest, compLabel, deleteGuest, guestRawIndex, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, adoptGuestAsOwn, ownComputers, removeOwnComputer, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
+import { closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, adoptGuestAsOwn, ownComputers, removeOwnComputer, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { Card, KV, fmtDate, go, tab, useStore } from "./common";
@@ -36,9 +36,9 @@ export function SettingsScreen() {
         </label>
       </Sec>
 
-      <Sec title="Logy buddyů">
+      <Sec title="Logy ostatních">
         <p className="note">Cizí logy (jen ke čtení) se načítají a spravují v záložce DB.</p>
-        <button className="btn" onClick={() => tab({ t: "hub", sub: "db" })}>Spravovat logy buddyů ›</button>
+        <button className="btn" onClick={() => tab({ t: "hub", sub: "db" })}>Spravovat logy ostatních ›</button>
       </Sec>
 
       <Sec title="Sdílení"><ShareInner /></Sec>
@@ -91,7 +91,7 @@ export function SettingsScreen() {
             if (f) try { toast(`Obnoveno, nových ponorů: ${await importBackup(f)}`); } catch (err) { toast((err as Error).message); }
           }} />
           <button className="btn danger" onClick={async () => {
-            if (!await ask("Úplný reset logbooku: smaže všechny lokality, buddye, poznámky, hodnocení, rozpracované ponory, přiřazení jmen a cizí logy. Ponory, čidla, baterie a nastavení zůstanou. Pokračovat?")) return;
+            if (!await ask("Úplný reset logbooku: smaže všechny lokality, parťáky, poznámky, hodnocení, rozpracované ponory, přiřazení jmen a cizí logy. Ponory, čidla, baterie a nastavení zůstanou. Pokračovat?")) return;
             if (!await ask("Opravdu? Před resetem se stáhne záloha do souboru.")) return;
             const b = await exportBackup();
             const a = document.createElement("a");
@@ -131,7 +131,7 @@ function OwnComputers() {
       {cs.map((c) => (
         <div key={c.serial} className="row between">
           <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)}</span>
-          {cs.length > 1 && <button className="btn small" onClick={async () => { if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako log buddyho a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
+          {cs.length > 1 && <button className="btn small" onClick={async () => { if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako cizí log a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
         </div>
       ))}
       <p className="note">Další svůj počítač přidáš v DB → Databáze u jeho logu volbou „To je můj počítač“, nebo při prvním importu.</p>
@@ -179,7 +179,7 @@ function ShareInner() {
       <button className="btn primary" onClick={share}>Sdílet aplikaci</button>
       <img className="qr" src="qr.svg" alt={"QR kód: " + APP_URL} width={180} height={180} />
       <p className="center small"><a href={APP_URL}>{APP_URL.replace("https://", "")}</a></p>
-      <p className="note">Každý má svá data jen ve svém zařízení. Svůj log pošleš buddymu v záložce DB → Sdílet můj log.</p>
+      <p className="note">Každý má svá data jen ve svém zařízení. Svůj log pošleš parťákovi v záložce DB → Sdílet můj log.</p>
     </>
   );
 }
@@ -190,6 +190,7 @@ export function GuestCard() {
   const [groups, setGroups] = useState<{ log: GuestLog; logs: GuestLog[]; counts: Record<string, number>; from: number; to: number; common: number; alts: number }[]>([]);
   const [busy, setBusy] = useState(false);
   const [ownerFor, setOwnerFor] = useState<string | null>(null);
+  const [actFor, setActFor] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const reload = async () => {
@@ -206,7 +207,7 @@ export function GuestCard() {
     setBusy(true);
     try {
       const r = await importAny(f);
-      toast([r.own ? `Přidáno ${r.own} tvých ponorů` : "", ...r.guests.map((x) => `cizí log ${ownerName(x) || x.name} (${x.count} ponorů)`)].filter(Boolean).join(" · ") || "Žádné nové ponory");
+      toast([r.own ? `Přidáno ${r.own} tvých ponorů` : "", ...r.guests.map((x) => `cizí log ${logName(x)} (${x.count} ponorů)`)].filter(Boolean).join(" · ") || "Žádné nové ponory");
       if (r.guests.length > 1) await askSameOwner(r.guests);
       const g = r.guests[0];
       if (g) { await openGuest(g); go({ t: "home" }); }
@@ -215,11 +216,11 @@ export function GuestCard() {
   };
   return (
     <>
-      <Card title="Logy buddyů">
+      <Card title="Logy ostatních">
         <input ref={ref} type="file" hidden onChange={(e) => pick(e.target.files?.[0])} />
-        <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Načíst log buddyho"}</button>
-        <p className="note">Export Shearwater Cloud buddyho. Jde ho poslat i přes WhatsApp nebo Quick Share → myX. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům. Víc počítačů jednoho buddyho spojíš tak, že jim přiřadíš stejného majitele.</p>
-        {!groups.length && <p className="muted">Zatím žádné logy buddyů.</p>}
+        <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Načíst log"}</button>
+        <p className="note">Export ze Shearwater Cloudu parťáka. Jde ho poslat i přes WhatsApp nebo Quick Share → myX. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům. Víc počítačů jednoho člověka spojíš tak, že jim přiřadíš stejného majitele.</p>
+        {!groups.length && <p className="muted">Zatím žádné logy ostatních.</p>}
       </Card>
       {groups.map((g) => {
         const open = st.guest?.id === g.log.id, who = ownerName(g.log), multi = g.logs.length > 1;
@@ -229,27 +230,31 @@ export function GuestCard() {
             <div className="small muted">{g.log.count} ponorů · {fmtDate(g.from)} – {fmtDate(g.to)} · {g.common} společných se mnou{g.alts ? ` · ${g.alts} ponorů se 2 počítači` : ""}</div>
             {g.logs.map((l, k) => (
               <div key={l.id} className="lt-comp">
-                <div className="small">{compLabel(l)} · {g.counts[l.id]} ponorů{multi && k === 0 ? " · hlavní" : ""}</div>
-                <div className="row">
-                  {l.serial && <button className="btn small" onClick={() => setOwnerFor(ownerFor === l.id ? null : l.id)}>Majitel</button>}
-                  {multi && k > 0 && l.serial && <button className="btn small" onClick={() => setPrimaryComputer(l.serial!)}>Nastavit jako hlavní</button>}
-                  <button className="btn small" onClick={async () => { if (await ask(`Smazat log počítače ${compLabel(l)}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
-                  <button className="btn small" disabled={moving === l.id} onClick={async () => {
-                    if (!await ask(`Počítač ${compLabel(l)} je tvůj (např. po výměně počítače)?\n\nJeho ${g.counts[l.id]} ponorů se přesune k tvým ponorům, převezmou se lokality a buddyové z jeho Cloudu a log buddyho zmizí. Odebrat ho jde později v Nastavení → Výbava.`)) return;
+                <div className="lt-comp-h">
+                  <div className="small">{compLabel(l)} · {g.counts[l.id]} ponorů{multi && k === 0 ? " · hlavní" : ""}</div>
+                  <button className={"btn small act" + (actFor === l.id ? " on" : "")} disabled={moving === l.id} onClick={() => setActFor(actFor === l.id ? null : l.id)}>{moving === l.id ? "Přesouvám…" : "Akce ▾"}</button>
+                </div>
+                {actFor === l.id && <div className="actmenu">
+                  {l.serial && <button onClick={() => { setActFor(null); setOwnerFor(ownerFor === l.id ? null : l.id); }}>{ownerName(l) ? "Změnit majitele" : "Přiřadit majitele"}</button>}
+                  {multi && k > 0 && l.serial && <button onClick={() => { setActFor(null); setPrimaryComputer(l.serial!); }}>Nastavit jako hlavní</button>}
+                  <button onClick={async () => {
+                    setActFor(null);
+                    if (!await ask(`Počítač ${compLabel(l)} je tvůj (např. po výměně počítače)?\n\nJeho ${g.counts[l.id]} ponorů se přesune k tvým ponorům, převezmou se lokality a parťáci z jeho Cloudu a cizí log zmizí. Odebrat ho jde později v Nastavení → Výbava.`)) return;
                     setMoving(l.id);
                     try { toast(`Přesunuto k tvým ponorům: ${await adoptGuestAsOwn(l)}`); } catch (e) { toast((e as Error).message); }
                     finally { setMoving(null); }
                     reload();
-                  }}>{moving === l.id ? "Přesouvám…" : "To je můj počítač"}</button>
-                </div>
+                  }}>To je můj počítač</button>
+                  <button className="danger" onClick={async () => { setActFor(null); if (await ask(`Smazat log počítače ${compLabel(l)}?`, { danger: true })) { await deleteGuest(l); reload(); } }}>Smazat</button>
+                </div>}
                 {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
-                  {ownerName(l) && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení{multi ? " (odpojit počítač)" : ""}</button>}</div>}
+                  {ownerName(l) && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení majitele{multi ? " (odpojit počítač)" : ""}</button>}</div>}
               </div>
             ))}
             <div className="row">
               {open ? <button className="btn primary" onClick={() => closeGuest()}>Zavřít</button>
                 : <button className="btn primary" onClick={async () => { await openGuest(g.log); go({ t: "home" }); }}>Otevřít (jen čtení)</button>}
-              {g.common ? <button className="btn" onClick={() => tab({ t: "hub", sub: "cmp", who: who || g.log.name })}>Srovnání</button> : null}
+              {g.common ? <button className="btn" onClick={() => tab({ t: "hub", sub: "cmp", who: who || logName(g.log) })}>Srovnání</button> : null}
             </div>
           </section>
         );

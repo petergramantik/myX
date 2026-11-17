@@ -151,6 +151,19 @@ const serialOf = (fn?: string) => (/\[([0-9A-F]+)\]/i.exec(fn || "")?.[1] || "")
 export const serialHex = (m: Meta) => (m.h.serial || 0).toString(16).toUpperCase();
 /** Moje počítače: ze sériových čísel mých ponorů a počítače cíleně označené jako moje. */
 export const ownSerials = () => new Set([...ownMetas().map(serialHex).filter((x) => x !== "0"), ...Object.values(ownLb().computers || {}).filter((c) => c.mine).map((c) => c.id)]);
+/** Model počítače podle sériového čísla (bez ID – to se ukazuje jen v Databázi). */
+function modelFor(ser: number): string {
+  const hex = ser.toString(16).toUpperCase(), g = st.guest;
+  const gl = g ? (g.logs || [g]).find((l) => l.serial === hex) : undefined;
+  return gl?.model || st.lb.computers?.[hex]?.model || ownLb().computers?.[hex]?.model || "Petrel";
+}
+/** Název počítače pro zobrazení: model, u dvou stejných modelů pořadí („Petrel 2 (druhý)“). */
+export function compName(ser: number): string {
+  const model = modelFor(ser);
+  const same = [...new Set(st.metas.map((m) => m.h.serial))].filter((x) => modelFor(x) === model);
+  if (same.length < 2) return model;
+  return `${model} (${["první", "druhý", "třetí", "čtvrtý"][same.indexOf(ser)] ?? same.indexOf(ser) + 1 + "."})`;
+}
 /** Moje počítače s počtem ponorů (Nastavení → Výbava). */
 export function ownComputers(): { serial: string; model: string; count: number; from: number; to: number }[] {
   const by = new Map<string, Meta[]>();
@@ -176,7 +189,7 @@ export async function importAny(file: File): Promise<{ own: number; guests: Gues
     const sorted = [...groups].sort((a, b) => b[1].length - a[1].length);
     mine = new Set([sorted[0][0]]);
     // první import s víc počítači: cíleně se zeptat, které jsou moje (výměna počítače)
-    for (const [k, v] of sorted.slice(1)) if (k && await ask(`V souboru je víc počítačů. Je počítač ${modelOf(v)} ${k} (${v.length} ponorů) také tvůj?`, { ok: "Je můj", cancel: "Je buddyho" })) mine.add(k);
+    for (const [k, v] of sorted.slice(1)) if (k && await ask(`V souboru je víc počítačů. Je počítač ${modelOf(v)} ${k} (${v.length} ponorů) také tvůj?`, { ok: "Je můj", cancel: "Je cizí" })) mine.add(k);
     if (mine.size > 1) { const lb = structuredClone(st.lb); lb.computers = lb.computers || {}; for (const k of mine) if (k) lb.computers[k] = { ...lb.computers[k], id: k, model: modelOf(groups.get(k)!), mine: true, updated: Date.now() }; await saveLb(lb); }
   }
   const ownRaws = [...groups].filter(([k]) => mine.has(k) || (!k && groups.size === 1 && mine.size === 0)).flatMap(([, v]) => v);
@@ -354,7 +367,7 @@ export async function foreignNames(kind: "buddy" | "site"): Promise<{ name: stri
         const k = norm(name);
         if (my.has(k) || lb.aliases?.[aliasKey(kind, name)] || (kind === "buddy" && owners.has(k))) continue;
         const e = out.get(k) || { name, n: 0, logs: new Set<string>() };
-        e.n++; e.logs.add(ownerName(log) || log.name); out.set(k, e);
+        e.n++; e.logs.add(logName(log)); out.set(k, e);
       }
     }
   }
@@ -424,7 +437,7 @@ export async function propagateExisting() {
   if (st.guest || (await db.get("kv", "aliasProp3"))) return;
   const lb = structuredClone(ownLb());
   const n = await propagate(lb);
-  if (n) { await saveLb(lb); toast(`Doplněno z logů buddyů k ${n} ponorům`); }
+  if (n) { await saveLb(lb); toast(`Doplněno z logů ostatních k ${n} ponorům`); }
   await db.put("kv", 1, "aliasProp3");
 }
 
@@ -443,7 +456,7 @@ export async function suggestionsFor(m: Meta): Promise<Suggest[]> {
     const buddies = gn.buddyIds.map((b) => g.buddies[b]?.name).filter((x): x is string => !!x)
       .map((name) => ({ name, mine: resolveForeign("buddy", name, lb) }))
       .filter((x) => x.mine !== ME && x.mine !== owner && !(x.mine && note?.buddyIds.includes(x.mine)) && !(owner && norm(lb.buddies[owner]?.name || "") === norm(x.name)));
-    if (site || buddies.length) out.push({ who: ownerName(log) || log.name, site, buddies });
+    if (site || buddies.length) out.push({ who: logName(log), site, buddies });
   }
   return out;
 }
@@ -479,6 +492,8 @@ export async function guestRawIndex(): Promise<{ log: GuestLog; metas: Meta[]; l
   guestRaw = out;
   return out;
 }
+/** Model z popisu počítače bez sériového čísla („Petrel 2 38A4FD78“ → „Petrel 2“). */
+export const compModel = (c?: string) => (c || "").replace(/\s+[0-9A-F]{6,}$/i, "");
 export const compLabel = (log: GuestLog) => `${log.model || "Počítač"}${log.serial ? " " + log.serial : ""}`;
 /**
  * Seskupí logy počítačů podle majitele (víc počítačů jednoho buddyho = jeden účastník).
@@ -551,6 +566,8 @@ export async function buddyDivesFor(m: Meta): Promise<{ log: GuestLog; meta: Met
     return { log, meta: g, owner: c?.buddyId ? lb.buddies[c.buddyId]?.name ?? null : null };
   }));
 }
+/** Jméno cizího logu pro zobrazení: majitel, jinak model počítače (bez sériového čísla). */
+export const logName = (log: GuestLog): string => ownerName(log) || log.model || "Cizí log";
 export const ownerName = (log: GuestLog): string | null => {
   const lb = ownLb(); const c = log.serial ? lb.computers?.[log.serial] : undefined;
   return c?.buddyId ? lb.buddies[c.buddyId]?.name ?? null : null;
@@ -642,7 +659,7 @@ export async function askSameOwner(logs: GuestLog[]) {
   if (withSerial.length < 2) return;
   if (!await ask(`V souboru jsou ${withSerial.length} různé počítače (${withSerial.map(compLabel).join(", ")}). Patří stejnému člověku?`)) return;
   const known = withSerial.map((l) => ownerName(l)).find(Boolean);
-  const name = await askText("Jméno majitele (buddyho):", known || "");
+  const name = await askText("Jméno majitele:", known || "");
   if (!name?.trim()) return;
   for (const l of withSerial) await setComputerOwner(l, { name: name.trim() });
   toast(`Počítače spojeny pod majitele ${name.trim()}`);
@@ -851,7 +868,7 @@ export async function mergeInto(kind: "site" | "buddy", from: string, into: stri
   lb.deleted[from] = now;
   const n = await propagate(lb);
   await saveOwnLb(lb);
-  if (n) toast(`Doplněno z logů buddyů k ${n} ponorům`);
+  if (n) toast(`Doplněno z logů ostatních k ${n} ponorům`);
 }
 export async function remove(kind: "site" | "buddy", id: string) {
   const lb = structuredClone(ownLb());
