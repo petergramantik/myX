@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.26.3";
+export const APP_VERSION = "1.26.4";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.26.4", date: "2026-11-17", title: "Vzhled zapnutých filtrů", items: [
+    "Zapnutý filtr má bílý rám a text bez modrého obrysu; počet pod ním se nepřekrývá.",
+  ] },
   { version: "1.26.3", date: "2026-11-17", title: "Filtry s počty", items: [
     "Označení všech plynů výběr zruší (zobrazí se všechny ponory).",
     "Pod zapnutými štítky filtru je počet ponorů; u více problémů x/y (zobrazené / s daným tagem).",

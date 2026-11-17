@@ -353,3 +353,6 @@ tr.muted-row td { color: var(--muted); font-style: italic; }
 .cf-col { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
 .cf-col small { font-size: 10px; color: var(--muted); line-height: 1; }
 .cat-filter { align-items: flex-start; }
+/* 1.26.4 – zapnutý filtr: bílý rám a text, bez modrého obrysu */
+.gchip.cf.on, .tag.cf.on { box-shadow: none; opacity: 1; border-color: #fff; color: #fff; }
+.cf-col { gap: 3px; }
