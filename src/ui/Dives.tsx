@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, cellCalibration, cellSpread, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, adoptForeign, nearestPair, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
-import { diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
+import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
@@ -18,7 +18,8 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const st = useStore();
   const [q, setQ] = useState("");
   const [rate, setRate] = useState<string>("");
-  const [tagF, setTagF] = useState<TagCat | null>(null);
+  const [tagF, setTagF] = useState<TagCat[]>([]);
+  const [gasF, setGasF] = useState<string[]>([]);
   const [compact, setCompact] = useState(() => { try { return localStorage.getItem("myx-compact") === "1"; } catch { return false; } });
   const lb = st.lb;
   const [onlyCommon, setOnlyCommon] = useState(true);
@@ -55,7 +56,12 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
     return n.split(" ").every((w) => txt.includes(w));
   };
   const rows = st.metas.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse()
-    .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)) && (!noBuddy || (!note?.buddyIds.length && !cmp.has(m.id))) && (!tagF || diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === tagF)));
+    .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)) && (!noBuddy || (!note?.buddyIds.length && !cmp.has(m.id))) && (!tagF.length || diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => tagF.includes(t.cat)))
+      && (!gasF.length || gasCats(m).some((g) => gasF.includes(g))));
+  // dostupné filtry: kategorie plynů a problémů, které se v ponorech vyskytují
+  const gasAll = GAS_CATS.filter((g) => st.metas.some((m) => gasCats(m).includes(g)));
+  const tagAll = TAG_ORDER.filter((c) => st.metas.some((m) => diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === c)));
+  const tog = <T,>(arr: T[], v: T, set: (x: T[]) => void) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   // buddy s počtem mých ponorů (pro štítky filtru)
   const bcount = new Map<string, number>();
   for (const m of st.metas) for (const b of lb.notes[m.id]?.buddyIds || []) if (lb.buddies[b]) bcount.set(b, (bcount.get(b) || 0) + 1);
@@ -81,15 +87,18 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <button className={onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(true)}>Jen společné ({st.metas.filter(common).length})</button>
           <button className={!onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(false)}>Všechny ({st.metas.length})</button>
         </div>
-      ) : (
+      ) : (<>
         <div className="filter-row">
           <div className="seg filter">
             {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
           </div>
-          {tagF && <button className="btn tagf" onClick={() => setTagF(null)}>{tagF} ✕</button>}
           <button className="btn view-tg" title={compact ? "Kompaktní zobrazení" : "Plné zobrazení"} onClick={() => { setCompact(!compact); try { localStorage.setItem("myx-compact", compact ? "0" : "1"); } catch { /* */ } }}>{compact ? "≡" : "☰"}</button>
         </div>
-      )}
+        {!compact && (gasAll.length > 0 || tagAll.length > 0) && <div className="cat-filter">
+          <span className="cf-group">{gasAll.map((g) => <button key={g} className={"gchip cf " + GAS_CLS[g] + (gasF.includes(g) ? " on" : "")} onClick={() => tog(gasF, g, setGasF)}>{g}</button>)}</span>
+          <span className="cf-group">{tagAll.map((c) => <button key={c} className={"tag cf" + (tagF.includes(c) ? " on" : "")} onClick={() => tog(tagF, c, setTagF)}>{c === "ČIDLO" ? "ČIDLA" : c}</button>)}</span>
+        </div>}
+      </>)}
       {drafts.map((d) => (
         <div key={d.id} className="dive-row draft" onClick={() => go({ t: "draft", id: d.id })}>
           <div className="dr-main"><b>{d.siteId ? lb.sites[d.siteId]?.name : "bez lokality"}</b><small>{fmtDate(d.created)} · čeká na data z počítače</small></div>
@@ -118,7 +127,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
               <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             </div>
             {(buds || badge) && <div className="dr-bud"><span className="dr-bnames">{buds}</span>{badge}</div>}
-            <div className="dr-top"><span className="dr-chips"><DilChip m={m} /><DiveTags m={m} onTag={(c) => setTagF(c)} /></span>{rate}</div>
+            <div className="dr-top"><span className="dr-chips"><DilChip m={m} /><DiveTags m={m} /></span>{rate}</div>
           </div>
         );
       })}
@@ -205,11 +214,18 @@ function DilChip({ m }: { m: Meta }) {
 }
 
 /** Tagy ponoru v seznamu (jen důležité): CO₂, nevěrohodné čidlo CO₂, vysoké a nízké pO₂, rozjetá čidla. */
-function DiveTags({ m, onTag }: { m: Meta; onTag?: (c: TagCat) => void }) {
+/** Souhrnné kategorie plynů ponoru pro filtr (AIR, TMX, NX). */
+const GAS_CATS = ["AIR", "TMX", "NX"];
+const GAS_CLS: Record<string, string> = { AIR: "air", TMX: "tmx", NX: "nx" };
+function gasCats(m: Meta): string[] {
+  return [...new Set((m.sum.gases || []).map((g) => gasLabel(g.mix).cls).filter((c) => c !== "o2").map((c) => c.toUpperCase()))];
+}
+
+function DiveTags({ m }: { m: Meta }) {
   const st = useStore();
   const tags = diveTagsOfMeta(st.metas, m, st.lb.settings.th);
   if (!tags.length) return null;
-  return <div className="dr-tags">{tags.map((t) => <span key={t.cat} className={"tag " + t.level} onClick={(e) => { if (onTag) { e.stopPropagation(); onTag(t.cat); } }}>{t.label}</span>)}</div>;
+  return <div className="dr-tags">{tags.map((t) => <span key={t.cat} className={"tag " + t.level}>{t.label}</span>)}</div>;
 }
 
 /** Tagy ponoru = kategorie oranžových a červených varování ze záhlaví detailu (včetně čidel z historie). */
@@ -605,6 +621,7 @@ function ValuesTab({ d }: { d: Dive }) {
 function CompWarnCard({ d }: { d: Dive }) {
   const ws = computerWarnings(d);
   const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
+  const valve = [...pressureAnalysis(d.s.t, d.s.o2p, d.h.diveTimeS).valve.map((v) => ({ ...v, g: "O₂" })), ...pressureAnalysis(d.s.t, d.s.dil, d.h.diveTimeS).valve.map((v) => ({ ...v, g: "diluent" }))].sort((a, b) => a.t - b.t);
   return (
     <Card title="Varování na počítači">
       {ws.length ? (
@@ -613,6 +630,7 @@ function CompWarnCard({ d }: { d: Dive }) {
             <td>{w.how === "open" ? <span className="muted">nepotvrzeno</span> : `${w.how === "ack" ? "potvrzeno" : "zmizelo"} ${mmss(w.end!)} (${Math.round(w.end! - w.start)} s)`}</td></tr>)}</tbody>
         </table>
       ) : <p className="muted">Počítač v tomto ponoru nezapsal žádné varování.</p>}
+      {valve.length > 0 && <div className="valve-list">{valve.map((v, i) => <div key={i} className="small">Onboard {v.g} {v.kind === "close" ? "zavřena (přechod na externí)" : "otevřena"} v {mmss(v.t)} ({v.from} → {v.to} bar)</div>)}</div>}
       <p className="note">Z událostí 0 (zobrazeno), 1 a 2 (potvrzeno / zmizelo). „Potvrzeno“ = pravé tlačítko na hlavní obrazovce. (P) pravděpodobný význam, (?) hypotéza.</p>
     </Card>
   );

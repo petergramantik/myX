@@ -29,22 +29,59 @@ const MIN_BAR = 20, HYST = 2, EXT_RISE = 10;
  * Nárůst tlaku nebo pád na mezitlak během ponoru = nejspíš externí plyn.
  */
 export function pressureUse(t: number[], p: (number | null)[], depth: number[], diveS: number): GasUse {
-  const idx = t.map((_, i) => i).filter((i) => t[i] <= diveS && p[i] != null);
-  const raw = idx.map((i) => p[i]!);
+  return pressureAnalysis(t, p, diveS).use;
+}
+
+/** Zavření / otevření onboard lahve během ponoru (prudký pád na mezitlak externí lahve a zpět). */
+export interface ValveEvent { t: number; kind: "close" | "open"; from: number; to: number }
+
+/**
+ * Rozbor tlaku lahve: spotřeba jen z postupného poklesu v době, kdy byla onboard lahev otevřená.
+ * Prudké změny (> 15 bar/min) jsou zavření / otevření ventilu nebo odvzdušnění, ne spotřeba.
+ * Hodnoty pod 20 bar = mezitlak externí lahve (onboard zavřená).
+ */
+export function pressureAnalysis(t: number[], p: (number | null)[], diveS: number): { use: GasUse; valve: ValveEvent[] } {
+  // 0 = vysílač zatím neposlal údaj (po zapnutí) – vynechat
+  const idx = t.map((_, i) => i).filter((i) => t[i] <= diveS && p[i] != null && p[i]! > 0);
+  const raw = idx.map((i) => p[i]!), tt = idx.map((i) => t[i]);
   const valid = raw.filter((v) => v >= MIN_BAR);
-  if (valid.length < Math.max(5, raw.length * 0.2)) return { ok: false, start: raw[0] ?? null, end: raw[raw.length - 1] ?? null, bar: 0, ext: [], noisy: false };
-  // medián z 7 vzorků (~35 s) potlačí šum převodníku
-  const sm = idx.map((_, k) => {
-    if (raw[k] < MIN_BAR) return null;
-    const w = raw.slice(Math.max(0, k - 3), k + 4).filter((v) => v >= MIN_BAR).sort((a, b) => a - b);
-    return w[w.length >> 1];
+  const empty = { use: { ok: false, start: raw[0] ?? null, end: raw[raw.length - 1] ?? null, bar: 0, ext: [], noisy: false } as GasUse, valve: [] as ValveEvent[] };
+  if (!raw.length) return empty;
+  // rychlost změny přes ~30 s: prudký pokles / nárůst = ventil, ne spotřeba
+  const RATE = 15;
+  const jump = raw.map((v, k) => {
+    let j = k; while (j > 0 && tt[k] - tt[j - 1] <= 30) j--;
+    const dt = (tt[k] - tt[j]) / 60;
+    if (j === k || dt <= 0) return 0;
+    const r = (raw[j] - v) / dt;
+    return r > RATE ? -1 : r < -RATE ? 1 : 0;
   });
-  // malé nárůsty (do 10 bar) = ohřátí lahve, odečtou se; větší nárůst = doplnění z externího zdroje
-  let ref: number | null = null, bar = 0, rise = 0, wiggle = 0;
+  // ventil: přechody mezi mezitlakem (< 20) a plným tlakem
+  const valve: ValveEvent[] = [];
+  let lastHigh: number | null = null, lastHighT = 0, low = raw[0] < MIN_BAR;
+  raw.forEach((v, k) => {
+    if (v >= 50 && jump[k] === 0) { lastHigh = v; lastHighT = tt[k]; }
+    if (!low && v < MIN_BAR) { low = true; if (lastHigh != null && lastHigh >= 50) valve.push({ t: lastHighT, kind: "close", from: Math.round(lastHigh), to: Math.round(v) }); }
+    else if (low && v >= MIN_BAR + 30) { low = false; valve.push({ t: tt[k], kind: "open", from: Math.round(raw[Math.max(0, k - 1)]), to: Math.round(v) }); }
+  });
+  if (valid.length < Math.max(5, raw.length * 0.2)) return { ...empty, valve };
+  // medián z 7 vzorků (~35 s) jen z ustálených hodnot nad mezitlakem
+  const ok = (k: number) => raw[k] >= MIN_BAR && jump[k] === 0;
+  const sm = raw.map((_, k) => {
+    if (!ok(k)) return null;
+    const w: number[] = []; for (let q = Math.max(0, k - 3); q <= Math.min(raw.length - 1, k + 3); q++) if (ok(q)) w.push(raw[q]);
+    w.sort((a, b) => a - b); return w[w.length >> 1];
+  });
+  // malé nárůsty (do 10 bar) = ohřátí lahve, odečtou se; větší nárůst bez předchozího zavření = doplnění z externího zdroje
+  let ref: number | null = null, bar = 0, rise = 0, wiggle = 0, closedAt: number | null = null;
   const extIdx: number[] = [];
   sm.forEach((v, k) => {
-    if (v == null) { extIdx.push(k); return; }
-    if (ref == null) { ref = v; return; }
+    if (v == null) { if (raw[k] < MIN_BAR) { extIdx.push(k); if (ref != null) closedAt = ref; ref = null; } else if (jump[k] < 0 && ref != null) closedAt = ref; return; }
+    if (ref == null) {
+      // znovuotevření onboard lahve: tlak se vrátí k poslední hodnotě – nic se nepočítá
+      if (closedAt != null && v - closedAt > EXT_RISE + 5) { rise += v - closedAt; extIdx.push(k); }
+      ref = v; closedAt = null; return;
+    }
     if (v < ref - HYST) { bar += ref - v; wiggle += ref - v; ref = v; }
     else if (v > ref + HYST) {
       if (v - ref >= EXT_RISE) { rise += v - ref; extIdx.push(k); } else { bar -= v - ref; wiggle += v - ref; }
@@ -53,13 +90,13 @@ export function pressureUse(t: number[], p: (number | null)[], depth: number[], 
   });
   const ext: [number, number][] = [];
   for (const k of extIdx) {
-    const m = t[idx[k]] / 60;
+    const m = tt[k] / 60;
     const last = ext[ext.length - 1];
     if (last && m - last[1] <= 2) last[1] = m; else ext.push([m, m]);
   }
   const firstV = sm.find((v) => v != null) ?? null, lastV = [...sm].reverse().find((v) => v != null) ?? null;
   const net = Math.max(0, bar);
-  return { ok: true, start: firstV, end: lastV, bar: Math.round(net), ext: ext.map(([a, b]) => [Math.round(a), Math.round(b)]), noisy: rise + wiggle > Math.max(60, net * 4) };
+  return { use: { ok: true, start: firstV, end: lastV, bar: Math.round(net), ext: ext.map(([a, b]) => [Math.round(a), Math.round(b)]), noisy: rise + wiggle > Math.max(60, net * 4) }, valve };
 }
 
 // ---------- ovládání počítače (záznamy 0x51)
@@ -516,12 +553,20 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   const cws = computerWarnings(d);
   for (const w of cws.filter((w) => w.kind === "o2press" || w.kind === "dilpress")) {
     const arr = w.kind === "o2press" ? d.s.o2p : d.s.dil, i = at(w.start + 3);
-    // tlak: medián nenulových hodnot 2 min od varování (vysílač po zapnutí chvíli posílá 0)
-    const win = arr.filter((v, k) => v != null && v > 0 && d.s.t[k] >= w.start && d.s.t[k] <= w.start + 120) as number[];
-    const p = win.length ? [...win].sort((a, b) => a - b)[Math.floor(win.length / 2)] : null;
     const gas = w.kind === "o2press" ? "O₂" : "diluentu";
-    if (p != null && p > 0 && p < 20) out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(p)} bar je mezitlak externí lahve – očekávané.` });
-    else out.push({ level: "warn", title: `Nízký tlak ${gas}${p != null ? ` (${Math.round(p)} bar)` : ""}`, text: `Onboard lahev – varování v ${Math.floor(w.start / 60)}. min (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.` });
+    // tlak po ustálení (2–7 min po varování; vysílač po zapnutí chvíli posílá 0) a tlak těsně před varováním
+    const med = (a: number, b: number) => { const v = arr.filter((x, k) => x != null && x > 0 && d.s.t[k] >= a && d.s.t[k] <= b) as number[]; return v.length ? [...v].sort((p, q) => p - q)[v.length >> 1] : null; };
+    const settled = med(w.start + 120, w.start + 420) ?? med(w.start, w.start + 120);
+    const before = Math.max(0, ...(arr.filter((x, k) => x != null && d.s.t[k] >= w.start - 180 && d.s.t[k] <= w.start) as number[]));
+    const now = med(w.start - 5, w.start + 15);
+    if (now != null && now >= 3 && now < 20 && !(settled != null && settled < 3)) {
+      // v okamžiku varování byl v okruhu mezitlak – externí lahev nebo zavřená onboard lahev
+      out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(now)} bar je mezitlak externí lahve (onboard zavřená)${settled != null && settled >= 20 ? `, později ${Math.round(settled)} bar – onboard otevřena` : ""}.` });
+    } else if (settled != null && settled >= 3 && settled < 20) {
+      if (before >= 50) out.push({ level: "info", title: `Přechod na externí lahev (${gas})`, text: `V ${Math.floor(w.start / 60)}. min (${Math.round(before)} → ${Math.round(settled)} bar), varování ${ackTxt(w)}.` });
+      else out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(settled)} bar je mezitlak externí lahve – očekávané.` });
+    } else if (settled != null && settled < 3) out.push({ level: "warn", title: `Nízký tlak ${gas} (0 bar)`, text: `Varování v ${mmss(w.start)} – tlak spadl k nule a neustálil se na mezitlaku externí lahve. Zdroj odpojený nebo prázdný? ${ackTxt(w)}.` });
+    else out.push({ level: "warn", title: `Nízký tlak ${gas}${settled != null ? ` (${Math.round(settled)} bar)` : ""}`, text: `Onboard lahev – varování v ${Math.floor(w.start / 60)}. min (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.` });
   }
   const outW = cws.find((w) => w.kind === "cellout"), outA = d.alarms.find((a) => a.label.startsWith("Vyřazené čidlo"));
   if (outW || outA) {

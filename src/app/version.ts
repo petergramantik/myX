@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.26.1";
+export const APP_VERSION = "1.26.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.26.2", date: "2026-11-17", title: "Filtr plynů a problémů, onboard ↔ externí lahev", items: [
+    "Plné zobrazení: řádek filtrů – vlevo plyny (AIR, TMX, NX), vpravo problémy (pO₂, CO₂, ČIDLA, TLAK, BAT, SP); přepínače.",
+    "Tagy v řádcích ponoru otevírají detail (nefiltrují).",
+    "Přechod z onboard na externí lahev se rozpozná podle ustáleného tlaku – jen informace, bez tagu TLAK.",
+    "Otevření / zavření onboard lahve během ponoru se nepočítá do spotřeby; v Událostech je vidět, kdy se lahev zavřela a otevřela.",
+  ] },
   { version: "1.26.1", date: "2026-11-17", title: "Tagy podle kategorií", items: [
     "Tagy v seznamu ponorů = oranžová a červená varování ze záhlaví detailu, sdružená do kategorií pO₂, CO₂, ČIDLO 1 2 3, TLAK, BAT, SP; barva podle nejzávažnějšího.",
     "Klepnutí na tag vyfiltruje ponory se stejnou kategorií.",

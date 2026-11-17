@@ -278,5 +278,16 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(cellsIn("Problém s čidlem 1").join() === "1", "číslo čidla z nadpisu");
 }
 
+// ---- otevírání / zavírání onboard lahve během ponoru (test lahve s externím O₂)
+{
+  const { pressureAnalysis } = await import("../src/core/analysis");
+  const t = [...Array(240).keys()].map((i) => i * 5);
+  // 0–5 min onboard (150 → 145), zavřeno 5–10 min (mezitlak 9), znovu otevřeno 10–15 min (145 → 140), zavřeno do konce
+  const p = t.map((x) => x < 300 ? 150 - x / 60 : x < 320 ? 150 - (x - 300) * 7 : x < 600 ? 9 : x < 900 ? 145 - (x - 600) / 60 : x < 920 ? 140 - (x - 900) * 6.5 : 9);
+  const r = pressureAnalysis(t, p, 1200);
+  ok(r.use.ok && r.use.bar >= 8 && r.use.bar <= 14, `spotřeba jen z otevřené onboard lahve (${r.use.bar} bar)`);
+  ok(r.valve.map((v) => v.kind).join(",") === "close,open,close", `zavřeno, otevřeno, zavřeno (${r.valve.map((v) => v.kind)})`);
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

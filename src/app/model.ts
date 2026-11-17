@@ -48,7 +48,7 @@ export const aliasKey = (kind: "buddy" | "site", name: string) => `${kind}:${nor
 /** Cizí počítač rozpoznaný podle sériového čísla v logu a jeho majitel. */
 export interface Computer { id: string; model: string; buddyId?: string; updated: number }
 
-export const META_V = 18;
+export const META_V = 19;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };

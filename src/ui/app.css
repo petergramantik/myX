@@ -343,3 +343,10 @@ tr.muted-row td { color: var(--muted); font-style: italic; }
 .dr-num.fixed { gap: 6px; } .dr-num.fixed span:first-child { width: 66px; } .dr-num.fixed span:last-child { width: 58px; }
 .dive-row.compact .dr-rate { width: 40px; flex: none; }
 .btn.tagf { font-size: 12px; padding: 0 8px; white-space: nowrap; } .dr-tags .tag { cursor: pointer; }
+.cat-filter { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cf-group { display: flex; gap: 5px; flex-wrap: wrap; }
+.gchip.cf, .tag.cf { cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; padding: 3px 8px; line-height: 1.2; background: transparent; opacity: .55; }
+.tag.cf { border: 1px solid var(--muted); color: var(--muted); border-radius: 6px; }
+.gchip.cf.on, .tag.cf.on { opacity: 1; box-shadow: 0 0 0 2px var(--accent); }
+.tag.cf.on { color: var(--text); border-color: var(--text); }
+.valve-list { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
