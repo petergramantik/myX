@@ -93,7 +93,15 @@ async function saveLb(lb: Logbook) {
 /** Sériové číslo počítače z názvu souboru v Shearwater Cloud („Petrel 2[306E13C5]#…“). */
 const serialOf = (fn?: string) => (/\[([0-9A-F]+)\]/i.exec(fn || "")?.[1] || "").toUpperCase();
 /** Sériová čísla mých počítačů (z mých ponorů). */
-export const ownSerials = () => new Set(ownMetas().map((m) => (m.h.serial || 0).toString(16).toUpperCase()).filter((x) => x !== "0"));
+export const serialHex = (m: Meta) => (m.h.serial || 0).toString(16).toUpperCase();
+/** Moje počítače: ze sériových čísel mých ponorů a počítače cíleně označené jako moje. */
+export const ownSerials = () => new Set([...ownMetas().map(serialHex).filter((x) => x !== "0"), ...Object.values(ownLb().computers || {}).filter((c) => c.mine).map((c) => c.id)]);
+/** Moje počítače s počtem ponorů (Nastavení → Výbava). */
+export function ownComputers(): { serial: string; model: string; count: number; from: number; to: number }[] {
+  const by = new Map<string, Meta[]>();
+  for (const m of ownMetas()) { const k = serialHex(m); by.set(k, [...(by.get(k) || []), m]); }
+  return [...by].map(([serial, ms]) => ({ serial, model: ownLb().computers?.[serial]?.model || "Počítač", count: ms.length, from: Math.min(...ms.map((m) => m.start)), to: Math.max(...ms.map((m) => m.start)) }));
+}
 
 /**
  * Import exportu Shearwater Cloud. K mým ponorům jdou jen ponory mých počítačů (při úplně prvním importu počítač
@@ -109,7 +117,13 @@ export async function importAny(file: File): Promise<{ own: number; guests: Gues
   const groups = new Map<string, RawDive[]>();
   for (const r of raws) { const k = serialOf(r.fn); groups.set(k, [...(groups.get(k) || []), r]); }
   let mine = ownSerials();
-  if (!mine.size && !st.metas.length) mine = new Set([[...groups].sort((a, b) => b[1].length - a[1].length)[0][0]]);
+  if (!mine.size && !st.metas.length) {
+    const sorted = [...groups].sort((a, b) => b[1].length - a[1].length);
+    mine = new Set([sorted[0][0]]);
+    // první import s víc počítači: cíleně se zeptat, které jsou moje (výměna počítače)
+    for (const [k, v] of sorted.slice(1)) if (k && confirm(`V souboru je víc počítačů. Je počítač ${modelOf(v)} ${k} (${v.length} ponorů) také tvůj?\n\nOK = přidat k mým ponorům, Zrušit = načíst jako log buddyho.`)) mine.add(k);
+    if (mine.size > 1) { const lb = structuredClone(st.lb); lb.computers = lb.computers || {}; for (const k of mine) if (k) lb.computers[k] = { ...lb.computers[k], id: k, model: modelOf(groups.get(k)!), mine: true, updated: Date.now() }; await saveLb(lb); }
+  }
   const ownRaws = [...groups].filter(([k]) => mine.has(k) || (!k && groups.size === 1 && mine.size === 0)).flatMap(([, v]) => v);
   const own = ownRaws.length ? await importOwn(buf, file.name, ownRaws) : 0;
   const guests: GuestLog[] = [];
@@ -122,6 +136,56 @@ export async function importDb(file: File): Promise<number> {
   const r = await importAny(file);
   if (r.guests.length) toast(`Načteno jako cizí log: ${r.guests.map((g) => ownerName(g) || g.name).join(", ")}`);
   return r.own;
+}
+
+const modelOf = (v: RawDive[]) => (/^(.*?)\[/.exec(v.find((r) => r.fn)?.fn || "")?.[1] || "Počítač").trim();
+
+/** Cizí log je ve skutečnosti můj počítač (výměna počítače): ponory přesunout k mým, převzít lokality a buddye, cizí log smazat. */
+export async function adoptGuestAsOwn(log: GuestLog): Promise<number> {
+  if (st.guest) closeGuest();
+  const data = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", log.id, db.GUEST);
+  if (!data) throw new Error("Log se nepodařilo načíst");
+  const pre = log.id + ":";
+  const have = new Set(st.metas.map((m) => m.id));
+  const added: Meta[] = [];
+  const cloud = new Map<string, CloudDetail>();
+  for (const gm of data.metas) {
+    const raw = await db.get<RawDive>("raw", gm.id, db.GUEST);
+    if (!raw) continue;
+    const id = gm.id.startsWith(pre) ? gm.id.slice(pre.length) : gm.id;
+    const n = data.lb.notes[gm.id];
+    if (n) cloud.set(id, { site: n.siteId ? data.lb.sites[n.siteId]?.name || "" : "", buddies: n.buddyIds.map((b) => data.lb.buddies[b]?.name).filter((x): x is string => !!x), notes: n.note || "" });
+    if (have.has(id)) continue;
+    const own: RawDive = { ...raw, id };
+    await db.put("raw", own);
+    const m = await metaOf(own);
+    await db.put("meta", m);
+    added.push(m);
+    pendingUpload.add(id);
+  }
+  let lb = structuredClone(st.lb);
+  if (log.serial) { lb.computers = lb.computers || {}; lb.computers[log.serial] = { ...lb.computers[log.serial], id: log.serial, model: log.model || log.name, buddyId: undefined, mine: true, updated: Date.now() }; }
+  lb = applyCloud(lb, cloud, new Set(added.map((m) => m.id)));
+  for (const m of added) delete lb.deleted[m.id];
+  await saveLb(lb);
+  set({ metas: sortMetas([...st.metas, ...added]) });
+  await deleteGuest(log);
+  await autoLinkDrafts();
+  scheduleSync();
+  return added.length;
+}
+
+/** Odebere počítač z mých: smaže jeho ponory z mého logbooku (jdou pak načíst jako cizí log). */
+export async function removeOwnComputer(serial: string): Promise<number> {
+  if (st.guest) closeGuest();
+  const gone = st.metas.filter((m) => serialHex(m) === serial);
+  const lb = structuredClone(st.lb), now = Date.now();
+  for (const m of gone) { await db.del("raw", m.id); await db.del("meta", m.id); delete lb.notes[m.id]; lb.deleted[m.id] = now; pendingUpload.delete(m.id); }
+  if (lb.computers?.[serial]) { lb.computers[serial] = { ...lb.computers[serial], mine: false, updated: now }; }
+  await saveLb(lb);
+  set({ metas: st.metas.filter((m) => serialHex(m) !== serial) });
+  scheduleSync();
+  return gone.length;
 }
 
 async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promise<number> {
@@ -802,7 +866,7 @@ export async function syncNow(): Promise<void> {
       const remoteIds = new Set(remote.dives.map((d) => d.id));
       const got: Meta[] = [];
       for (const d of remote.dives) {
-        if (local.has(d.id) || d.id.includes(":")) continue;
+        if (local.has(d.id) || d.id.includes(":") || ownLb().deleted?.[d.id]) continue;
         const b = await api(`/dive/${encodeURIComponent(d.id)}`);
         if (!b.ok) continue;
         const raw: RawDive = { id: d.id, num: d.num, start: d.start, blob: new Uint8Array(await b.arrayBuffer()) };

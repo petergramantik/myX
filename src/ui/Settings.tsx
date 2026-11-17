@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
 import { DEFAULT_ALL_TH } from "../app/model";
 import { OwnerPicker } from "./Owner";
-import { closeGuest, compLabel, deleteGuest, guestRawIndex, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
+import { closeGuest, compLabel, deleteGuest, guestRawIndex, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, adoptGuestAsOwn, ownComputers, removeOwnComputer, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { Card, KV, fmtDate, go, tab, useStore } from "./common";
@@ -27,6 +27,7 @@ export function SettingsScreen() {
         <label>Diluent – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
         <label>O₂ – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
         <p className="note">Externí lahve (S80 = 11,1 l, S40 = 5,7 l) se zadávají u ponoru v kartě Spotřeba plynu.</p>
+        <OwnComputers />
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
           <input type="date" value={manual ? new Date(manual * 1000).toISOString().slice(0, 10) : ""} onChange={(e) => saveSettings({ manualFill: e.target.value ? Date.parse(e.target.value + "T12:00:00Z") / 1000 : null })} />
         </label>
@@ -112,6 +113,25 @@ export function SettingsScreen() {
           <button className="btn primary" onClick={() => { setWorker(url, key); syncNow(); }}>Uložit a synchronizovat</button>
         </div>
       </Sec>
+    </div>
+  );
+}
+
+/** Moje počítače (víc po výměně počítače); odebrání vrátí ponory zpět mimo můj logbook. */
+function OwnComputers() {
+  useStore();
+  const cs = ownComputers();
+  if (!cs.length) return null;
+  return (
+    <div className="own-comps">
+      <h3 className="subh">Moje počítače</h3>
+      {cs.map((c) => (
+        <div key={c.serial} className="row between">
+          <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)}</span>
+          {cs.length > 1 && <button className="btn small" onClick={async () => { if (confirm(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako log buddyho a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
+        </div>
+      ))}
+      <p className="note">Další svůj počítač přidáš v DB → Databáze u jeho logu volbou „To je můj počítač“, nebo při prvním importu.</p>
     </div>
   );
 }
@@ -210,6 +230,11 @@ export function GuestCard() {
                   {l.serial && <button className="btn small" onClick={() => setOwnerFor(ownerFor === l.id ? null : l.id)}>Majitel</button>}
                   {multi && k > 0 && l.serial && <button className="btn small" onClick={() => setPrimaryComputer(l.serial!)}>Nastavit jako hlavní</button>}
                   <button className="btn small" onClick={async () => { if (confirm(`Smazat log počítače ${compLabel(l)}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
+                  <button className="btn small" onClick={async () => {
+                    if (!confirm(`Počítač ${compLabel(l)} je tvůj (např. po výměně počítače)?\n\nJeho ${g.counts[l.id]} ponorů se přesune k tvým ponorům, převezmou se lokality a buddyové z jeho Cloudu a log buddyho zmizí. Odebrat ho jde později v Nastavení → Výbava.`)) return;
+                    try { toast(`Přidáno k tvým ponorům: ${await adoptGuestAsOwn(l)}`); } catch (e) { toast((e as Error).message); }
+                    reload();
+                  }}>To je můj počítač</button>
                 </div>
                 {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
                   {ownerName(l) && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení{multi ? " (odpojit počítač)" : ""}</button>}</div>}

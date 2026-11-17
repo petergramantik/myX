@@ -368,3 +368,4 @@ details.card.sec > summary h2 { margin: 0; }
 .lt-comp { border-top: 1px solid var(--line); padding-top: 6px; margin-top: 6px; } .lt-h .pill { margin-left: 6px; }
 .comp-line { margin: 0 2px 8px; } .comp-line .pill { font-size: 11px; padding: 1px 6px; }
 .warn-t { color: var(--warn); margin: 4px 0; } .ok-t { color: var(--muted); margin: 4px 0; }
+.row.between { justify-content: space-between; align-items: center; } .own-comps { display: flex; flex-direction: column; gap: 6px; }

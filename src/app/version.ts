@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.28";
+export const APP_VERSION = "1.29";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.29", date: "2026-11-17", title: "Vlastní log z víc počítačů", items: [
+    "První import souboru s víc počítači se zeptá, které jsou tvoje.",
+    "DB → Databáze: u logu volba „To je můj počítač“ – ponory se přesunou k tvým (i s lokalitami a buddyi z Cloudu).",
+    "Nastavení → Výbava: seznam tvých počítačů, počítač jde odebrat.",
+  ] },
   { version: "1.28", date: "2026-11-17", title: "Víc počítačů jednoho buddyho", items: [
     "Počítače se stejným majitelem tvoří jeden log: jedna dlaždice v DB, společný seznam ponorů, jeden účastník srovnání.",
     "Při načtení souboru s víc cizími počítači se aplikace zeptá, zda patří stejnému člověku.",
