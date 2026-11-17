@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ME, adoptForeign, aliasesFor, removeAlias, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
-import { BLSwitch, Card, KV, Picker, back, fmtDate, go, num, useStore } from "./common";
+import { BLSwitch, Card, ClearInput, KV, Picker, back, fmtDate, go, num, useStore } from "./common";
 import { WeatherCard } from "./Weather";
 
 const MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
@@ -20,7 +20,7 @@ export function SitesScreen() {
   return (
     <div className="screen">
       <BLSwitch on="sites" />
-      <input className="search" placeholder="Hledat lokalitu" value={q} onChange={(e) => setQ(e.target.value)} />
+      <ClearInput className="search" placeholder="Hledat lokalitu" value={q} onChange={setQ} />
       {list.map(({ s, c, km }) => (
         <div key={s.id} className="list-item" onClick={() => go({ t: "site", id: s.id })}>
           <div className="li-main"><b>{s.name}</b><small>{c ? `${c.n} ponorů · naposledy ${fmtDate(c.last)}` : "bez ponorů"}{km != null ? ` · ${num(km, 1)} km` : ""}{s.spId ? " · SP" : ""}</small></div>
@@ -130,7 +130,7 @@ function SpLinkInput({ onLink, busy }: { onLink: (id: number) => void; busy: boo
   return (
     <>
       <div className="row">
-        <input value={v} placeholder="Hledat název nebo vložit odkaz" onChange={(e) => setV(e.target.value)} />
+        <ClearInput value={v} placeholder="Hledat název nebo vložit odkaz" onChange={setV} />
         <button className="btn" disabled={!ref || busy} onClick={() => ref && onLink(ref)}>Spárovat</button>
       </div>
       {q.map((x) => <button key={x.id} className="btn block" disabled={busy} onClick={() => onLink(x.id)}>{x.name}</button>)}

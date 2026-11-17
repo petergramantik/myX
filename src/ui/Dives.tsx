@@ -8,7 +8,7 @@ import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { partIds, shareDives } from "./share";
 import { ask } from "../app/dialog";
-import { AlertBox, Card, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
+import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
@@ -16,22 +16,32 @@ import { LineChart, TissueMap } from "./Chart";
 
 const C = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#fff176", "#ef5350"];
 
+const DL0 = { q: "", rate: "", tagF: [] as TagCat[], gasF: [] as string[], onlyCommon: true, bsel: [] as string[], noBuddy: false, pickMode: false, picked: [] as string[] };
+const dlMemo: typeof DL0 & { ctx: string | null; y: number } = { ...DL0, ctx: null, y: 0 };
+
 export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) {
   const st = useStore();
-  const [q, setQ] = useState("");
-  const [rate, setRate] = useState<string>("");
-  const [tagF, setTagF] = useState<TagCat[]>([]);
-  const [gasF, setGasF] = useState<string[]>([]);
+  // filtry seznamu přežijí otevření ponoru / srovnání a návrat (do zavření aplikace nebo změny logu)
+  const ctx = `${st.guest?.id || ""}|${site || ""}|${buddy || ""}`;
+  if (dlMemo.ctx !== ctx) Object.assign(dlMemo, { ...DL0, ctx, bsel: buddy ? [buddy] : [] });
+  const mem = <K extends keyof typeof DL0>(k: K) => {
+    const [v, set0] = useState(dlMemo[k]);
+    return [v, (x: (typeof DL0)[K]) => { dlMemo[k] = x; set0(x); }] as const;
+  };
+  const [q, setQ] = mem("q");
+  const [rate, setRate] = mem("rate");
+  const [tagF, setTagF] = mem("tagF");
+  const [gasF, setGasF] = mem("gasF");
   const [compact, setCompact] = useState(() => { try { return localStorage.getItem("myx-compact") === "1"; } catch { return false; } });
   const lb = st.lb;
-  const [onlyCommon, setOnlyCommon] = useState(true);
-  const [bsel, setBsel] = useState<string[]>(buddy ? [buddy] : []);
-  const [noBuddy, setNoBuddy] = useState(false);
+  const [onlyCommon, setOnlyCommon] = mem("onlyCommon");
+  const [bsel, setBsel] = mem("bsel");
+  const [noBuddy, setNoBuddy] = mem("noBuddy");
   const [moreB, setMoreB] = useState(false);
-  const [pickMode, setPickMode] = useState(false);
-  const [picked, setPicked] = useState<string[]>([]);
+  const [pickMode, setPickMode] = mem("pickMode");
+  const [picked, setPicked] = mem("picked");
   const endPick = () => { setPickMode(false); setPicked([]); };
-  useEffect(() => { setBsel(buddy ? [buddy] : []); }, [buddy]);
+  useEffect(() => { const y = dlMemo.y; if (y) requestAnimationFrame(() => window.scrollTo(0, y)); return () => { dlMemo.y = leaveY; }; }, []);
   // seznam ponorů s buddym: ponory, ke kterým mám log buddyho, se otevřou rovnou jako srovnání
   const [cmp, setCmp] = useState<Map<string, Common>>(new Map());
   const [sugSite, setSugSite] = useState<Map<string, { name: string; who: string }>>(new Map());
@@ -87,7 +97,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <button className={"chip" + (noBuddy ? " on" : "")} onClick={() => { setNoBuddy(!noBuddy); setBsel([]); }}>Bez parťáka</button>
         </div>
       )}
-      <input className="search" placeholder="Hledat lokalitu, parťáka, poznámku, datum…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <ClearInput className="search" placeholder="Hledat lokalitu, parťáka, poznámku, datum…" value={q} onChange={setQ} />
       {st.guest ? (
         <div className="seg filter">
           <button className={onlyCommon ? "on" : ""} onClick={() => setOnlyCommon(true)}>Jen společné ({st.metas.filter(common).length})</button>
@@ -97,7 +107,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
       ) : (<>
         <div className="filter-row">
           <div className="seg filter">
-            {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
+            {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => { setRate(k); if (!k) { setQ(""); setTagF([]); setGasF([]); setBsel([]); setNoBuddy(false); dlMemo.y = 0; } }}>{l}</button>)}
           </div>
           <button className={"btn view-tg pick-tg" + (pickMode ? " on" : "")} title="Vybrat ponory ke sdílení" onClick={() => (pickMode ? endPick() : setPickMode(true))}>☑</button>
           <button className="btn view-tg" title={compact ? "Kompaktní zobrazení" : "Plné zobrazení"} onClick={() => { setCompact(!compact); try { localStorage.setItem("myx-compact", compact ? "0" : "1"); } catch { /* */ } }}>{compact ? "≡" : "☰"}</button>

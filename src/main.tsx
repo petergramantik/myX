@@ -153,6 +153,13 @@ function App() {
   );
 }
 
+// žádné pole v aplikaci nemá nabízet automatické vyplnění (platební karty, adresy)
+const noAutofill = (root: ParentNode) => root.querySelectorAll?.("input:not([type=file]):not([type=checkbox]):not([type=radio]):not([type=range]):not([data-af]), textarea:not([data-af])").forEach((el) => {
+  el.setAttribute("autocomplete", (el as HTMLInputElement).type === "password" ? "new-password" : "off");
+  el.setAttribute("data-af", "1");
+  el.setAttribute("data-form-type", "other"); el.setAttribute("data-lpignore", "true");
+});
+new MutationObserver(() => noAutofill(document)).observe(document.body, { childList: true, subtree: true });
 createRoot(document.getElementById("root")!).render(<App />);
 
 // automatická aktualizace: nový service worker převezme stránku a ta se znovu načte

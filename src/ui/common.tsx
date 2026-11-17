@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { getState, subscribe, type State } from "../app/store";
 import { norm } from "../app/model";
 
@@ -58,6 +58,17 @@ export function KV({ rows }: { rows: [string, React.ReactNode, string?][] }) {
   );
 }
 
+/** Textové pole s křížkem pro vyprázdnění (hledání, výběr jmen). */
+export function ClearInput({ value, onChange, placeholder, className }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <span className={"clr " + (className || "")}>
+      <input ref={ref} name="myx-search" autoComplete="off" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      {value && <button type="button" className="clr-x" aria-label="Vymazat" onMouseDown={(e) => e.preventDefault()} onClick={() => { onChange(""); ref.current?.focus(); }}>✕</button>}
+    </span>
+  );
+}
+
 /** Pole s našeptávačem: vybere existující položku, nebo založí novou. */
 export function Picker({ items, placeholder, onPick, onCreate }: {
   items: { id: string; name: string; hint?: string }[]; placeholder: string;
@@ -69,7 +80,7 @@ export function Picker({ items, placeholder, onPick, onCreate }: {
   const exact = items.some((i) => norm(i.name) === n);
   return (
     <div className="picker">
-      <input value={q} placeholder={placeholder} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
+      <ClearInput value={q} placeholder={placeholder} onChange={setQ} />
       {n && (
         <div className="picker-list">
           {hits.map((i) => <button key={i.id} onClick={() => { onPick(i.id); setQ(""); }}>{i.name}{i.hint && <small>{i.hint}</small>}</button>)}

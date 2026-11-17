@@ -32,6 +32,7 @@ export function HelpScreen() {
       </H>
 
       <H title="3. Seznam ponorů">
+        <p><b>Filtry se pamatují:</b> po otevření ponoru nebo srovnání a návratu zůstanou filtry i pozice v seznamu; „Vše“ u hodnocení je vynuluje. Hledací pole vyprázdníš křížkem ✕.</p>
         <p><b>Výběr ponorů:</b> ☑ vpravo u filtrů zapne výběr – klepnutím ponory zaškrtáváš, dole je Vše / Sdílet / ✕.</p>
         <p><b>Plné / kompaktní zobrazení:</b> přepínač ☰ / ≡ vpravo u filtrů. V kompaktním zobrazení naznačí problém barevný rámeček řádku.</p>
         <p><b>Filtry:</b> Vše / 👍 / 👎 / ❗ podle hodnocení; pod nimi plyny (AIR, TMX, NX) a problémy (pO₂, CO₂, ČIDLA, TLAK, BAT, SP). Uvnitř skupiny stačí kterýkoli, mezi skupinami platí obojí. Pod zapnutým filtrem je počet ponorů.</p>

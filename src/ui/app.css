@@ -413,3 +413,8 @@ details.card.sec > summary h2 { margin: 0; }
 .dlg-choices .btn { width: 100%; }
 .dlg-choices small { display: block; margin-top: 3px; font-size: 13px; }
 .guest-del { width: 100%; margin-top: 12px; }
+.clr { position: relative; display: block; }
+.clr input { width: 100%; padding-right: 38px; }
+.clr-x { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 16px; line-height: 1; }
+.clr-x:active { background: var(--panel2); }
+.row > .clr { flex: 1; min-width: 140px; }
