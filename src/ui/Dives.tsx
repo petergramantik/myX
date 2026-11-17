@@ -95,8 +95,8 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <button className="btn view-tg" title={compact ? "Kompaktní zobrazení" : "Plné zobrazení"} onClick={() => { setCompact(!compact); try { localStorage.setItem("myx-compact", compact ? "0" : "1"); } catch { /* */ } }}>{compact ? "≡" : "☰"}</button>
         </div>
         {!compact && (gasAll.length > 0 || tagAll.length > 0) && <div className="cat-filter">
-          <span className="cf-group">{gasAll.map((g) => <button key={g} className={"gchip cf " + GAS_CLS[g] + (gasF.includes(g) ? " on" : "")} onClick={() => tog(gasF, g, setGasF)}>{g}</button>)}</span>
-          <span className="cf-group">{tagAll.map((c) => <button key={c} className={"tag cf" + (tagF.includes(c) ? " on" : "")} onClick={() => tog(tagF, c, setTagF)}>{c === "ČIDLO" ? "ČIDLA" : c}</button>)}</span>
+          <span className="cf-group">{gasAll.map((g) => <span key={g} className="cf-col"><button className={"gchip cf " + GAS_CLS[g] + (gasF.includes(g) ? " on" : "")} onClick={() => { const n = gasF.includes(g) ? gasF.filter((x) => x !== g) : [...gasF, g]; setGasF(n.length === gasAll.length ? [] : n); }}>{g}</button>{gasF.includes(g) && <small>{st.metas.filter((m) => gasCats(m).includes(g)).length}</small>}</span>)}</span>
+          <span className="cf-group">{tagAll.map((c) => { const y = st.metas.filter((m) => diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === c)).length; return <span key={c} className="cf-col"><button className={"tag cf" + (tagF.includes(c) ? " on" : "")} onClick={() => tog(tagF, c, setTagF)}>{c === "ČIDLO" ? "ČIDLA" : c}</button>{tagF.includes(c) && <small>{tagF.length > 1 ? `${rows.length}/${y}` : y}</small>}</span>; })}</span>
         </div>}
       </>)}
       {drafts.map((d) => (

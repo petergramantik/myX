@@ -350,3 +350,6 @@ tr.muted-row td { color: var(--muted); font-style: italic; }
 .gchip.cf.on, .tag.cf.on { opacity: 1; box-shadow: 0 0 0 2px var(--accent); }
 .tag.cf.on { color: var(--text); border-color: var(--text); }
 .valve-list { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.cf-col { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
+.cf-col small { font-size: 10px; color: var(--muted); line-height: 1; }
+.cat-filter { align-items: flex-start; }

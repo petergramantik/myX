@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.26.2";
+export const APP_VERSION = "1.26.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.26.3", date: "2026-11-17", title: "Filtry s počty", items: [
+    "Označení všech plynů výběr zruší (zobrazí se všechny ponory).",
+    "Pod zapnutými štítky filtru je počet ponorů; u více problémů x/y (zobrazené / s daným tagem).",
+  ] },
   { version: "1.26.2", date: "2026-11-17", title: "Filtr plynů a problémů, onboard ↔ externí lahev", items: [
     "Plné zobrazení: řádek filtrů – vlevo plyny (AIR, TMX, NX), vpravo problémy (pO₂, CO₂, ČIDLA, TLAK, BAT, SP); přepínače.",
     "Tagy v řádcích ponoru otevírají detail (nefiltrují).",
