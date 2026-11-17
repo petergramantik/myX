@@ -1,6 +1,6 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
 import { decodeDive, peekHeader, readCloudDetails, readShearwaterDb, type CloudDetail, type Dive, type RawDive } from "../core/shearwater";
-import { injections, summarize } from "../core/analysis";
+import { DEFAULT_THRESHOLDS, diveWarnings, injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
 import * as db from "./db";
@@ -61,7 +61,10 @@ async function metaOf(raw: RawDive): Promise<Meta> {
   // hloubka po 30 s za prvních 30 min – pro párování společných ponorů podle profilu
   const prof: number[] = []; let j = 0;
   for (let t = 0; t <= 1800 && t <= d.h.diveTimeS; t += 30) { while (j + 1 < d.s.t.length && d.s.t[j] < t) j++; prof.push(Math.round(d.s.depth[j] * 10) / 10); }
-  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum: summarize(d), inj: injections(d).length, cells: cellsOfDive(d), v: META_V, prof };
+  const sum = summarize(d);
+  // oranžová a červená varování (výchozí prahy) – pro tagy v seznamu ponorů
+  const warns = diveWarnings(d, sum, DEFAULT_THRESHOLDS).filter((w) => w.level === "warn" || w.level === "bad").map((w) => ({ level: w.level as "warn" | "bad", title: w.title, text: w.text }));
+  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum, inj: injections(d).length, cells: cellsOfDive(d), v: META_V, prof, warns };
 }
 
 // ---------- start

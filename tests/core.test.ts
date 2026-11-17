@@ -263,5 +263,20 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(deviatingCell(d, 20)?.cell === 3, "číslo vyřazeného čidla z průběhu mV");
 }
 
+// ---- tagy v seznamu ponorů podle kategorií
+{
+  const { diveTagsOf, cellsIn } = await import("../src/core/tags");
+  const t = diveTagsOf([
+    { level: "warn", title: "Souvislost CO₂", text: "" }, { level: "bad", title: "Vysoké CO₂", text: "" },
+    { level: "warn", title: "Chyba CO₂ čidla (P)", text: "" }, { level: "bad", title: "Podezření na vlhkost na čidlech (zatékání?)", text: "Odchylují se čidla 1 a 3 najednou" },
+    { level: "warn", title: "Vyřazené čidlo 2 (P)", text: "" }, { level: "warn", title: "Klesání s vysokým setpointem", text: "" },
+    { level: "warn", title: "Nízký tlak O₂ (23 bar)", text: "" }, { level: "warn", title: "Slabá baterie", text: "" },
+    { level: "bad", title: "Podezření na hypoxii při zanoření – zkontroluj ventil O₂", text: "" }, { level: "info", title: "Velmi hustý plyn", text: "" },
+  ]);
+  ok(t.map((x) => x.label).join(",") === "pO₂,CO₂,ČIDLO 1 2 3,TLAK,BAT,SP", `pořadí a sloučení kategorií (${t.map((x) => x.label)})`);
+  ok(t.find((x) => x.cat === "CO₂")!.level === "bad" && t.find((x) => x.cat === "SP")!.level === "warn", "barva podle nejzávažnějšího");
+  ok(cellsIn("Problém s čidlem 1").join() === "1", "číslo čidla z nadpisu");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

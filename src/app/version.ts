@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.26";
+export const APP_VERSION = "1.26.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.26.1", date: "2026-11-17", title: "Tagy podle kategorií", items: [
+    "Tagy v seznamu ponorů = oranžová a červená varování ze záhlaví detailu, sdružená do kategorií pO₂, CO₂, ČIDLO 1 2 3, TLAK, BAT, SP; barva podle nejzávažnějšího.",
+    "Klepnutí na tag vyfiltruje ponory se stejnou kategorií.",
+    "Pozdní přepnutí, nenastavený vysoký setpoint a velmi hustý plyn jsou jen informace v detailu.",
+  ] },
   { version: "1.26", date: "2026-11-17", title: "Varování na počítači a jejich potvrzení", items: [
     "Dekódování varování zobrazených na Petrelu: nízký tlak O₂ / diluentu, nízké / vysoké pO₂, CO₂, nízké NDL, vyřazené čidlo (P), chyba CO₂ čidla (P); ostatní jako neznámé s kódem.",
     "Události: karta „Varování na počítači“ – kdy se zobrazilo a kdy a jak bylo potvrzeno.",

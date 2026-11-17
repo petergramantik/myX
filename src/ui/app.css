@@ -342,3 +342,4 @@ tr.muted-row td { color: var(--muted); font-style: italic; }
 .dr-num.fixed span { display: inline-block; text-align: right; }
 .dr-num.fixed { gap: 6px; } .dr-num.fixed span:first-child { width: 66px; } .dr-num.fixed span:last-child { width: 58px; }
 .dive-row.compact .dr-rate { width: 40px; flex: none; }
+.btn.tagf { font-size: 12px; padding: 0 8px; white-space: nowrap; } .dr-tags .tag { cursor: pointer; }

@@ -134,14 +134,14 @@ export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RU
       .map((x) => { const back = sum.sp.find((y) => y.t > x.t && y.to < 1.0); return `Krátce: ${fmin(x.t)} min → ${fmt(x.to)} (${fmt(x.depth)} m)${back ? `, po ${Math.round(back.t - x.t)} s zpět na ${fmt(back.to)}` : ""}.`; });
     prevT = c.t;
     const txt = [...short, `${fmin(c.t)} min → ${fmt(c.to)} (${fmt(c.depth)} m), ${fmt(Math.round(delay * 10) / 10)} min po dosažení dna (${fmt(s.depth[p])} m)${c.manual ? ", ručně v menu Petrelu" : ""}.`].join(" ");
-    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: "warn", title: "Pozdní přepnutí na vysoký setpoint", text: txt });
+    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: "info", title: "Pozdní přepnutí na vysoký setpoint", text: txt });
     else if (k === 0) out.push({ level: "info", title: "Přepnutí setpointu", text: txt });
   }
   if (!startHigh && !ups.length && d.h.maxDepth > 10) {
     // bez přepnutí: varovat jen pokud se potápěč na dně ≥ lateMin zdržel
     let longest = 0;
     for (let i = 0; i < n; i++) { if (s.depth[i] < 10) continue; const p = plateauStart(d, i, r.osc); longest = Math.max(longest, s.t[i] - s.t[p]); }
-    if (longest > r.lateMin * 60) out.push({ level: "warn", title: "Vysoký setpoint nenastaven", text: `Během ponoru nebyl setpoint přepnut na vysoký (≥ 1,0), i když byl potápěč na dně ${Math.round(longest / 60)} min.` });
+    if (longest > r.lateMin * 60) out.push({ level: "info", title: "Vysoký setpoint nenastaven", text: `Během ponoru nebyl setpoint přepnut na vysoký (≥ 1,0), i když byl potápěč na dně ${Math.round(longest / 60)} min.` });
   }
   // klesání s vysokým setpointem: o víc než descM od nejmělčího místa
   let minI = -1, peakI = -1, warned = false;
@@ -564,7 +564,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   const pl = co2Plausibility(d);
   if (pl && !pl.ok) out.push({ level: "warn", title: "Čidlo CO₂ nejspíš podhodnocuje", text: `Pod 20 m ukazovalo přesnou nulu ${pl.zeroPct} % času (oříznutá nula) – malé hodnoty CO₂ nevidí. Zkontroluj kalibraci; nízké hodnoty ber s rezervou.` });
   const ef = effortOf(d, th.co2Mbar);
-  if (ef.densOver62 >= 1) out.push({ level: "warn", title: "Velmi hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString("cs-CZ")} g/l, ${Math.round(ef.densOver62)} min nad 6,2 g/l – výrazně vyšší dechová práce a riziko hromadění CO₂.` });
+  if (ef.densOver62 >= 1) out.push({ level: "info", title: "Velmi hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString("cs-CZ")} g/l, ${Math.round(ef.densOver62)} min nad 6,2 g/l – výrazně vyšší dechová práce a riziko hromadění CO₂.` });
   else if (ef.densOver52 >= 1) out.push({ level: "info", title: "Hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString("cs-CZ")} g/l, ${Math.round(ef.densOver52)} min nad doporučenými 5,2 g/l.` });
   for (const c of ef.co2Notes) out.push({ level: c.level, title: "Souvislost CO₂", text: c.text });
   if (ef.vents >= 5) out.push({ level: "info", title: "Časté upouštění smyčky", text: `${ef.vents}× pokles diluentu bez klesání (upouštění smyčky, vyfukování masky) – může souviset s vyvážením nebo stresem.` });

@@ -4,6 +4,7 @@ import { BTN_NAMES, GAS_COLOR, cellCalibration, cellSpread, diveWarnings, gasLab
 import { ME, adoptForeign, nearestPair, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
+import { diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
@@ -17,6 +18,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const st = useStore();
   const [q, setQ] = useState("");
   const [rate, setRate] = useState<string>("");
+  const [tagF, setTagF] = useState<TagCat | null>(null);
   const [compact, setCompact] = useState(() => { try { return localStorage.getItem("myx-compact") === "1"; } catch { return false; } });
   const lb = st.lb;
   const [onlyCommon, setOnlyCommon] = useState(true);
@@ -53,7 +55,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
     return n.split(" ").every((w) => txt.includes(w));
   };
   const rows = st.metas.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse()
-    .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)) && (!noBuddy || (!note?.buddyIds.length && !cmp.has(m.id))));
+    .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)) && (!noBuddy || (!note?.buddyIds.length && !cmp.has(m.id))) && (!tagF || diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === tagF)));
   // buddy s počtem mých ponorů (pro štítky filtru)
   const bcount = new Map<string, number>();
   for (const m of st.metas) for (const b of lb.notes[m.id]?.buddyIds || []) if (lb.buddies[b]) bcount.set(b, (bcount.get(b) || 0) + 1);
@@ -84,6 +86,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <div className="seg filter">
             {[["", "Vše"], ["up", "👍"], ["down", "👎"], ["problem", "❗"]].map(([k, l]) => <button key={k} className={rate === k ? "on" : ""} onClick={() => setRate(k)}>{l}</button>)}
           </div>
+          {tagF && <button className="btn tagf" onClick={() => setTagF(null)}>{tagF} ✕</button>}
           <button className="btn view-tg" title={compact ? "Kompaktní zobrazení" : "Plné zobrazení"} onClick={() => { setCompact(!compact); try { localStorage.setItem("myx-compact", compact ? "0" : "1"); } catch { /* */ } }}>{compact ? "≡" : "☰"}</button>
         </div>
       )}
@@ -102,7 +105,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         const rate = note?.rating ? <span className="dr-rt">{RATING[note.rating].icon}</span> : null;
         const open = () => { const cc = bsel.length ? c : undefined; go(cc ? { t: "cmp", id: m.id, other: cc.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); };
         if (compact) return (
-          <div key={m.id} className={"dive-row compact " + rowLevel(diveTags(m, lb.settings.th))} onClick={open}>
+          <div key={m.id} className={"dive-row compact " + rowLevel(diveTagsOfMeta(st.metas, m, lb.settings.th))} onClick={open}>
             <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{buds ? " · " + buds : ""}</small></div>
             <div className="dr-num fixed"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             <div className="dr-rate">{rate}{badge}</div>
@@ -115,7 +118,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
               <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             </div>
             {(buds || badge) && <div className="dr-bud"><span className="dr-bnames">{buds}</span>{badge}</div>}
-            <div className="dr-top"><span className="dr-chips"><DilChip m={m} /><DiveTags m={m} /></span>{rate}</div>
+            <div className="dr-top"><span className="dr-chips"><DilChip m={m} /><DiveTags m={m} onTag={(c) => setTagF(c)} /></span>{rate}</div>
           </div>
         );
       })}
@@ -202,29 +205,23 @@ function DilChip({ m }: { m: Meta }) {
 }
 
 /** Tagy ponoru v seznamu (jen důležité): CO₂, nevěrohodné čidlo CO₂, vysoké a nízké pO₂, rozjetá čidla. */
-function DiveTags({ m }: { m: Meta }) {
-  const tags = diveTags(m, useStore().lb.settings.th);
+function DiveTags({ m, onTag }: { m: Meta; onTag?: (c: TagCat) => void }) {
+  const st = useStore();
+  const tags = diveTagsOfMeta(st.metas, m, st.lb.settings.th);
   if (!tags.length) return null;
-  return <div className="dr-tags">{tags.map(([c, t]) => <span key={t} className={"tag " + c}>{t}</span>)}</div>;
+  return <div className="dr-tags">{tags.map((t) => <span key={t.cat} className={"tag " + t.level} onClick={(e) => { if (onTag) { e.stopPropagation(); onTag(t.cat); } }}>{t.label}</span>)}</div>;
+}
+
+/** Tagy ponoru = kategorie oranžových a červených varování ze záhlaví detailu (včetně čidel z historie). */
+function diveTagsOfMeta(metas: Meta[], m: Meta, th: Parameters<typeof cellDiveWarnings>[2]): DiveTag[] {
+  const idx = metas.findIndex((x) => x.id === m.id);
+  const cw = idx >= 0 ? cellDiveWarnings(metas, idx, th) : [];
+  return diveTagsOf([...(m.warns || []), ...cw]);
 }
 
 /** Nejzávažnější úroveň tagů pro rámeček kompaktního řádku. */
-function rowLevel(tags: [string, string][]): string {
-  return tags.some((t) => t[0] === "bad") ? "lvl-bad" : tags.length ? "lvl-warn" : "";
-}
-
-function diveTags(m: Meta, th: { co2Mbar: number }): [string, string][] {
-  const x = m.sum;
-  const tags: [string, string][] = [];
-  if ((x.co2Max != null && x.co2Max >= th.co2Mbar && !x.co2Bad) || x.co2AlarmN > 0) tags.push(["bad", `CO₂ ${num(x.co2Max ?? 0, 1)}`]);
-  if (x.co2Bad) tags.push(["warn", "CO₂?"]);
-  if (x.ppo2Max > 1.6 || x.po2HiN > 0) tags.push(["bad", "pO₂ 1,6+"]);
-  if (x.startPo2 === "bad") tags.push(["bad", "Hypoxie?"]);
-  if (x.po2LoN > 0) tags.push(["warn", "pO₂ nízké"]);
-  if (x.cellIssue === "wet") tags.push(["bad", "Vlhkost?"]);
-  else if (x.cellIssue === "multi") tags.push(["warn", "Čidla"]);
-  else if (x.cellIssue) tags.push(["warn", "Čidlo " + x.cellIssue.slice(1)]);
-  return tags;
+function rowLevel(tags: DiveTag[]): string {
+  return tags.some((t) => t.level === "bad") ? "lvl-bad" : tags.length ? "lvl-warn" : "";
 }
 
 /** Návrhy lokality a buddyů z logu buddyho ke stejnému ponoru. */
