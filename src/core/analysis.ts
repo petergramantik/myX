@@ -1,4 +1,5 @@
 // Odvozené hodnoty: souhrn ponoru, kalibrace čidel, odhad vstřiků solenoidu, upozornění.
+import { computerWarnings, deviatingCell, type CompWarn } from "./compwarn";
 import { co2Plausibility, dilVents, effortOf, gasDensity } from "./effort";
 import type { Dive, Header } from "./shearwater";
 
@@ -508,6 +509,37 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     if (sp0.level === "bad") out.push({ level: "bad", title: "Podezření na hypoxii při zanoření – zkontroluj ventil O₂", text: `${sp0.reasons.join(", ")}. ${det}` });
     else out.push({ level: sp0.level, title: "Nízké pO₂ při zanoření", text: det + (sp0.level === "info" ? " Smyčka ještě dotahovala setpoint." : "") });
   }
+  // varování zobrazená na počítači (tlaky lahví, vyřazené čidlo, chyba CO₂ čidla, neznámá) + alarmy „other“
+  const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
+  const ackTxt = (w: CompWarn) => w.how === "ack" ? `potvrzeno v ${mmss(w.end!)}` : w.how === "cleared" ? `zmizelo v ${mmss(w.end!)}` : "nepotvrzeno";
+  const at = (t: number) => { const i = d.s.t.findIndex((x) => x >= t); return i < 0 ? d.s.t.length - 1 : i; };
+  const cws = computerWarnings(d);
+  for (const w of cws.filter((w) => w.kind === "o2press" || w.kind === "dilpress")) {
+    const arr = w.kind === "o2press" ? d.s.o2p : d.s.dil, i = at(w.start + 3);
+    // tlak: medián nenulových hodnot 2 min od varování (vysílač po zapnutí chvíli posílá 0)
+    const win = arr.filter((v, k) => v != null && v > 0 && d.s.t[k] >= w.start && d.s.t[k] <= w.start + 120) as number[];
+    const p = win.length ? [...win].sort((a, b) => a - b)[Math.floor(win.length / 2)] : null;
+    const gas = w.kind === "o2press" ? "O₂" : "diluentu";
+    if (p != null && p > 0 && p < 20) out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(p)} bar je mezitlak externí lahve – očekávané.` });
+    else out.push({ level: "warn", title: `Nízký tlak ${gas}${p != null ? ` (${Math.round(p)} bar)` : ""}`, text: `Onboard lahev – varování v ${Math.floor(w.start / 60)}. min (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.` });
+  }
+  const outW = cws.find((w) => w.kind === "cellout"), outA = d.alarms.find((a) => a.label.startsWith("Vyřazené čidlo"));
+  if (outW || outA) {
+    const t0 = Math.min(outW?.start ?? Infinity, outA?.start ?? Infinity), dc = deviatingCell(d, t0);
+    const nA = d.alarms.filter((a) => a.label.startsWith("Vyřazené čidlo")).length;
+    out.push({ level: "warn", title: `Vyřazené čidlo${dc ? " " + dc.cell : ""} (P)`, text: `Od ${Math.floor(t0 / 60)}. min${outW?.how === "open" || !outW ? " do konce ponoru" : ` do ${mmss(outW.end!)}`}${dc ? ` – čidlo ${dc.cell} se odchylovalo o ${dc.pct} %` : ""}${nA > 1 ? `, alarm opakován ${nA}×` : ""}. Počítač ho pravděpodobně vyřadil z hlasování.` });
+  }
+  const co2s = cws.filter((w) => w.kind === "co2sensor"), co2sA = d.alarms.filter((a) => a.label.startsWith("Chyba CO₂"));
+  if (co2s.length || co2sA.length) out.push({ level: "warn", title: `Chyba CO₂ čidla (P)${co2s.length > 1 ? ` – ${co2s.length}×` : ""}`, text: `${co2s.length ? `Hlášení v ${co2s.map((w) => `${mmss(w.start)} (${ackTxt(w)})`).join(", ")}` : `Alarm v ${co2sA.map((a) => mmss(a.start)).join(", ")}`}. Hodnoty CO₂ v tomto ponoru ber s rezervou.` });
+  for (const w of cws.filter((w) => w.kind === "unknown")) out.push({ level: "info", title: w.label, text: `Zobrazeno v ${mmss(w.start)}, ${ackTxt(w)}.` });
+  for (const a of d.alarms.filter((a) => a.label.startsWith("Neznámý alarm"))) out.push({ level: "info", title: a.label, text: `Spuštěn v ${mmss(a.start)}.` });
+  const ndl = cws.filter((w) => w.kind === "ndl");
+  if (ndl.length) out.push({ level: "info", title: `Nízké NDL${ndl.length > 1 ? ` – ${ndl.length}×` : ""}`, text: ndl.map((w) => `${mmss(w.start)} (${ackTxt(w)}${w.how === "ack" ? `, za ${Math.round(w.end! - w.start)} s` : ""})`).join(", ") + "." });
+  // baterie Petrelu v tomto ponoru
+  const bvs = d.s.bv.filter((v) => v > 0);
+  if (bvs.length && d.h.batWarn > 0) { const bmin = Math.min(...bvs);
+    if (bmin < d.h.batCrit) out.push({ level: "bad", title: "Kritická baterie", text: `Napětí kleslo na ${bmin.toFixed(2)} V (kritický práh ${d.h.batCrit.toFixed(2)} V).` });
+    else if (bmin < d.h.batWarn) out.push({ level: "warn", title: "Slabá baterie", text: `Napětí kleslo na ${bmin.toFixed(2)} V (práh varování ${d.h.batWarn.toFixed(2)} V).` }); }
   const ph = lowPo2Phases(d);
   if (ph.surface) out.push({ level: "info", title: "Nízké pO₂ u hladiny", text: `Alarm nízkého pO₂ ${ph.surface}× při výstupu k hladině nebo po vynoření – pokles tlaku.` });
   for (const kind of ["co2", "po2high", "po2low"] as const) {

@@ -245,5 +245,23 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(r[0].text.includes("Citlivost") && r[0].text.includes("V ponoru se odchyluje") && r[0].text.endsWith("Vyměň čidlo.") && r[0].text.split("Vyměň čidlo").length === 2, `oba popisy, jedno doporučení (${r[0].text})`);
 }
 
+// ---- varování zobrazená na počítači (události 0/1/2)
+{
+  const { computerWarnings, deviatingCell } = await import("../src/core/compwarn");
+  const d: any = { h: { diveTimeS: 600 }, s: { t: [0, 10, 20], mv1: [70, 70, 70], mv2: [70, 70, 70], mv3: [50, 50, 50] }, alarms: [],
+    buttons: [{ t: 31, btn: 1, from: 0xb3, to: 0xb3 }, { t: 33, btn: 1, from: 0xb3, to: 0xb3 }],
+    events: [
+      { t: 1, kind: "0", payload: "00 00 00 02 00 20 00 00" }, { t: 1, kind: "0", payload: "00 00 00 02 00 60 00 00" },
+      { t: 31, kind: "1", payload: "00 00 00 02 00 20 00 00" }, { t: 33, kind: "1", payload: "00 00 00 02 00 60 00 00" },
+      { t: 100, kind: "0", payload: "00 00 00 00 00 00 10 00" }, { t: 200, kind: "0", payload: "00 00 00 00 00 00 00 80" },
+    ] };
+  const w = computerWarnings(d);
+  ok(w.length === 4 && w[0].label === "Nízký tlak O₂" && w[0].how === "ack" && w[0].end === 31, "nízký tlak O₂ zobrazen v 1. s, potvrzen ve 31. s");
+  ok(w[1].label === "Nízký tlak diluentu" && w[1].end === 33, "nízký tlak diluentu jako samostatné varování");
+  ok(w[2].kind === "cellout" && w[2].c === "P" && w[2].how === "open", "vyřazené čidlo (P), nepotvrzeno");
+  ok(w[3].kind === "unknown" && w[3].label.includes("B7 0x80"), "neznámý bit s kódem");
+  ok(deviatingCell(d, 20)?.cell === 3, "číslo vyřazeného čidla z průběhu mV");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

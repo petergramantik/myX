@@ -3,6 +3,7 @@ import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, cellSpread, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, adoptForeign, nearestPair, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
+import { computerWarnings } from "../core/compwarn";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
@@ -603,6 +604,23 @@ function ValuesTab({ d }: { d: Dive }) {
   );
 }
 
+/** Varování zobrazená na počítači a jak byla potvrzena. */
+function CompWarnCard({ d }: { d: Dive }) {
+  const ws = computerWarnings(d);
+  const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
+  return (
+    <Card title="Varování na počítači">
+      {ws.length ? (
+        <table className="kv"><thead><tr><th>Varování</th><th>Zobrazeno</th><th>Konec</th></tr></thead>
+          <tbody>{ws.map((w, i) => <tr key={i}><td>{w.label}{w.c !== "✓" ? ` (${w.c})` : ""}</td><td>{mmss(w.start)}</td>
+            <td>{w.how === "open" ? <span className="muted">nepotvrzeno</span> : `${w.how === "ack" ? "potvrzeno" : "zmizelo"} ${mmss(w.end!)} (${Math.round(w.end! - w.start)} s)`}</td></tr>)}</tbody>
+        </table>
+      ) : <p className="muted">Počítač v tomto ponoru nezapsal žádné varování.</p>}
+      <p className="note">Z událostí 0 (zobrazeno), 1 a 2 (potvrzeno / zmizelo). „Potvrzeno“ = pravé tlačítko na hlavní obrazovce. (P) pravděpodobný význam, (?) hypotéza.</p>
+    </Card>
+  );
+}
+
 function EventsTab({ d }: { d: Dive }) {
   const th = useStore().lb.settings.th;
   const infos = groupAlerts(diveWarnings(d, summarize(d), th).filter((a) => a.level === "info"));
@@ -633,8 +651,9 @@ function EventsTab({ d }: { d: Dive }) {
       ) : <p className="muted">Počítač v tomto ponoru nehlásil alarm CO₂ ani pO₂.</p>}
       <p className="note">Z událostí 9 (spuštění) a 10 (ukončení). V grafech CO₂ a pO₂ jsou alarmy vyznačené podbarvením.</p>
     </Card>
+    <CompWarnCard d={d} />
     <Card title="Události v záznamu">
-      <p className="note">Bez CO₂ (to je v grafu) a bez stisků tlačítek (výše). Popisy u typů 0, 1 a 2 jsou odhad.</p>
+      <p className="note">Bez CO₂ (to je v grafu) a bez stisků tlačítek (výše). Značka (P) = pravděpodobný význam, (?) = hypotéza.</p>
       <table className="kv"><thead><tr><th>Čas</th><th>Typ</th><th>Význam / data</th></tr></thead>
         <tbody>{d.events.map((e, i) => <tr key={i}><td>{Math.round(e.t / 60)}′</td><td>{e.kind}</td><td>{e.label}<br /><code>{e.payload}</code></td></tr>)}</tbody>
       </table>

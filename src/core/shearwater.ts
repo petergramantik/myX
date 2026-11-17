@@ -60,7 +60,8 @@ const ALARM_BITS: { kind: Alarm["kind"]; label: string; byte: number; bit: numbe
   { kind: "co2", label: "Alarm CO₂", byte: 2, bit: 0x20 },
   { kind: "po2low", label: "Nízké pO₂", byte: 3, bit: 0x40 },
   { kind: "po2high", label: "Vysoké pO₂", byte: 3, bit: 0x80 },
-  { kind: "other", label: "Alarm (neurčený, bit 0x20)", byte: 3, bit: 0x20 }, // význam zatím neznámý – rozklíčovat podle dalších logů
+  { kind: "other", label: "Vyřazené čidlo (P)", byte: 3, bit: 0x20 }, // P: 9. 12. 2024 – pomalé čidlo 3 po přepnutí SP, opakuje se do konce ponoru
+  { kind: "other", label: "Chyba CO₂ čidla (P)", byte: 2, bit: 0x02 }, // P: souběh s nesmyslnými hodnotami CO₂ (Radek 26. 10. 2026)
 ];
 
 const u16 = (b: Uint8Array, i: number) => (b[i] << 8) | b[i + 1];
@@ -69,7 +70,7 @@ const u32 = (b: Uint8Array, i: number) => ((b[i] << 24) >>> 0) + ((b[i + 1] << 1
 const PSI2 = 2 / 14.5038;
 export const BAT_TYPES: Record<number, string> = { 1: "Alkalická 1,5 V", 2: "Lithiová 1,5 V", 3: "NiMH 1,2 V" };
 const EVN: Record<number, string> = {
-  11: "Začátek ponoru", 46: "ID záznamu", 0: "Změna stavu systému", 1: "Změna stavu systému",
+  11: "Začátek ponoru", 46: "ID záznamu", 0: "Varování zobrazeno", 1: "Varování potvrzeno / zmizelo", 2: "Varování potvrzeno tlačítkem", 19: "Výběr plynu (P)", 22: "Uložení kurzu (?)",
   9: "Alarm spuštěn (maska)", 10: "Alarm ukončen (maska)",
 };
 
@@ -157,7 +158,7 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
   const alarms: Alarm[] = [];
   const buttons: Button[] = [];
   const sd = new Date(start * 1000), startClock = sd.getUTCMinutes() * 60 + sd.getUTCSeconds();
-  const open: Partial<Record<Alarm["kind"], Alarm>> = {};
+  const open: Record<string, Alarm> = {};
   let tb: number[] = [];
   const pressure = (depth: number) => surfP / 1000 + depth * salinity / 1000 * 0.0981;
   for (const r of R) {
@@ -181,11 +182,18 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
         if (n) { const v = u32(r, 8); if (s.co2raw[i] == null || v > s.co2raw[i]!) { s.co2raw[i] = v; s.co2[i] = Math.round(v * pressure(s.depth[i]) / 10) / 1000; } }
       } else {
         events.push({ t: ts, kind: String(r[1]), label: EVN[r[1]] ?? `Událost typu ${r[1]}`, payload: hex(r.subarray(8, 16)) });
-        if (r[1] === 9 || r[1] === 10) for (const b of ALARM_BITS) {
-          const on = r[1] === 9 ? r[8 + b.byte] & b.bit : 0, off = r[1] === 10 ? r[12 + b.byte] & b.bit : 0;
+        if (r[1] === 9 || r[1] === 10) {
           const tt = Math.max(0, ts);
-          if (on && !open[b.kind]) { const a: Alarm = { kind: b.kind, label: b.label, start: tt, end: tt }; open[b.kind] = a; alarms.push(a); }
-          if (off && open[b.kind]) { open[b.kind]!.end = tt; delete open[b.kind]; }
+          const bits = [...ALARM_BITS];
+          // neznámé bity: obecný alarm s kódem
+          if (r[1] === 9) for (let by = 0; by < 4; by++) for (let bit = 1; bit < 256; bit <<= 1)
+            if (r[8 + by] & bit && !bits.some((b) => b.byte === by && b.bit === bit)) bits.push({ kind: "other", label: `Neznámý alarm (B${by} 0x${bit.toString(16)})`, byte: by, bit });
+          for (const b of bits) {
+            const on = r[1] === 9 ? r[8 + b.byte] & b.bit : 0, off = r[1] === 10 ? r[12 + b.byte] & b.bit : 0;
+            const key = b.label;
+            if (on && !open[key]) { const a: Alarm = { kind: b.kind, label: b.label, start: tt, end: tt }; open[key] = a; alarms.push(a); }
+            if (off && open[key]) { open[key]!.end = tt; delete open[key]; }
+          }
         }
       }
     } else if (t === 0x51) {
