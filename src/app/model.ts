@@ -46,10 +46,10 @@ export interface Logbook {
 export interface Alias { id: string; kind: "buddy" | "site"; name: string; targetId: string; updated: number }
 export const aliasKey = (kind: "buddy" | "site", name: string) => `${kind}:${norm(name)}`;
 /** Cizí počítač rozpoznaný podle sériového čísla v logu a jeho majitel. */
-export interface Computer { id: string; model: string; buddyId?: string; updated: number }
+export interface Computer { id: string; model: string; buddyId?: string; primary?: boolean; updated: number }
 
 export const META_V = 19;
-export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
+export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; comp?: string; alt?: string; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };
 export const emptyLogbook = (): Logbook => ({

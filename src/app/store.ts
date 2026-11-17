@@ -19,7 +19,7 @@ export interface State {
   guestRev: number;        // mění se při přidání / odebrání cizího logu (přenačtení návrhů)
 }
 /** Cizí log uložený v samostatné databázi, nikdy se nesynchronizuje. */
-export interface GuestLog { id: string; name: string; count: number; added: number; serial?: string; model?: string }
+export interface GuestLog { id: string; name: string; count: number; added: number; serial?: string; model?: string; /** u skupiny počítačů jednoho majitele: všechny jeho logy (hlavní první) */ logs?: GuestLog[] }
 
 let st: State = {
   ready: false, metas: [], lb: emptyLogbook(), pos: null, posErr: null,
@@ -333,13 +333,58 @@ export async function applySuggestion(diveId: string, kind: "site" | "buddy", na
 }
 
 /** Načtené cizí logy s jejich ponory (pro hledání společných ponorů). */
-let guestIndex: { log: GuestLog; metas: Meta[]; lb: Logbook }[] | null = null;
-export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[]; lb: Logbook }[]> {
-  if (guestIndex) return guestIndex;
+let guestIndex: { log: GuestLog; metas: Meta[]; lb: Logbook; alts: Meta[] }[] | null = null;
+/** Data jednoho cizího logu (jednoho počítače); přepočítá metadata po změně verze výpočtů. */
+async function guestData(log: GuestLog): Promise<{ metas: Meta[]; lb: Logbook } | null> {
+  const data = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", log.id, db.GUEST);
+  if (!data) return null;
+  if (data.metas.some((m) => m.v !== META_V)) {
+    const fresh: Meta[] = [];
+    for (const m of data.metas) { const raw = await db.get<RawDive>("raw", m.id, db.GUEST); if (raw) fresh.push(await metaOf(raw)); }
+    data.metas = fresh;
+    await db.put("kv", data, log.id, db.GUEST);
+  }
+  return data;
+}
+/** Logy jednotlivých počítačů (bez seskupení podle majitele). */
+let guestRaw: { log: GuestLog; metas: Meta[]; lb: Logbook }[] | null = null;
+export async function guestRawIndex(): Promise<{ log: GuestLog; metas: Meta[]; lb: Logbook }[]> {
+  if (guestRaw) return guestRaw;
   const out: { log: GuestLog; metas: Meta[]; lb: Logbook }[] = [];
-  for (const log of await guestLogs()) { const d = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", log.id, db.GUEST); if (d) out.push({ log, metas: d.metas, lb: d.lb }); }
-  guestIndex = out;
+  for (const log of await guestLogs()) { const d = await guestData(log); if (d) out.push({ log, metas: d.metas, lb: d.lb }); }
+  guestRaw = out;
   return out;
+}
+export const compLabel = (log: GuestLog) => `${log.model || "Počítač"}${log.serial ? " " + log.serial : ""}`;
+/**
+ * Seskupí logy počítačů podle majitele (víc počítačů jednoho buddyho = jeden účastník).
+ * Hlavní počítač: označený u majitele, jinak ten s nejvíc ponory. Ponor ze záložního počítače, který se páruje
+ * s ponorem hlavního (současné použití), se nezobrazí zvlášť – hlavní ponor dostane odkaz `alt`.
+ */
+export function groupGuests(raw: { log: GuestLog; metas: Meta[]; lb: Logbook }[], lb: Logbook): { log: GuestLog; metas: Meta[]; lb: Logbook; alts: Meta[] }[] {
+  const groups = new Map<string, typeof raw>();
+  for (const x of raw) { const b = x.log.serial ? lb.computers?.[x.log.serial]?.buddyId : undefined; const k = b ? "b:" + b : "l:" + x.log.id; groups.set(k, [...(groups.get(k) || []), x]); }
+  return [...groups.values()].map((g) => {
+    const prim = (x: (typeof raw)[0]) => (x.log.serial && lb.computers?.[x.log.serial]?.primary ? 1 : 0);
+    g = [...g].sort((a, b) => prim(b) - prim(a) || b.metas.length - a.metas.length);
+    const multi = g.length > 1;
+    const metas: Meta[] = g[0].metas.map((m) => (multi ? { ...m, comp: compLabel(g[0].log) } : m));
+    const alts: Meta[] = [];
+    for (const x of g.slice(1)) for (const m of x.metas) {
+      const mm = { ...m, comp: compLabel(x.log) };
+      const p = nearestPair(metas.filter((q) => !q.alt), mm)[0];
+      if (p && Math.abs(p.start - mm.start) <= PAIR_S) { p.alt = mm.id; alts.push(mm); } else metas.push(mm);
+    }
+    const mlb = g.reduce((acc, x) => ({ ...acc, notes: { ...acc.notes, ...x.lb.notes }, sites: { ...acc.sites, ...x.lb.sites }, buddies: { ...acc.buddies, ...x.lb.buddies } }), { ...g[0].lb });
+    const log: GuestLog = multi ? { ...g[0].log, count: metas.length, logs: g.map((x) => x.log) } : g[0].log;
+    return { log, metas: sortMetas(metas), lb: mlb, alts };
+  });
+}
+/** Cizí logy seskupené podle majitele (pro párování, srovnání, převzaté údaje). */
+export async function guestIndexLoad(): Promise<{ log: GuestLog; metas: Meta[]; lb: Logbook; alts: Meta[] }[]> {
+  if (guestIndex) return guestIndex;
+  guestIndex = groupGuests(await guestRawIndex(), ownLb());
+  return guestIndex;
 }
 /** Max. rozdíl začátků pro spárování podle profilu – hodiny se rozcházejí o minuty a kolem změny letního času i o hodinu. */
 export const PAIR_S = 5400;
@@ -369,7 +414,7 @@ export function nearestPair(metas: Meta[], m: Meta): Meta[] {
 }
 /** Odhad odchylky hodin počítače buddyho z časů začátku společných ponorů (s, + = jdou napřed). */
 export async function clockDrift(serial: string): Promise<{ at: number; diff: number }[]> {
-  const ix = (await guestIndexLoad()).find((x) => x.log.serial === serial);
+  const ix = (await guestRawIndex()).find((x) => x.log.serial === serial);
   if (!ix) return [];
   return ownMetas().flatMap((m) => nearestPair(ix.metas, m).map((g) => ({ at: m.start, diff: g.start - m.start })));
 }
@@ -397,17 +442,29 @@ export async function setComputerOwner(log: GuestLog, buddy: { id?: string; name
     bid = Object.values(lb.buddies).find((b) => norm(b.name) === n)?.id;
     if (!bid) { bid = uid(); lb.buddies[bid] = { id: bid, name: buddy.name.trim(), updated: Date.now() }; }
   }
-  const c: Computer = { id: log.serial, model: log.model || log.name, buddyId: bid, updated: Date.now() };
+  const c: Computer = { ...lb.computers[log.serial], id: log.serial, model: log.model || log.name, buddyId: bid, updated: Date.now() };
   lb.computers[log.serial] = c;
   if (bid) { // doplnit buddyho k mým ponorům, které se časově shodují s ponory z jeho počítače
-    const g = (await guestIndexLoad()).find((x) => x.log.id === log.id)?.metas || [];
+    const g = (await guestRawIndex()).find((x) => x.log.id === log.id)?.metas || [];
     for (const m of ownMetas()) {
       if (!nearestPair(g, m).length) continue;
       const n = lb.notes[m.id] || { buddyIds: [], note: "", updated: 0 };
       if (!n.buddyIds.includes(bid)) lb.notes[m.id] = { ...n, buddyIds: [...n.buddyIds, bid], updated: Date.now() };
     }
   }
+  guestIndex = null;
   await saveOwnLb(lb);
+  set({ guestRev: st.guestRev + 1 });
+}
+/** Hlavní počítač majitele (ze kterého se bere ponor, když potápěl se dvěma počítači současně). */
+export async function setPrimaryComputer(serial: string) {
+  const lb = structuredClone(ownLb());
+  const c = lb.computers?.[serial]; if (!c) return;
+  for (const x of Object.values(lb.computers || {})) if (x.buddyId && x.buddyId === c.buddyId && x.primary) { x.primary = false; x.updated = Date.now(); }
+  c.primary = true; c.updated = Date.now();
+  guestIndex = null;
+  await saveOwnLb(lb);
+  set({ guestRev: st.guestRev + 1 });
 }
 export async function guestLogs(): Promise<GuestLog[]> {
   return ((await db.get<GuestLog[]>("kv", "logs", db.GUEST)) || []).sort((a, b) => b.added - a.added);
@@ -441,7 +498,7 @@ async function importGuestRaws(buf: Uint8Array, raws: RawDive[], open = true): P
   // starší log ze stejného počítače nahradit, ať se nehromadí duplicity
   for (const old of (await guestLogs()).filter((l) => log.serial && l.serial === log.serial)) await deleteGuest(old);
   await db.put("kv", [log, ...(await guestLogs())], "logs", db.GUEST);
-  guestIndex = null;
+  guestIndex = null; guestRaw = null;
   set({ guestRev: st.guestRev + 1 });
   const known = log.serial ? ownLb().computers?.[log.serial] : undefined;
   if (known?.buddyId) await setComputerOwner(log, { id: known.buddyId }); // stejný počítač už má majitele
@@ -454,6 +511,18 @@ export async function lastExport(): Promise<{ name: string; at: number; count: n
 }
 
 /** Soubor sdílený do aplikace (Web Share Target) – načte se jako cizí log. Vrací log a jeho nejnovější ponor. */
+/** Soubor s víc cizími počítači: zeptat se, zda patří jednomu člověku, a přiřadit jim stejného majitele. */
+export async function askSameOwner(logs: GuestLog[]) {
+  const withSerial = logs.filter((l) => l.serial);
+  if (withSerial.length < 2) return;
+  if (!confirm(`V souboru jsou ${withSerial.length} různé počítače (${withSerial.map(compLabel).join(", ")}). Patří stejnému člověku?`)) return;
+  const known = withSerial.map((l) => ownerName(l)).find(Boolean);
+  const name = prompt("Jméno majitele (buddyho):", known || "");
+  if (!name?.trim()) return;
+  for (const l of withSerial) await setComputerOwner(l, { name: name.trim() });
+  toast(`Počítače spojeny pod majitele ${name.trim()}`);
+}
+
 export async function takeShared(): Promise<{ log: GuestLog | null; last: Meta | null; mine: Meta | null; own: number } | null> {
   if (!("caches" in self)) return null;
   const c = await caches.open("myx-share");
@@ -464,6 +533,7 @@ export async function takeShared(): Promise<{ log: GuestLog | null; last: Meta |
   const file = new File([await r.blob()], name);
   const res = await importAny(file);
   const log = res.guests[0] || null;
+  if (res.guests.length > 1) await askSameOwner(res.guests);
   if (!log) return { log: null, last: [...st.metas].sort((a, b) => b.start - a.start)[0] || null, mine: null, own: res.own };
   await openGuest(log);
   const last = [...st.metas].sort((a, b) => b.start - a.start)[0] || null;
@@ -472,18 +542,13 @@ export async function takeShared(): Promise<{ log: GuestLog | null; last: Meta |
 }
 
 export async function openGuest(log: GuestLog) {
-  const data = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", log.id, db.GUEST);
-  if (!data) { toast("Cizí log se nepodařilo načíst"); return; }
-  if (data.metas.some((m) => m.v !== META_V)) { // nová verze výpočtů – přepočítat ze surových dat
-    const fresh: Meta[] = [];
-    for (const m of data.metas) { const raw = await db.get<RawDive>("raw", m.id, db.GUEST); if (raw) fresh.push(await metaOf(raw)); }
-    data.metas = fresh;
-    await db.put("kv", data, log.id, db.GUEST);
-  }
+  const ix = await guestIndexLoad();
+  const g = ix.find((x) => x.log.id === log.id || x.log.logs?.some((l) => l.id === log.id));
+  if (!g) { toast("Cizí log se nepodařilo načíst"); return; }
   if (!own) own = { metas: st.metas, lb: st.lb };
   diveCache.clear();
   // nastavení (limity, objemy lahví) zůstávají vlastní, čidla a baterie cizí log nemá; jména přeložit podle mých přiřazení
-  set({ guest: log, metas: sortMetas(data.metas), lb: withAliases({ ...data.lb, settings: own.lb.settings }, own.lb) });
+  set({ guest: g.log, metas: g.metas, lb: withAliases({ ...g.lb, settings: own.lb.settings }, own.lb) });
 }
 export function closeGuest() {
   if (!own) return;
@@ -498,7 +563,7 @@ export async function deleteGuest(log: GuestLog) {
   for (const m of data?.metas || []) await db.del("raw", m.id, db.GUEST);
   await db.del("kv", log.id, db.GUEST);
   await db.put("kv", (await guestLogs()).filter((l) => l.id !== log.id), "logs", db.GUEST);
-  guestIndex = null;
+  guestIndex = null; guestRaw = null;
   set({ guestRev: st.guestRev + 1 });
 }
 

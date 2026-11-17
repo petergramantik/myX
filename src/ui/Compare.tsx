@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { setpointChanges } from "../core/analysis";
-import { conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag } from "../core/compare";
+import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag } from "../core/compare";
 import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, ownerName, toast } from "../app/store";
 import { GuestCard } from "./Settings";
 import { Card, fmtDate, fmtDateTime, go, tab, useStore } from "./common";
@@ -40,6 +40,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   const [byClock, setByClock] = useState(false);
   const [showClock, setShowClock] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [twoComp, setTwoComp] = useState(false);
   const st0 = useStore();
   useEffect(() => {
     const m = st0.metas.find((x) => x.id === id), sid = st0.lb.notes[id]?.siteId;
@@ -48,7 +49,18 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   }, [id, st0.lb.notes[id]?.siteId]);
   useEffect(() => {
     Promise.all([loadDive(id), ...ids.map((x) => loadGuestDive(x))]).then(setDives).catch((e) => setErr(e.message));
-    guestIndexLoad().then((ix) => setNames(["Já", ...ids.map((x) => { const g = ix.find((y) => y.metas.some((m) => m.id === x)); return g ? ownerName(g.log) || g.log.name : "buddy"; })]));
+    guestIndexLoad().then((ix) => {
+      // jméno účastníka; u víc počítačů jednoho majitele i počítač
+      const nm = (x: string) => {
+        const g = ix.find((y) => y.metas.some((m) => m.id === x) || y.alts.some((m) => m.id === x));
+        if (!g) return null;
+        const m = [...g.metas, ...g.alts].find((q) => q.id === x);
+        return (ownerName(g.log) || g.log.name) + (m?.comp ? ` (${m.comp})` : "");
+      };
+      setNames([st0.guest ? nm(id) || "buddy" : "Já", ...ids.map((x) => nm(x) || "buddy")]);
+      const grp = (x: string) => ix.findIndex((y) => y.metas.some((m) => m.id === x) || y.alts.some((m) => m.id === x));
+      setTwoComp(ids.length === 1 && grp(id) >= 0 && grp(id) === grp(ids[0]));
+    });
   }, [id, other]);
   const all = dives.filter((d): d is Dive => !!d);
   const th = useStore().lb.settings.th;
@@ -96,6 +108,10 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
           </label>
         ))}</div>
       </section>
+      {twoComp && D.length === 2 && <Card title="Rozdíly počítačů">
+        <p className="note">Stejný ponor ze dvou počítačů jednoho potápěče – co by mohlo ukazovat na závadu.</p>
+        {computerDiff(D[0], D[1], offs[1], lags[sel[1]].clock - lags[sel[1]].real).map((x, i) => <p key={i} className={x.level === "warn" ? "warn-t" : "ok-t"}>{x.level === "warn" ? "⚠ " : "✓ "}{x.text}</p>)}
+      </Card>}
       <Card title="Závěr">
         {sections.filter((x) => x.level > 0).map((x) => (
           <div key={x.key} className={"csec l" + x.level}><b>{x.title}</b>{x.lines.map((l, i) => <p key={i}>{l}</p>)}</div>

@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.27";
+export const APP_VERSION = "1.28";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.28", date: "2026-11-17", title: "Víc počítačů jednoho buddyho", items: [
+    "Počítače se stejným majitelem tvoří jeden log: jedna dlaždice v DB, společný seznam ponorů, jeden účastník srovnání.",
+    "Při načtení souboru s víc cizími počítači se aplikace zeptá, zda patří stejnému člověku.",
+    "Ponor ze dvou počítačů současně se zobrazí jednou z hlavního počítače (volba „Nastavit jako hlavní“), se štítkem 2 počítače.",
+    "Srovnání počítačů: rozdíly hloubky, pO₂, mV čidel, teploty, deko a hodin – pro hledání závady.",
+  ] },
   { version: "1.27", date: "2026-11-17", title: "Nápověda a nové Nastavení", items: [
     "Ikona „?“ v záhlaví otevře Nápovědu – přehled funkcí po sekcích (import a export ze Shearwater Cloudu, sdílení, seznam, detail, co aplikace z logu vyčte, srovnání, B&L, nastavení).",
     "Nastavení rozdělené do sbalitelných sekcí; upozornění podle oblastí; synchronizace přes Worker v sekci Dev.",

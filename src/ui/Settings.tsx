@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
 import { DEFAULT_ALL_TH } from "../app/model";
 import { OwnerPicker } from "./Owner";
-import { closeGuest, deleteGuest, ownerName, setComputerOwner, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
+import { closeGuest, compLabel, deleteGuest, guestRawIndex, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { Card, KV, fmtDate, go, tab, useStore } from "./common";
@@ -164,28 +164,27 @@ function ShareInner() {
 /** Cizí logy: jen k prohlížení, uložené zvlášť, bez synchronizace. */
 export function GuestCard() {
   const st = useStore();
-  const [logs, setLogs] = useState<GuestLog[]>([]);
-  const [info, setInfo] = useState<Record<string, { from: number; to: number; common: number }>>({});
+  const [groups, setGroups] = useState<{ log: GuestLog; logs: GuestLog[]; counts: Record<string, number>; from: number; to: number; common: number; alts: number }[]>([]);
   const [busy, setBusy] = useState(false);
   const [ownerFor, setOwnerFor] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const reload = async () => {
-    setLogs(await guestLogs());
-    const ix = await guestIndexLoad(), mine = ownMetas(), out: typeof info = {};
-    for (const { log, metas } of ix) {
-      const st0 = metas.map((m) => m.start);
-      out[log.id] = { from: Math.min(...st0), to: Math.max(...st0), common: mine.filter((m) => nearestPair(metas, m).length).length };
-    }
-    setInfo(out);
+    const raw = await guestRawIndex(), ix = await guestIndexLoad(), mine = ownMetas();
+    setGroups(ix.map((g) => {
+      const logs = g.log.logs || [g.log], st0 = g.metas.map((m) => m.start);
+      const counts: Record<string, number> = {}; for (const l of logs) counts[l.id] = raw.find((x) => x.log.id === l.id)?.metas.length ?? l.count;
+      return { log: g.log, logs, counts, from: Math.min(...st0), to: Math.max(...st0), common: mine.filter((m) => nearestPair(g.metas, m).length).length, alts: g.alts.length };
+    }));
   };
-  useEffect(() => { reload(); }, [st.guest, st.lb.computers]);
+  useEffect(() => { reload(); }, [st.guest, st.lb.computers, st.guestRev]);
   const pick = async (f?: File) => {
     if (!f) return;
     setBusy(true);
     try {
       const r = await importAny(f);
-      const g = r.guests[0];
       toast([r.own ? `Přidáno ${r.own} tvých ponorů` : "", ...r.guests.map((x) => `cizí log ${ownerName(x) || x.name} (${x.count} ponorů)`)].filter(Boolean).join(" · ") || "Žádné nové ponory");
+      if (r.guests.length > 1) await askSameOwner(r.guests);
+      const g = r.guests[0];
       if (g) { await openGuest(g); go({ t: "home" }); }
     } catch (e) { toast("Soubor se nepodařilo načíst: " + (e as Error).message); }
     finally { setBusy(false); reload(); if (ref.current) ref.current.value = ""; }
@@ -195,29 +194,36 @@ export function GuestCard() {
       <Card title="Logy buddyů">
         <input ref={ref} type="file" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Načíst log buddyho"}</button>
-        <p className="note">Export Shearwater Cloud buddyho. Jde ho poslat i přes WhatsApp nebo Quick Share → myX. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům.</p>
-        {!logs.length && <p className="muted">Zatím žádné logy buddyů.</p>}
+        <p className="note">Export Shearwater Cloud buddyho. Jde ho poslat i přes WhatsApp nebo Quick Share → myX. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům. Víc počítačů jednoho buddyho spojíš tak, že jim přiřadíš stejného majitele.</p>
+        {!groups.length && <p className="muted">Zatím žádné logy buddyů.</p>}
       </Card>
-      {logs.map((l) => {
-        const i = info[l.id], open = st.guest?.id === l.id, who = ownerName(l);
+      {groups.map((g) => {
+        const open = st.guest?.id === g.log.id, who = ownerName(g.log), multi = g.logs.length > 1;
         return (
-          <section key={l.id} className={"card logtile" + (open ? " open" : "")}>
-            <div className="lt-h"><b>{who || "Nepřiřazený log"}</b>{open && <span className="pill info">otevřený</span>}</div>
-            <div className="small">{l.model || "Počítač"}{l.serial ? ` ${l.serial}` : ""}</div>
-            <div className="small muted">{l.count} ponorů{i ? ` · ${fmtDate(i.from)} – ${fmtDate(i.to)}` : ""}{i ? ` · ${i.common} společných se mnou` : ""}</div>
-            <div className="small muted">Načteno {new Date(l.added).toLocaleDateString("cs-CZ")}</div>
+          <section key={g.log.id} className={"card logtile" + (open ? " open" : "")}>
+            <div className="lt-h"><b>{who || "Nepřiřazený log"}</b>{multi && <span className="pill">{g.logs.length} počítače</span>}{open && <span className="pill info">otevřený</span>}</div>
+            <div className="small muted">{g.log.count} ponorů · {fmtDate(g.from)} – {fmtDate(g.to)} · {g.common} společných se mnou{g.alts ? ` · ${g.alts} ponorů se 2 počítači` : ""}</div>
+            {g.logs.map((l, k) => (
+              <div key={l.id} className="lt-comp">
+                <div className="small">{compLabel(l)} · {g.counts[l.id]} ponorů{multi && k === 0 ? " · hlavní" : ""}</div>
+                <div className="row">
+                  {l.serial && <button className="btn small" onClick={() => setOwnerFor(ownerFor === l.id ? null : l.id)}>Majitel</button>}
+                  {multi && k > 0 && l.serial && <button className="btn small" onClick={() => setPrimaryComputer(l.serial!)}>Nastavit jako hlavní</button>}
+                  <button className="btn small" onClick={async () => { if (confirm(`Smazat log počítače ${compLabel(l)}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
+                </div>
+                {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
+                  {ownerName(l) && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení{multi ? " (odpojit počítač)" : ""}</button>}</div>}
+              </div>
+            ))}
             <div className="row">
               {open ? <button className="btn primary" onClick={() => closeGuest()}>Zavřít</button>
-                : <button className="btn primary" onClick={async () => { await openGuest(l); go({ t: "home" }); }}>Otevřít (jen čtení)</button>}
-              {i?.common ? <button className="btn" onClick={() => tab({ t: "hub", sub: "cmp", who: who || l.name })}>Srovnání</button> : null}
-              {l.serial && <button className="btn" onClick={() => setOwnerFor(ownerFor === l.id ? null : l.id)}>Majitel</button>}
-              <button className="btn" onClick={async () => { if (confirm(`Smazat log ${who || l.name}?`)) { await deleteGuest(l); reload(); } }}>Smazat</button>
+                : <button className="btn primary" onClick={async () => { await openGuest(g.log); go({ t: "home" }); }}>Otevřít (jen čtení)</button>}
+              {g.common ? <button className="btn" onClick={() => tab({ t: "hub", sub: "cmp", who: who || g.log.name })}>Srovnání</button> : null}
             </div>
-            {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
-              {who && <button className="btn small" onClick={async () => { await setComputerOwner(l, null); setOwnerFor(null); reload(); }}>Zrušit přiřazení</button>}</div>}
           </section>
         );
       })}
     </>
   );
 }
+

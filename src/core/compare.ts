@@ -391,3 +391,32 @@ export function profileLag(a: Dive, b: Dive): { real: number; clock: number; rms
 export function cellIssueText(k: CellIssue): string {
   return k === "wet" ? "podezření na vlhkost na čidlech" : k === "multi" ? "podezření na vadná čidla" : k ? `podezření na nefunkční čidlo ${k.slice(1)}` : "";
 }
+
+/**
+ * Srovnání dvou počítačů na stejném ponoru (záložní / hlavní): rozdíly, které ukazují na závadu.
+ * off = posun b vůči a (s) po zarovnání profilem.
+ */
+export function computerDiff(a: Dive, b: Dive, off: number, clockS: number): { level: "ok" | "warn"; text: string }[] {
+  const at = (d: Dive, v: (number | null)[], t: number) => { if (t < 0 || t > d.h.diveTimeS) return null; const i = d.s.t.findIndex((x) => x >= t); return i < 0 ? null : v[i]; };
+  const pairs = (va: (d: Dive) => (number | null)[]) => { const out: [number, number][] = []; for (let t = 0; t <= a.h.diveTimeS; t += 10) { const x = at(a, va(a), t), y = at(b, va(b), t - off); if (x != null && y != null) out.push([x, y]); } return out; };
+  const stat = (p: [number, number][]) => { if (!p.length) return null; const d = p.map(([x, y]) => y - x); const mean = d.reduce((s, v) => s + v, 0) / d.length; const max = Math.max(...d.map(Math.abs)); return { mean, max }; };
+  const nf = (v: number, k = 1) => v.toLocaleString("cs-CZ", { maximumFractionDigits: k });
+  const out: { level: "ok" | "warn"; text: string }[] = [];
+  const dep = stat(pairs((d) => d.s.depth).filter(([x]) => x > 1.5));
+  if (dep) out.push(Math.abs(dep.mean) > 0.5 ? { level: "warn", text: `Hloubka: druhý počítač ukazuje v průměru o ${nf(Math.abs(dep.mean))} m ${dep.mean > 0 ? "víc" : "míň"} (max. rozdíl ${nf(dep.max)} m) – možná odchylka tlakového čidla.` } : { level: "ok", text: `Hloubka sedí (průměrný rozdíl ${nf(Math.abs(dep.mean), 2)} m).` });
+  const po2 = stat(pairs((d) => d.s.ppo2));
+  if (po2) out.push(Math.abs(po2.mean) > 0.05 ? { level: "warn", text: `pO₂: rozdíl v průměru ${nf(po2.mean, 2)} bar (max. ${nf(po2.max, 2)}) – jiná kalibrace nebo zapojení čidel.` } : { level: "ok", text: `pO₂ sedí (průměrný rozdíl ${nf(Math.abs(po2.mean), 2)} bar).` });
+  for (const k of [1, 2, 3] as const) {
+    const key = ("mv" + k) as "mv1" | "mv2" | "mv3";
+    const mv = stat(pairs((d) => d.s[key]).filter(([x, y]) => x > 0 && y > 0));
+    if (mv && Math.abs(mv.mean) > 2) out.push({ level: "warn", text: `Čidlo ${k}: rozdíl ${nf(mv.mean)} mV – u stejné hlavy ukazuje na komunikaci nebo připojení.` });
+  }
+  const tmp = stat(pairs((d) => d.s.temp));
+  if (tmp) out.push(Math.abs(tmp.mean) > 1.5 ? { level: "warn", text: `Teplota: rozdíl ${nf(tmp.mean)} °C – jiné umístění počítače nebo čidlo teploty.` } : { level: "ok", text: `Teplota sedí (rozdíl ${nf(Math.abs(tmp.mean))} °C).` });
+  const da = Math.max(0, ...a.s.stopt.map((v, i) => (a.s.stop[i] > 0 ? v : 0))), db = Math.max(0, ...b.s.stopt.map((v, i) => (b.s.stop[i] > 0 ? v : 0)));
+  const ga = `${a.h.gfLo}/${a.h.gfHi}`, gb = `${b.h.gfLo}/${b.h.gfHi}`;
+  if (ga !== gb) out.push({ level: "ok", text: `Deko: různé GF (${ga} vs ${gb}) – rozdíl deko je očekávaný.` });
+  else if (Math.abs(da - db) > 3) out.push({ level: "warn", text: `Deko: při stejném GF ${ga} se nejdelší zastávka liší o ${Math.abs(da - db)} min – jiný výpočet nebo vstupní data (plyny, setpoint).` });
+  out.push(Math.abs(clockS) > 120 ? { level: "warn", text: `Hodiny se rozcházejí o ${Math.round(Math.abs(clockS) / 60)} min.` } : { level: "ok", text: `Hodiny sedí (rozdíl ${Math.round(Math.abs(clockS))} s).` });
+  return out;
+}

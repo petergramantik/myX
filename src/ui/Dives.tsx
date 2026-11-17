@@ -123,7 +123,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         return (
           <div key={m.id} className="dive-row full" onClick={open}>
             <div className="dr-mid">
-              <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}</small></div>
+              <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{m.comp ? ` · ${m.comp.split(" ")[0]}` : ""}{m.alt ? " · 2 počítače" : ""}</small></div>
               <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             </div>
             {(buds || badge) && <div className="dr-bud"><span className="dr-bnames">{buds}</span>{badge}</div>}
@@ -473,6 +473,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const warns = mergeCellAlerts([...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)]);
   return (
     <>
+      {meta.comp && <div className="comp-line small muted">Z počítače {meta.comp}{meta.alt && <> · <span className="pill">2 počítače</span> <a onClick={() => go({ t: "cmp", id: meta.id, other: meta.alt! })}>Srovnání počítačů ›</a></>}</div>}
       {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold />)}
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
         <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > 1.6 ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > (lb.settings.th.pn2Hot ?? 3.16) ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[

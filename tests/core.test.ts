@@ -289,5 +289,25 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(r.valve.map((v) => v.kind).join(",") === "close,open,close", `zavřeno, otevřeno, zavřeno (${r.valve.map((v) => v.kind)})`);
 }
 
+// ---- víc počítačů jednoho buddyho: seskupení a ponory se 2 počítači
+{
+  const { groupGuests } = await import("../src/app/store");
+  const { emptyLogbook } = await import("../src/app/model");
+  const prof = [0, 4, 4.8, 5, 5, 4.9, 5.4, 9.8, 14.9, 15, 15.2, 14.8, 15, 15, 15, 14, 13, 12, 12, 12, 12, 12];
+  const mk = (id: string, start: number) => ({ id, start, prof, num: 1, h: {} as any, sum: {} as any, inj: 0, cells: {} as any, v: 0 }) as any;
+  const lb = emptyLogbook(); lb.buddies = { b1: { id: "b1", name: "Pepa", updated: 1 } };
+  lb.computers = { A: { id: "A", model: "Petrel 3", buddyId: "b1", updated: 1 }, B: { id: "B", model: "Perdix", buddyId: "b1", updated: 1 } };
+  const L = (id: string, serial: string, metas: any[]) => ({ log: { id, name: id, count: metas.length, added: 0, serial, model: serial === "A" ? "Petrel 3" : "Perdix" }, metas, lb: emptyLogbook() });
+  const g = groupGuests([L("la", "A", [mk("a1", 1000), mk("a2", 100000), mk("a3", 200000)]), L("lb", "B", [mk("b1", 1030), mk("b2", 300000)])], lb);
+  ok(g.length === 1 && g[0].log.logs?.length === 2, "dva počítače jednoho majitele = jedna skupina");
+  ok(g[0].metas.length === 4 && g[0].alts.length === 1 && g[0].metas.find((m) => m.id === "a1")?.alt === "b1", "stejný ponor ze dvou počítačů se zobrazí jednou (hlavní + alt)");
+  ok(g[0].metas.find((m) => m.id === "b2")?.comp === "Perdix B", "ponor ze záložního počítače s označením počítače");
+  lb.computers.B.primary = true;
+  const g2 = groupGuests([L("la", "A", [mk("a1", 1000), mk("a2", 100000), mk("a3", 200000)]), L("lb", "B", [mk("b1", 1030), mk("b2", 300000)])], lb);
+  ok(g2[0].log.id === "lb" && g2[0].metas.find((m) => m.id === "b1")?.alt === "a1", "hlavní počítač podle volby");
+  const g3 = groupGuests([L("la", "A", [mk("a1", 1000)]), L("lc", "C", [mk("c1", 1000)])], lb);
+  ok(g3.length === 2, "počítač bez stejného majitele zůstává zvlášť");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");
