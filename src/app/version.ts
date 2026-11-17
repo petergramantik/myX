@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.31.2";
+export const APP_VERSION = "1.31.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.31.3", date: "2026-11-17", title: "Aliasy parťáků a lokalit", items: [
+    "Detail ponoru → Z logů ostatních: každé jméno tučně s tlačítkem Akce – To je… (propojit s mým parťákem / lokalitou), Přidat k ponoru, Založit nového, To jsem já; u podobného jména nabídne „To je Radek Patak?“.",
+    "Propojení (alias) platí pro všechny ponory, přežije aktualizaci i smazání cizího logu.",
+    "B&L: v detailu parťáka a lokality karta Aliasy s možností zrušit propojení; Nastavení → Výbava → Moje aliasy.",
+  ] },
   { version: "1.31.2", date: "2026-11-17", title: "Filtr společných ponorů se pamatuje", items: [
     "Filtr společných ponorů (lidé, rok, měsíc, den) a pozice v seznamu zůstanou po návratu ze srovnání; vynuluje je „Vše“ nebo zavření aplikace.",
   ] },

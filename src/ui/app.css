@@ -392,3 +392,10 @@ details.card.sec > summary h2 { margin: 0; }
 .actmenu button { background: transparent; color: var(--fg, #e6edf3); border: 0; border-top: 1px solid var(--line); text-align: left; padding: 10px 12px; font-size: 16px; }
 .actmenu button:first-child { border-top: 0; }
 .actmenu button.danger { color: var(--bad, #ef5350); }
+.fr { border-top: 1px solid var(--line); padding: 7px 0; } .suggest .fr:first-of-type { margin-top: 4px; }
+.fr-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fr-n b { font-size: 1.05rem; }
+.fr-h .btn.act { padding: 3px 10px; font-size: 14px; flex: none; } .fr-h .btn.act.on { border-color: var(--accent); color: var(--accent); }
+.alias-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.alias-row:first-of-type { border-top: 0; }
+.alias-row .x { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 0 6px; }

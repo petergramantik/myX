@@ -1,6 +1,6 @@
 import { ask, askText } from "../app/dialog";
 import { useEffect, useState } from "react";
-import { ME, adoptForeign, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
+import { ME, adoptForeign, aliasesFor, removeAlias, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
 import { BLSwitch, Card, KV, Picker, back, fmtDate, go, num, useStore } from "./common";
@@ -110,6 +110,7 @@ export function SiteScreen({ id }: { id: string }) {
 
       {c && <WeatherCard lat={c.lat} lon={c.lon} />}
 
+      <AliasCard kind="site" id={id} />
       <Card title="Úpravy">
         <MergeRow items={others.map((x) => ({ id: x.id, name: x.name }))} current={s.name} onMerge={async (into, nm) => { await mergeInto("site", id, into, nm); back(); toast("Lokality sloučeny"); }} />
         <button className="btn danger" onClick={async () => { if (await ask(`Smazat lokalitu „${s.name}“? Ponory zůstanou bez lokality.`)) { await remove("site", id); back(); } }}>Smazat lokalitu</button>
@@ -205,8 +206,9 @@ function ForeignNames({ kind }: { kind: "buddy" | "site" }) {
   useEffect(() => { if (list.length) setOpen(true); }, [list.length > 0]);
   if (!list.length) return null;
   const mine = Object.values(kind === "buddy" ? ownLb().buddies : ownLb().sites).sort((a, b) => a.name.localeCompare(b.name, "cs"));
+  const foreignFrom = (name: string) => list.find((x) => x.name === name)?.logs.join(", ");
   const done = async (name: string, id: string | null, keep?: string) => {
-    const n = await adoptForeign(kind, name, id, keep);
+    const n = await adoptForeign(kind, name, id, keep, foreignFrom(name));
     setPick(null); setTarget(null); reload();
     if (n) toast(`${kind === "site" ? "Lokalita doplněna" : "Buddy doplněn"} k ${n} ponorům`);
   };
@@ -267,6 +269,23 @@ function BuddyComputer({ id }: { id: string }) {
   })}</>;
 }
 
+/** Aliasy: jména z cizích logů (a dřívější názvy po sloučení) propojená s mým parťákem / lokalitou / se mnou. */
+export function AliasCard({ kind, id, title = "Aliasy" }: { kind: "buddy" | "site"; id: string; title?: string }) {
+  useStore();
+  const list = aliasesFor(kind, id);
+  if (!list.length) return null;
+  return (
+    <Card title={title}>
+      {list.map((a) => (
+        <div key={a.id} className="alias-row">
+          <span><b>{a.name}</b>{a.from ? <small className="muted"> · {a.from}</small> : null}</span>
+          <button className="x" title="Zrušit propojení" onClick={async () => { if (await ask(`Zrušit alias „${a.name}“? Jméno se znovu objeví v „Z logů ostatních“, už doplněné ponory zůstanou.`)) { await removeAlias(a.id); toast("Alias zrušen"); } }}>✕</button>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
 export function BuddyScreen({ id }: { id: string }) {
   const st = useStore(), my = { lb: ownLb(), metas: ownMetas() };
   const b = my.lb.buddies[id];
@@ -291,6 +310,7 @@ export function BuddyScreen({ id }: { id: string }) {
           ["Lokality", Object.entries(sites).sort((a, c) => c[1] - a[1]).map(([s, n]) => `${getState().lb.sites[s]?.name} (${n})`).join(", ") || "–"],
         ]} />
       </Card>
+      <AliasCard kind="buddy" id={id} />
       <Card title="Úpravy">
         <MergeRow items={Object.values(my.lb.buddies).filter((x) => x.id !== id)} current={b.name} onMerge={async (into, nm) => { await mergeInto("buddy", id, into, nm); back(); toast("Sloučeno"); }} />
         <button className="btn danger" onClick={async () => { if (await ask(`Smazat parťáka „${b.name}“?`)) { await remove("buddy", id); back(); } }}>Smazat</button>

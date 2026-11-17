@@ -374,7 +374,7 @@ export async function foreignNames(kind: "buddy" | "site"): Promise<{ name: stri
   return [...out.values()].sort((a, b) => b.n - a.n).map((x) => ({ name: x.name, n: x.n, logs: [...x.logs] }));
 }
 /** Jméno z cizího logu: založit jako mého buddyho/lokalitu (targetId = null), nebo přiřadit k existujícímu. */
-export async function adoptForeign(kind: "buddy" | "site", name: string, targetId: string | null, keepName?: string): Promise<number> {
+export async function adoptForeign(kind: "buddy" | "site", name: string, targetId: string | null, keepName?: string, from?: string): Promise<number> {
   const lb = structuredClone(ownLb());
   let id = targetId;
   if (!id && kind === "buddy" && norm(name) === "ja") id = ME;
@@ -387,10 +387,33 @@ export async function adoptForeign(kind: "buddy" | "site", name: string, targetI
     if (t && t.name !== keepName.trim()) { t.name = keepName.trim(); t.updated = Date.now(); }
   }
   const key = aliasKey(kind, name);
-  lb.aliases = { ...(lb.aliases || {}), [key]: { id: key, kind, name, targetId: id, updated: Date.now() } as Alias };
+  lb.aliases = { ...(lb.aliases || {}), [key]: { id: key, kind, name, targetId: id, updated: Date.now(), ...(from ? { from } : {}) } as Alias };
   const n = await propagate(lb);
   await saveOwnLb(lb);
   return n;
+}
+
+/** Aliasy (jména z cizích logů) přiřazené k mému parťákovi / lokalitě, nebo ke mně (ME). */
+export function aliasesFor(kind: "buddy" | "site", targetId: string): Alias[] {
+  return Object.values(ownLb().aliases || {}).filter((a) => a.kind === kind && a.targetId === targetId).sort((a, b) => a.name.localeCompare(b.name, "cs"));
+}
+/** Zruší alias; jména už doplněná k ponorům zůstanou. */
+export async function removeAlias(key: string) {
+  const lb = structuredClone(ownLb());
+  if (!lb.aliases?.[key]) return;
+  delete lb.aliases[key];
+  lb.deleted = { ...lb.deleted, [key]: Date.now() }; // ať ho synchronizace nevrátí
+  await saveOwnLb(lb);
+}
+/** Odhad, komu jméno z cizího logu patří: můj parťák se stejným křestním jménem / lokalita s podobným názvem. */
+export function aliasGuess(kind: "buddy" | "site", name: string): { id: string; name: string } | null {
+  const lb = ownLb(), n = norm(name);
+  if (!n) return null;
+  const items = Object.values(kind === "buddy" ? lb.buddies : lb.sites);
+  const hit = kind === "buddy"
+    ? items.find((x) => norm(x.name).split(" ")[0] === n.split(" ")[0])
+    : items.find((x) => { const m = norm(x.name); return n.length >= 4 && (m.includes(n) || n.includes(m)); });
+  return hit ? { id: hit.id, name: hit.name } : null;
 }
 
 /**
@@ -461,9 +484,9 @@ export async function suggestionsFor(m: Meta): Promise<Suggest[]> {
   return out;
 }
 /** Přiřadí k mému ponoru lokalitu / buddyho z logu buddyho (neznámé jméno založí a zapamatuje). */
-export async function applySuggestion(diveId: string, kind: "site" | "buddy", name: string) {
+export async function applySuggestion(diveId: string, kind: "site" | "buddy", name: string, from?: string) {
   let id = resolveForeign(kind, name);
-  if (!id) { await adoptForeign(kind, name, null); id = resolveForeign(kind, name); }
+  if (!id) { await adoptForeign(kind, name, null, undefined, from); id = resolveForeign(kind, name); }
   if (!id || id === ME) return;
   const n = ownLb().notes[diveId] || { buddyIds: [], note: "", updated: 0 };
   await setNote(diveId, kind === "site" ? { siteId: id } : { buddyIds: [...new Set([...n.buddyIds, id])] });

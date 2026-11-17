@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
-import { ME, adoptForeign, compModel, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
+import { ME, adoptForeign, aliasGuess, compModel, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
 import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
-import { AlertBox, Card, KV, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
+import { AlertBox, Card, KV, Picker, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
@@ -244,40 +244,52 @@ function rowLevel(tags: DiveTag[]): string {
   return tags.some((t) => t.level === "bad") ? "lvl-bad" : tags.length ? "lvl-warn" : "";
 }
 
-/** Návrhy lokality a buddyů z logu buddyho ke stejnému ponoru. */
+/** Návrhy lokality a parťáků z logů ostatních ke stejnému ponoru – každé jméno s nabídkou Akce. */
 function SuggestCard({ meta }: { meta: Meta }) {
   const st = useStore();
   const [sg, setSg] = useState<Suggest[]>([]);
-  useEffect(() => { suggestionsFor(meta).then(setSg); }, [meta.id, st.lb.notes[meta.id]?.updated, st.lb.aliases, st.guestRev]);
+  useEffect(() => { suggestionsFor(meta).then(setSg); }, [meta.id, st.lb.notes[meta.id]?.updated, st.lb.aliases, st.lb.buddies, st.lb.sites, st.guestRev]);
   const note = st.lb.notes[meta.id];
-  const items = sg.map((x) => ({ ...x, site: !note?.siteId && x.site && x.site.mine !== note?.siteId ? x.site : null })).filter((x) => x.site || x.buddies.length);
+  // lokalita: nepropojenou nabídnout vždy (jde ji propojit), propojenou jen když ponor lokalitu nemá
+  const items = sg.map((x) => ({ ...x, site: x.site && (!x.site.mine || (!note?.siteId && x.site.mine !== ME)) ? x.site : null })).filter((x) => x.site || x.buddies.length);
   if (!items.length) return null;
-  const nm = (kind: "site" | "buddy", v: { name: string; mine: string | null }) => {
-    const mine = v.mine ? (kind === "site" ? st.lb.sites[v.mine]?.name : st.lb.buddies[v.mine]?.name) : null;
-    return mine && mine !== v.name ? `${v.name} → ${mine}` : v.name;
-  };
   return (
     <Card title="Z logů ostatních">
       {items.map((x) => (
         <div key={x.who} className="suggest">
           <small className="muted">{x.who} má u tohoto ponoru zapsáno:</small>
-          {x.site && <div className="kvline"><span>📍 <i>{nm("site", x.site)}</i></span><button className="btn small" onClick={() => applySuggestion(meta.id, "site", x.site!.name)}>Použít</button></div>}
-          {x.buddies.length > 0 && (
-            <div className="kvline wrap"><span>S kým: {x.buddies.map((b) => <i key={b.name}>{nm("buddy", b)} </i>)}</span>
-              <span className="row">
-                <button className="btn small" onClick={async () => { for (const b of x.buddies) await applySuggestion(meta.id, "buddy", b.name); }}>Přidat {x.buddies.length > 1 ? "všechny" : ""}</button>
-              </span>
-            </div>
-          )}
-          {x.buddies.length > 0 && <div className="quick">{x.buddies.map((b) => (
-            <span key={b.name} className="row">
-              <button className="btn small" onClick={() => applySuggestion(meta.id, "buddy", b.name)}>＋ {nm("buddy", b)}</button>
-              {!b.mine && <button className="btn small" onClick={() => adoptForeign("buddy", b.name, ME)}>To jsem já</button>}
-            </span>
-          ))}</div>}
+          {x.site && <ForeignRow kind="site" v={x.site} who={x.who} diveId={meta.id} />}
+          {x.buddies.map((b) => <ForeignRow key={b.name} kind="buddy" v={b} who={x.who} diveId={meta.id} />)}
         </div>
       ))}
     </Card>
+  );
+}
+
+/** Jedno jméno z cizího logu: tučně, vpravo Akce (To je…, přidat k ponoru, založit, To jsem já). */
+function ForeignRow({ kind, v, who, diveId }: { kind: "site" | "buddy"; v: { name: string; mine: string | null }; who: string; diveId: string }) {
+  const st = useStore();
+  const [open, setOpen] = useState(false), [pick, setPick] = useState(false);
+  const items = Object.values(kind === "site" ? st.lb.sites : st.lb.buddies);
+  const mineName = v.mine ? items.find((i) => i.id === v.mine)?.name : null;
+  const guess = !v.mine ? aliasGuess(kind, v.name) : null;
+  const run = async (f: () => Promise<unknown>) => { setOpen(false); setPick(false); await f(); };
+  return (
+    <div className="fr">
+      <div className="fr-h">
+        <span className="fr-n">{kind === "site" ? "📍 " : ""}<b>{v.name}</b>{mineName && mineName !== v.name ? <small className="muted"> → {mineName}</small> : null}</span>
+        <button className={"btn small act" + (open ? " on" : "")} onClick={() => { setOpen(!open); setPick(false); }}>Akce ▾</button>
+      </div>
+      {open && <div className="actmenu">
+        {guess && <button onClick={() => run(() => adoptForeign(kind, v.name, guess.id, undefined, who))}>To je {guess.name}?</button>}
+        {!v.mine && <button onClick={() => { setOpen(false); setPick(true); }}>To je…</button>}
+        <button onClick={() => run(() => applySuggestion(diveId, kind, v.name, who))}>{mineName ? `Přidat ${mineName} k ponoru` : "Přidat k ponoru"}</button>
+        {!v.mine && <button onClick={() => run(() => adoptForeign(kind, v.name, null, undefined, who))}>{kind === "site" ? "Založit jako novou lokalitu" : "Založit jako nového parťáka"}</button>}
+        {!v.mine && kind === "buddy" && <button onClick={() => run(() => adoptForeign(kind, v.name, ME, undefined, who))}>To jsem já</button>}
+      </div>}
+      {pick && <Picker items={items.map((i) => ({ id: i.id, name: i.name }))} placeholder={kind === "site" ? "Vyber mou lokalitu" : "Vyber mého parťáka"}
+        onPick={(id) => run(() => adoptForeign(kind, v.name, id, undefined, who))} onCreate={() => run(() => adoptForeign(kind, v.name, null, undefined, who))} />}
+    </div>
   );
 }
 

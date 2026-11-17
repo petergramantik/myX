@@ -43,7 +43,7 @@ export interface Logbook {
   aliases?: Record<string, Alias>;     // jméno buddyho/lokality z cizího logu → můj záznam
 }
 /** Jméno z cizího logu přiřazené k mému buddymu nebo lokalitě (klíč „buddy:jméno“ / „site:jméno“ v normalizované podobě). */
-export interface Alias { id: string; kind: "buddy" | "site"; name: string; targetId: string; updated: number }
+export interface Alias { id: string; kind: "buddy" | "site"; name: string; targetId: string; updated: number; /** odkud jméno pochází (cizí log), pro zobrazení v B&L */ from?: string }
 export const aliasKey = (kind: "buddy" | "site", name: string) => `${kind}:${norm(name)}`;
 /** Cizí počítač rozpoznaný podle sériového čísla v logu a jeho majitel. */
 export interface Computer { id: string; model: string; buddyId?: string; primary?: boolean; /** můj počítač (cíleně přidaný, např. po výměně počítače) */ mine?: boolean; updated: number }
