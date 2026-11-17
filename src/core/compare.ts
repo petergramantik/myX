@@ -378,10 +378,13 @@ export function profileLag(a: Dive, b: Dive): { real: number; clock: number; rms
   const sample = (d: Dive, step: number) => { const out: number[] = []; let j = 0; for (let t = 0; t <= d.h.diveTimeS; t += step) { while (j + 1 < d.s.t.length && d.s.t[j] < t) j++; out.push(d.s.depth[j]); } return out; };
   const STEP = 10, A = sample(a, STEP), B = sample(b, STEP);
   let best = 0, bestE = Infinity;
+  // jen prvních 10 minut (potápěči začínají společně) a jen překryv – kratší ponor buddyho zarovnání nezkreslí
+  const WIN = 600 / STEP;
   for (let lag = -1500; lag <= 1500; lag += STEP) {
     // b posunuté tak, že jeho začátek je v čase lag (s) od začátku a
     const k0 = lag / STEP; let e = 0, n = 0;
-    for (let i = 0; i < A.length; i += 2) { const j = i - k0; const y = j >= 0 && j < B.length ? B[j] : 0; e += (A[i] - y) ** 2; n++; }
+    for (let i = 0; i < Math.min(A.length, WIN); i++) { const j = i - k0; if (j < 0 || j >= B.length) continue; e += (A[i] - B[j]) ** 2; n++; }
+    if (n < WIN * 0.8) continue;
     e /= n; if (e < bestE) { bestE = e; best = lag; }
   }
   return { real: best, clock, rmse: Math.sqrt(bestE) };

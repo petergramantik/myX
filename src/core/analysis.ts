@@ -101,7 +101,7 @@ export function pressureAnalysis(t: number[], p: (number | null)[], diveS: numbe
 
 // ---------- ovládání počítače (záznamy 0x51)
 export const SCR_MAIN = 0xb3, SCR_MENU = 0x06;
-const SCR_NAMES: Record<number, string> = { 0xb3: "hlavní obrazovka", 0x155: "info 1", 0x156: "info 2", 0x06: "menu", 0xa4: "po vynoření" };
+const SCR_NAMES: Record<number, string> = { 0xb3: "hlavní obrazovka", 0x155: "info 1", 0x156: "info 2", 0x159: "info 1 (P)", 0x15a: "info 2 (P)", 0xec: "info 3", 0x02: "info", 0x06: "menu – Switch Setpoint", 0x05: "menu – Select Gas", 0x07: "výběr plynu", 0x08: "menu – Switch CC > OC", 0x09: "menu – Dive Setup+", 0xa4: "menu na hladině" };
 export const scrName = (c: number) => SCR_NAMES[c] ?? `obrazovka 0x${c.toString(16)}`;
 export const BTN_NAMES: Record<number, string> = { 1: "pravé tlačítko", 2: "levé tlačítko", 4: "návrat" };
 /** Čas strávený mimo hlavní obrazovku během ponoru (s). */
@@ -576,6 +576,15 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   }
   const co2s = cws.filter((w) => w.kind === "co2sensor"), co2sA = d.alarms.filter((a) => a.label.startsWith("Chyba CO₂"));
   if (co2s.length || co2sA.length) out.push({ level: "warn", title: `Chyba CO₂ čidla (P)${co2s.length > 1 ? ` – ${co2s.length}×` : ""}`, text: `${co2s.length ? `Hlášení v ${co2s.map((w) => `${mmss(w.start)} (${ackTxt(w)})`).join(", ")}` : `Alarm v ${co2sA.map((a) => mmss(a.start)).join(", ")}`}. Hodnoty CO₂ v tomto ponoru ber s rezervou.` });
+  const batW = cws.find((w) => w.kind === "battery");
+  if (batW) out.push({ level: "warn", title: "Slabá baterie (P)", text: `Počítač hlásil slabou baterii v ${mmss(batW.start)}, ${ackTxt(batW)}.` });
+  const solA = d.alarms.filter((a) => a.label.startsWith("Porucha solenoidu"));
+  if (solA.length) {
+    // od kdy už jen ruční doplňování O₂ (poslední dávka solenoidem)
+    const ds = o2Doses(d), lastSol = [...ds].reverse().find((x) => x.kind === "sol");
+    const manFrom = lastSol ? ds.find((x) => x.t > lastSol.t && x.kind === "man") : null;
+    out.push({ level: "bad", title: "Porucha solenoidu / baterie v hlavě (P)", text: `Alarm poprvé v ${mmss(solA[0].start)}${solA.length > 1 ? `, opakován ${solA.length}×` : ""}.${manFrom ? ` Od ${Math.floor(manFrom.t / 60)}. min jen ruční doplňování O₂.` : ""} Zkontroluj baterii v hlavě a solenoid.` });
+  }
   for (const w of cws.filter((w) => w.kind === "unknown")) out.push({ level: "info", title: w.label, text: `Zobrazeno v ${mmss(w.start)}, ${ackTxt(w)}.` });
   for (const a of d.alarms.filter((a) => a.label.startsWith("Neznámý alarm"))) out.push({ level: "info", title: a.label, text: `Spuštěn v ${mmss(a.start)}.` });
   const ndl = cws.filter((w) => w.kind === "ndl");

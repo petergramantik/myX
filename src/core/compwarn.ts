@@ -2,7 +2,7 @@ import type { Dive } from "./shearwater";
 
 /** Jistota významu příznaku: ✓ potvrzeno daty, P pravděpodobně, ? hypotéza. */
 export type Certainty = "✓" | "P" | "?";
-export type CompWarnKind = "ndl" | "o2press" | "dilpress" | "po2low" | "po2high" | "co2" | "cellout" | "co2sensor" | "unknown";
+export type CompWarnKind = "battery" | "ndl" | "o2press" | "dilpress" | "po2low" | "po2high" | "co2" | "cellout" | "co2sensor" | "unknown";
 
 /** Bity „varování na displeji“ (události 0 zobrazeno / 1 potvrzeno nebo zmizelo / 2 potvrzeno tlačítkem – Petrel 3), bajty 8–15 záznamu. */
 export const WARN_BITS: { byte: number; bit: number; kind: CompWarnKind; label: string; c: Certainty }[] = [
@@ -13,6 +13,7 @@ export const WARN_BITS: { byte: number; bit: number; kind: CompWarnKind; label: 
   { byte: 7, bit: 0x10, kind: "po2high", label: "Vysoké pO₂", c: "✓" },
   { byte: 7, bit: 0x40, kind: "co2", label: "CO₂", c: "✓" },
   { byte: 6, bit: 0x10, kind: "cellout", label: "Vyřazené čidlo", c: "P" },
+  { byte: 6, bit: 0x40, kind: "battery", label: "Slabá baterie", c: "P" },
   { byte: 6, bit: 0x01, kind: "co2sensor", label: "Chyba CO₂ čidla", c: "P" },
   { byte: 6, bit: 0x02, kind: "co2sensor", label: "Chyba CO₂ čidla", c: "P" },
 ];

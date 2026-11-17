@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.29";
+export const APP_VERSION = "1.30";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.30", date: "2026-11-17", title: "Spojené ponory, porucha solenoidu, zarovnání srovnání", items: [
+    "Víc záznamů počítače jako jeden ponor: stejné číslo v Shearwater Cloudu nebo povrchový interval do 30 min (Nastavení → Výbava); části jdou ručně oddělit nebo spojit.",
+    "Spojený ponor: jeden řádek „N části“, grafy s vyznačeným pobytem na hladině, karta Části ponoru.",
+    "Nové příznaky: porucha solenoidu / baterie v hlavě (P), slabá baterie (P); pojmenované obrazovky menu a info.",
+    "Srovnání se zarovnává podle prvních 10 minut – kratší ponor buddyho už neposune časovou osu.",
+  ] },
   { version: "1.29", date: "2026-11-17", title: "Vlastní log z víc počítačů", items: [
     "První import souboru s víc počítači se zeptá, které jsou tvoje.",
     "DB → Databáze: u logu volba „To je můj počítač“ – ponory se přesunou k tvým (i s lokalitami a buddyi z Cloudu).",

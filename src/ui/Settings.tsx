@@ -27,6 +27,8 @@ export function SettingsScreen() {
         <label>Diluent – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
         <label>O₂ – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
         <p className="note">Externí lahve (S80 = 11,1 l, S40 = 5,7 l) se zadávají u ponoru v kartě Spotřeba plynu.</p>
+        <label>Spojit záznamy s povrchovým intervalem do (min, 0 = vypnuto)<input inputMode="decimal" defaultValue={st.lb.settings.segGap ?? 30} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v >= 0) saveSettings({ segGap: v }); }} /></label>
+        <p className="note">Víc záznamů počítače jako jeden ponor (bazén, krátký suchý přechod). Záznamy se stejným číslem ponoru v Shearwater Cloudu se spojují vždy; v detailu ponoru jdou části ručně oddělit nebo spojit.</p>
         <OwnComputers />
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
           <input type="date" value={manual ? new Date(manual * 1000).toISOString().slice(0, 10) : ""} onChange={(e) => saveSettings({ manualFill: e.target.value ? Date.parse(e.target.value + "T12:00:00Z") / 1000 : null })} />

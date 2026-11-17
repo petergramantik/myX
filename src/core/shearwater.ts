@@ -8,10 +8,17 @@ export interface RawDive {
   start: number;       // místní čas počítače jako „UTC“ sekundy
   blob: Uint8Array;    // původní data_bytes_1 (4 B délka + gzip)
   fn?: string;         // název souboru v Shearwater Cloud, např. „Petrel 3[B94F4935]#138 …“
+  cnum?: number;       // číslo ponoru v Shearwater Cloud (uživatel ho může přepsat – stejné číslo = jeden ponor)
 }
 
 /** Údaje zapsané v Shearwater Cloud (lokalita, buddy, poznámka) podle log_id. */
 export interface CloudDetail { site: string; buddies: string[]; notes: string }
+/** Čísla ponorů zapsaná v Shearwater Cloud (DiveNumber) podle log_id. */
+export function readCloudNumbers(buf: Uint8Array): Map<string, number> {
+  const out = new Map<string, number>();
+  try { for (const r of new SqliteFile(buf).rows("dive_details")) { const id = String(r["DiveId"] ?? ""), n = Number(r["DiveNumber"]); if (id && Number.isFinite(n) && n > 0) out.set(id, n); } } catch { /* bez tabulky */ }
+  return out;
+}
 export function readCloudDetails(buf: Uint8Array): Map<string, CloudDetail> {
   const out = new Map<string, CloudDetail>();
   let rows: Record<string, unknown>[] = [];
@@ -61,7 +68,8 @@ const ALARM_BITS: { kind: Alarm["kind"]; label: string; byte: number; bit: numbe
   { kind: "po2low", label: "Nízké pO₂", byte: 3, bit: 0x40 },
   { kind: "po2high", label: "Vysoké pO₂", byte: 3, bit: 0x80 },
   { kind: "other", label: "Vyřazené čidlo (P)", byte: 3, bit: 0x20 }, // P: 9. 12. 2024 – pomalé čidlo 3 po přepnutí SP, opakuje se do konce ponoru
-  { kind: "other", label: "Chyba CO₂ čidla (P)", byte: 2, bit: 0x02 }, // P: souběh s nesmyslnými hodnotami CO₂ (Radek 26. 10. 2026)
+  { kind: "other", label: "Chyba CO₂ čidla (P)", byte: 2, bit: 0x02 },
+  { kind: "other", label: "Porucha solenoidu / baterie v hlavě (P)", byte: 3, bit: 0x10 }, // P: Laďa 9. 5. 2026 – selhal solenoid (baterie v hlavě), dál jen ruční O₂ // P: souběh s nesmyslnými hodnotami CO₂ (Radek 26. 10. 2026)
 ];
 
 const u16 = (b: Uint8Array, i: number) => (b[i] << 8) | b[i + 1];

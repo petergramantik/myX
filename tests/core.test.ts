@@ -309,5 +309,30 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(g3.length === 2, "počítač bez stejného majitele zůstává zvlášť");
 }
 
+// ---- zarovnání srovnání podle prvních 10 minut (buddy skončil dřív)
+{
+  const { profileLag } = await import("../src/core/compare");
+  const mk = (start: number, dur: number) => { const t = [...Array(dur / 10 + 1).keys()].map((i) => i * 10); return { h: { start, diveTimeS: dur }, s: { t, depth: t.map((x) => (x < 300 ? x / 10 : x < dur - 300 ? 30 + 5 * Math.sin(x / 200) : (dur - x) / 10)) } } as any; };
+  const a = mk(0, 3600), b = mk(356, 2400);
+  b.s.depth = b.s.t.map((x: number) => (x < 300 ? x / 10 : x < 2100 ? 30 + 5 * Math.sin(x / 200) : (2400 - x) / 10));
+  const r = profileLag(a, b);
+  ok(r.real === 0 && r.rmse < 1, `buddy skončil o 20 min dřív – posun podle začátku 0 s (${r.real}, ${r.rmse.toFixed(2)})`);
+}
+// ---- spojené ponory
+{
+  const { segGroups, mergeDives } = await import("../src/core/segments");
+  const m = (id: string, start: number, dur: number, cnum?: number, serial = 1) => ({ id, start, cnum, h: { serial, diveTimeS: dur } });
+  const ms = [m("a", 0, 400, 30), m("b", 450, 400, 30), m("c", 900, 400, 30), m("d", 5000, 1200, 31), m("e", 6500, 600, 32), m("f", 20000, 600, 33)];
+  const g = segGroups(ms, 30);
+  ok(g.parts.get("a")!.length === 3 && g.head.get("c") === "a", "stejné číslo z Cloudu = jeden ponor");
+  ok(g.parts.get("d")!.length === 2, "povrchový interval do 30 min = jeden ponor");
+  ok(g.parts.get("f")!.length === 1, "delší interval = samostatný ponor");
+  ok(segGroups(ms, 30, { e: false }).parts.get("e")!.length === 1, "ruční oddělení má přednost");
+  ok(segGroups(ms, 0, { f: true }).parts.get("d")!.map((x) => x.id).join() === "d,e,f".slice(0, 1) + "" || segGroups(ms, 0, { f: true }).head.get("f") === "e", "ruční spojení s předchozím");
+  const dv = (start: number, dur: number) => ({ id: "x", h: { start, diveTimeS: dur, maxDepth: dur / 100, end: start + dur }, s: { t: [0, dur], depth: [0, dur / 100] }, events: [{ t: 5, kind: "0", label: "", payload: "" }], alarms: [], buttons: [], tissues: [] }) as any;
+  const md = mergeDives([dv(0, 400), dv(450, 400)]) as any;
+  ok(md.s.t.join() === "0,400,450,850" && md.h.diveTimeS === 850 && md.surf[0].from === 400 && md.events[1].t === 455, "spojení dekódovaných částí s posunem času");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

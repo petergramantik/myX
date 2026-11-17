@@ -27,7 +27,7 @@ export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
 /** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
 export interface Co2Cal { date: string; gas: string }
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; motto?: boolean; cyl?: { dil: number; o2: number }; spLateSet?: boolean; updated: number }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; motto?: boolean; cyl?: { dil: number; o2: number }; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
@@ -48,8 +48,8 @@ export const aliasKey = (kind: "buddy" | "site", name: string) => `${kind}:${nor
 /** Cizí počítač rozpoznaný podle sériového čísla v logu a jeho majitel. */
 export interface Computer { id: string; model: string; buddyId?: string; primary?: boolean; /** můj počítač (cíleně přidaný, např. po výměně počítače) */ mine?: boolean; updated: number }
 
-export const META_V = 19;
-export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; comp?: string; alt?: string; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
+export const META_V = 20;
+export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; cnum?: number; comp?: string; /** spojený ponor: všechny záznamy (jen v zobrazení) */ parts?: Meta[]; alt?: string; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };
 export const emptyLogbook = (): Logbook => ({

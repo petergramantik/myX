@@ -1,5 +1,6 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
-import { decodeDive, peekHeader, readCloudDetails, readShearwaterDb, type CloudDetail, type Dive, type RawDive } from "../core/shearwater";
+import { mergeDives, segGroups } from "../core/segments";
+import { decodeDive, peekHeader, readCloudDetails, readCloudNumbers, readShearwaterDb, type CloudDetail, type Dive, type RawDive } from "../core/shearwater";
 import { DEFAULT_THRESHOLDS, diveWarnings, injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
@@ -38,17 +39,61 @@ export function toast(msg: string) {
 }
 
 const sortMetas = (m: Meta[]) => [...m].sort((a, b) => a.start - b.start);
-export const myNum = (id: string) => st.metas.findIndex((m) => m.id === id) + 1;
+export const myNum = (id: string) => diveHeads().findIndex((m) => m.id === segInfo().head.get(id)) + 1;
 
 // ---------- dekódované ponory (mezipaměť v paměti)
 const diveCache = new Map<string, Promise<Dive>>();
+function loadPart(id: string): Promise<Dive> {
+  return db.get<RawDive>("raw", id, st.guest ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeDive(r); });
+}
 export function loadDive(id: string): Promise<Dive> {
-  let p = diveCache.get(id);
+  const parts = segInfo().parts.get(id);
+  const key = parts && parts.length > 1 ? parts.map((m) => m.id).join("+") : id;
+  let p = diveCache.get(key);
   if (!p) {
-    p = db.get<RawDive>("raw", id, st.guest ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeDive(r); });
-    diveCache.set(id, p);
+    p = parts && parts.length > 1 ? Promise.all(parts.map((m) => loadPart(m.id))).then(mergeDives) : loadPart(id);
+    diveCache.set(key, p);
   }
   return p;
+}
+
+// ---------- spojené ponory (víc záznamů = jeden ponor)
+let segCache: { metas: Meta[]; gap: number; ov: Record<string, boolean>; r: ReturnType<typeof segGroups<Meta>> } | null = null;
+/** Seskupení zobrazených záznamů do ponorů (podle čísla z Cloudu, povrchového intervalu a ručních voleb). */
+export function segInfo() {
+  const gap = ownLb().settings.segGap ?? 30, ov = ownLb().settings.segOv || {};
+  if (segCache && segCache.metas === st.metas && segCache.gap === gap && segCache.ov === ov) return segCache.r;
+  const r = segGroups(st.metas, gap, ov);
+  segCache = { metas: st.metas, gap, ov, r };
+  return r;
+}
+/** Ponory k zobrazení: hlavy skupin (první záznam), seřazené od nejstaršího. */
+export function diveHeads(): Meta[] { const { parts } = segInfo(); return st.metas.filter((m) => parts.has(m.id)); }
+let viewCache: { r: unknown; v: Meta[] } | null = null;
+/** Ponory k zobrazení se souhrnem spojených částí (max. hloubka, čas pod vodou, plyny, varování). */
+export function viewMetas(): Meta[] {
+  const r = segInfo();
+  if (viewCache && viewCache.r === r) return viewCache.v;
+  const v = diveHeads().map((m) => {
+    const ps = r.parts.get(m.id)!;
+    if (ps.length < 2) return m;
+    const gases = new Map<string, { mix: string; s: number }>();
+    for (const p of ps) for (const g of p.sum.gases || []) { const x = gases.get(g.mix) || { ...g, s: 0 }; x.s += g.s; gases.set(g.mix, x); }
+    return { ...m, parts: ps, h: { ...m.h, maxDepth: Math.max(...ps.map((p) => p.h.maxDepth)), diveTimeS: ps.reduce((a, p) => a + p.h.diveTimeS, 0) },
+      sum: { ...m.sum, gases: [...gases.values()] as typeof m.sum.gases }, warns: ps.flatMap((p) => p.warns || []) } as Meta;
+  });
+  viewCache = { r, v };
+  return v;
+}
+/** Ruční spojení s předchozím (true), rozdělení (false) nebo návrat k automatice (null). */
+export async function setSegOverride(id: string, v: boolean | null) {
+  const lb = structuredClone(ownLb());
+  const ov = { ...(lb.settings.segOv || {}) };
+  if (v == null) delete ov[id]; else ov[id] = v;
+  lb.settings = { ...lb.settings, segOv: ov, updated: Date.now() };
+  diveCache.clear();
+  await saveOwnLb(lb);
+  if (st.guest) set({ lb: { ...st.lb, settings: { ...st.lb.settings, segOv: ov } } });
 }
 
 /** Ponor z cizího logu (pro porovnání), bez ohledu na to, zda je cizí log právě otevřený. */
@@ -64,7 +109,7 @@ async function metaOf(raw: RawDive): Promise<Meta> {
   const sum = summarize(d);
   // oranžová a červená varování (výchozí prahy) – pro tagy v seznamu ponorů
   const warns = diveWarnings(d, sum, DEFAULT_THRESHOLDS).filter((w) => w.level === "warn" || w.level === "bad").map((w) => ({ level: w.level as "warn" | "bad", title: w.title, text: w.text }));
-  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum, inj: injections(d).length, cells: cellsOfDive(d), v: META_V, prof, warns };
+  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum, inj: injections(d).length, cells: cellsOfDive(d), v: META_V, prof, warns, cnum: raw.cnum };
 }
 
 // ---------- start
@@ -193,11 +238,16 @@ async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promis
   const cloud = readCloudDetails(buf);
   if (cloud.size) { const lb = applyCloud(st.lb, cloud, new Set(raws.map((r) => r.id))); if (lb !== st.lb) await saveLb(lb); }
   const have = new Set(st.metas.map((m) => m.id));
+  const cnums = readCloudNumbers(buf);
+  // číslo ponoru z Cloudu doplnit i k už načteným ponorům (spojené ponory se stejným číslem)
+  const upd: Meta[] = [];
+  for (const m of st.metas) { const n = cnums.get(m.id); if (n != null && m.cnum !== n) { const raw = await db.get<RawDive>("raw", m.id); if (raw) { await db.put("raw", { ...raw, cnum: n }); } const mm = { ...m, cnum: n }; await db.put("meta", mm); upd.push(mm); } }
+  if (upd.length) set({ metas: st.metas.map((m) => upd.find((x) => x.id === m.id) || m) });
   const added: Meta[] = [];
   for (const r of raws) {
     if (have.has(r.id)) continue;
     const ph = await peekHeader(r.blob);
-    const raw: RawDive = { ...r, num: ph.num, start: ph.start, blob: r.blob.slice() };
+    const raw: RawDive = { ...r, num: ph.num, start: ph.start, blob: r.blob.slice(), cnum: cnums.get(r.id) };
     await db.put("raw", raw);
     const m = await metaOf(raw);
     await db.put("meta", m);
@@ -546,10 +596,11 @@ async function importGuestRaws(buf: Uint8Array, raws: RawDive[], open = true): P
   const serial = serialOf(fn);
   const id = uid();
   const metas: Meta[] = [];
+  const cnums = readCloudNumbers(buf);
   for (const r of raws) {
     try {
       const ph = await peekHeader(r.blob);
-      const raw: RawDive = { ...r, id: `${id}:${r.id}`, num: ph.num, start: ph.start, blob: r.blob.slice() };
+      const raw: RawDive = { ...r, id: `${id}:${r.id}`, num: ph.num, start: ph.start, blob: r.blob.slice(), cnum: cnums.get(r.id) };
       await db.put("raw", raw, undefined, db.GUEST);
       metas.push(await metaOf(raw));
     } catch { /* poškozený ponor přeskočit */ }

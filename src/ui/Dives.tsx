@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, GAS_COLOR, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
-import { ME, adoptForeign, nearestPair, applySuggestion, loadDive, myNum, ownMetas, setNote, suggestionsFor, type Suggest } from "../app/store";
+import { ME, adoptForeign, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
 import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
@@ -42,7 +42,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
       setSugSite(out);
     })();
   }, [st.metas, st.guest, st.guestRev, lb.notes, lb.aliases]);
-  useEffect(() => { if (!st.guest) commonDives(st.metas).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [st.metas, st.guest, st.guestRev, lb.computers]);
+  useEffect(() => { if (!st.guest) commonDives(diveHeads()).then((c) => setCmp(new Map(c.map((x) => [x.m.id, x])))); }, [st.metas, st.guest, st.guestRev, lb.computers, lb.settings.segOv, lb.settings.segGap]);
   // u cizího logu: ponory, ke kterým mám svůj ponor (začátek do ±15 min)
   const mine = st.guest ? ownMetas() : [];
   const common = (m: Meta) => mine.some((x) => nearestPair([m], x).length > 0);
@@ -55,12 +55,13 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
     const txt = norm([note?.siteId ? lb.sites[note.siteId]?.name : "", ...(note?.buddyIds || []).map((b) => lb.buddies[b]?.name || ""), note?.note || "", fmtDate(date)].join(" "));
     return n.split(" ").every((w) => txt.includes(w));
   };
-  const rows = st.metas.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse()
+  const vm = viewMetas();
+  const rows = vm.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse()
     .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)) && (!noBuddy || (!note?.buddyIds.length && !cmp.has(m.id))) && (!tagF.length || diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => tagF.includes(t.cat)))
       && (!gasF.length || gasCats(m).some((g) => gasF.includes(g))));
   // dostupné filtry: kategorie plynů a problémů, které se v ponorech vyskytují
-  const gasAll = GAS_CATS.filter((g) => st.metas.some((m) => gasCats(m).includes(g)));
-  const tagAll = TAG_ORDER.filter((c) => st.metas.some((m) => diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === c)));
+  const gasAll = GAS_CATS.filter((g) => vm.some((m) => gasCats(m).includes(g)));
+  const tagAll = TAG_ORDER.filter((c) => vm.some((m) => diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === c)));
   const tog = <T,>(arr: T[], v: T, set: (x: T[]) => void) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   // buddy s počtem mých ponorů (pro štítky filtru)
   const bcount = new Map<string, number>();
@@ -95,8 +96,8 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <button className="btn view-tg" title={compact ? "Kompaktní zobrazení" : "Plné zobrazení"} onClick={() => { setCompact(!compact); try { localStorage.setItem("myx-compact", compact ? "0" : "1"); } catch { /* */ } }}>{compact ? "≡" : "☰"}</button>
         </div>
         {!compact && (gasAll.length > 0 || tagAll.length > 0) && <div className="cat-filter">
-          <span className="cf-group">{gasAll.map((g) => <span key={g} className="cf-col"><button className={"gchip cf " + GAS_CLS[g] + (gasF.includes(g) ? " on" : "")} onClick={() => { const n = gasF.includes(g) ? gasF.filter((x) => x !== g) : [...gasF, g]; setGasF(n.length === gasAll.length ? [] : n); }}>{g}</button>{gasF.includes(g) && <small>{st.metas.filter((m) => gasCats(m).includes(g)).length}</small>}</span>)}</span>
-          <span className="cf-group">{tagAll.map((c) => { const y = st.metas.filter((m) => diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === c)).length; return <span key={c} className="cf-col"><button className={"tag cf" + (tagF.includes(c) ? " on" : "")} onClick={() => tog(tagF, c, setTagF)}>{c === "ČIDLO" ? "ČIDLA" : c}</button>{tagF.includes(c) && <small>{tagF.length > 1 ? `${rows.length}/${y}` : y}</small>}</span>; })}</span>
+          <span className="cf-group">{gasAll.map((g) => <span key={g} className="cf-col"><button className={"gchip cf " + GAS_CLS[g] + (gasF.includes(g) ? " on" : "")} onClick={() => { const n = gasF.includes(g) ? gasF.filter((x) => x !== g) : [...gasF, g]; setGasF(n.length === gasAll.length ? [] : n); }}>{g}</button>{gasF.includes(g) && <small>{vm.filter((m) => gasCats(m).includes(g)).length}</small>}</span>)}</span>
+          <span className="cf-group">{tagAll.map((c) => { const y = vm.filter((m) => diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === c)).length; return <span key={c} className="cf-col"><button className={"tag cf" + (tagF.includes(c) ? " on" : "")} onClick={() => tog(tagF, c, setTagF)}>{c === "ČIDLO" ? "ČIDLA" : c}</button>{tagF.includes(c) && <small>{tagF.length > 1 ? `${rows.length}/${y}` : y}</small>}</span>; })}</span>
         </div>}
       </>)}
       {drafts.map((d) => (
@@ -115,7 +116,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         const open = () => { const cc = bsel.length ? c : undefined; go(cc ? { t: "cmp", id: m.id, other: cc.with.map((x) => x.id).join(",") } : { t: "dive", id: m.id }); };
         if (compact) return (
           <div key={m.id} className={"dive-row compact " + rowLevel(diveTagsOfMeta(st.metas, m, lb.settings.th))} onClick={open}>
-            <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{buds ? " · " + buds : ""}</small></div>
+            <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{m.parts ? ` · ${m.parts.length} části` : ""}{buds ? " · " + buds : ""}</small></div>
             <div className="dr-num fixed"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             <div className="dr-rate">{rate}{badge}</div>
           </div>
@@ -123,7 +124,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         return (
           <div key={m.id} className="dive-row full" onClick={open}>
             <div className="dr-mid">
-              <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{m.comp ? ` · ${m.comp.split(" ")[0]}` : ""}{m.alt ? " · 2 počítače" : ""}</small></div>
+              <div className="dr-main"><b>{siteEl}</b><small>č. {no} · {fmtDate(m.start)}{m.comp ? ` · ${m.comp.split(" ")[0]}` : ""}{m.alt ? " · 2 počítače" : ""}{m.parts ? ` · ${m.parts.length} části` : ""}</small></div>
               <div className="dr-num"><span>{num(m.h.maxDepth)}<small>m</small></span><span>{Math.round(m.h.diveTimeS / 60)}<small>min</small></span></div>
             </div>
             {(buds || badge) && <div className="dr-bud"><span className="dr-bnames">{buds}</span>{badge}</div>}
@@ -146,10 +147,13 @@ export function DiveScreen({ id }: { id: string }) {
   const [slide, setSlide] = useState("");
   const touch = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => { setD(null); loadDive(id).then(setD).catch((e) => setErr(e.message)); }, [id]);
-  const meta = st.metas.find((m) => m.id === id);
+  const headId = segInfo().head.get(id) || id;
+  useEffect(() => { if (headId !== id) go({ t: "dive", id: headId }); }, [headId, id]);
+  const vm = viewMetas();
+  const meta = vm.find((m) => m.id === headId);
   if (!meta) return <div className="screen"><p>Ponor nenalezen.</p></div>;
-  const idx = st.metas.indexOf(meta);
-  const prev = st.metas[idx - 1], next = st.metas[idx + 1];
+  const idx = vm.indexOf(meta);
+  const prev = vm[idx - 1], next = vm[idx + 1];
   const onTouchStart = (e: React.TouchEvent) => {
     const el = e.target as HTMLElement;
     // grafy a aktivní prvky mají vlastní gesta – tam přejetí ponor nepřepíná
@@ -464,17 +468,41 @@ function DiveTitle({ id }: { id: string }) {
   );
 }
 
+/** Části spojeného ponoru (víc záznamů počítače) a ruční spojení / rozdělení. */
+function PartsCard({ meta }: { meta: Meta }) {
+  const gapMin = useStore().lb.settings.segGap ?? 30;
+  const vm = viewMetas(), i = vm.findIndex((m) => m.id === meta.id), next = vm[i + 1];
+  const ps = meta.parts;
+  const mm = (s: number) => `${Math.round(s / 60)} min`;
+  const hhmm = (t: number) => new Date(t * 1000).toISOString().slice(11, 16);
+  const canJoin = next && (next.h.serial || 0) === (meta.h.serial || 0) && next.start - (meta.parts ? meta.parts[meta.parts.length - 1] : meta).start < 6 * 3600;
+  if (!ps && !canJoin) return null;
+  return (
+    <Card title={ps ? `Ponor z ${ps.length} částí` : "Části ponoru"}>
+      {ps && ps.map((p, k) => (
+        <div key={p.id} className="row between">
+          <span className="small">{k + 1}. část {hhmm(p.start)} · {mm(p.h.diveTimeS)} · max {num(p.h.maxDepth)} m{k > 0 ? ` · po ${mm(p.start - (ps[k - 1].start + ps[k - 1].h.diveTimeS))} na hladině` : ""}</span>
+          {k > 0 && <button className="btn small" onClick={() => setSegOverride(p.id, false)}>Oddělit</button>}
+        </div>
+      ))}
+      {canJoin && <button className="btn small" onClick={() => setSegOverride(next.id, true)}>Spojit s následujícím ponorem ({hhmm(next.start)})</button>}
+      <p className="note">Záznamy se stejným číslem ponoru z Cloudu nebo s povrchovým intervalem do {gapMin} min se spojují automaticky (Nastavení → Výbava).</p>
+    </Card>
+  );
+}
+
 function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const st = useStore();
   const lb = st.lb;
-  const meta = st.metas.find((m) => m.id === id)!;
+  const meta = viewMetas().find((m) => m.id === id) || st.metas.find((m) => m.id === id)!;
   const note = lb.notes[id] || { buddyIds: [], note: "", updated: 0 };
-  const idx = st.metas.indexOf(meta);
+  const idx = st.metas.findIndex((m) => m.id === id);
   const warns = mergeCellAlerts([...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)]);
   return (
     <>
       {meta.comp && <div className="comp-line small muted">Z počítače {meta.comp}{meta.alt && <> · <span className="pill">2 počítače</span> <a onClick={() => go({ t: "cmp", id: meta.id, other: meta.alt! })}>Srovnání počítačů ›</a></>}</div>}
       {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold />)}
+      <PartsCard meta={meta} />
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
         <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > 1.6 ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > (lb.settings.th.pn2Hot ?? 3.16) ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
           ["Hloubka", <Pair l={`${num(meta.h.maxDepth)} m`} ll="max" r={`${num(meta.sum.avgDepth)} m`} rl="průměr" />],
@@ -515,7 +543,7 @@ function ProfileCard({ d }: { d: Dive }) {
   const gasAt = useMemo(() => s.o2.map((o, i) => gasLabel(`${o}/${s.he[i]}`).label), [d]);
   return (
     <Card title="Profil a dekompresní strop">
-      <LineChart t={s.t} invert height={220} series={[
+      <LineChart t={s.t} invert height={220} bands={((d as Dive & { surf?: { from: number; to: number }[] }).surf || []).map((b) => ({ ...b, color: "#90a4ae" }))} series={[
         { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m", fillUp: true },
         { label: "", color: C[1], values: link, width: 1 },
         { label: "Zastávka", color: C[1], values: stops, unit: "m", width: 3 },
@@ -544,7 +572,7 @@ function ChartsTab({ d }: { d: Dive }) {
       <Card title="pO₂ a čidla" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
         {cellMode === "cal" ? (
-          <LineChart t={s.t} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={[...d.alarms.filter((a) => a.kind === "po2high" || a.kind === "po2low").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" })), ...(cellSpread(d)?.bands || []).map((b) => ({ ...b, to: b.to + 5, color: "#ce93d8" }))]} series={[
+          <LineChart t={s.t} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={[...d.alarms.filter((a) => a.kind === "po2high" || a.kind === "po2low").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" })), ...(cellSpread(d)?.bands || []).map((b) => ({ ...b, to: b.to + 5, color: "#ce93d8" })), ...((d as Dive & { surf?: { from: number; to: number }[] }).surf || []).map((b) => ({ ...b, color: "#90a4ae" }))]} series={[
             { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: "Čidlo 1", color: C[1], values: cells[0], unit: "bar" },
             { label: "Čidlo 2", color: C[2], values: cells[1], unit: "bar" }, { label: "Čidlo 3", color: C[3], values: cells[2], unit: "bar" }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3" },
           ]} extra={depthExtra} />
