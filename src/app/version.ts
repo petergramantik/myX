@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.26.4";
+export const APP_VERSION = "1.27";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.27", date: "2026-11-17", title: "Nápověda a nové Nastavení", items: [
+    "Ikona „?“ v záhlaví otevře Nápovědu – přehled funkcí po sekcích (import a export ze Shearwater Cloudu, sdílení, seznam, detail, co aplikace z logu vyčte, srovnání, B&L, nastavení).",
+    "Nastavení rozdělené do sbalitelných sekcí; upozornění podle oblastí; synchronizace přes Worker v sekci Dev.",
+    "Import přijme jakýkoli soubor (i na iPhonu) a ověří, že jde o databázi Shearwater.",
+  ] },
   { version: "1.26.4", date: "2026-11-17", title: "Vzhled zapnutých filtrů", items: [
     "Zapnutý filtr má bílý rám a text bez modrého obrysu; počet pod ním se nepřekrývá.",
   ] },

@@ -19,56 +19,61 @@ export function SettingsScreen() {
   const setTh = (k: keyof typeof th, v: string) => { const n = parseFloat(v.replace(",", ".")); if (!Number.isNaN(n)) saveSettings({ th: { ...th, [k]: n } }); };
   return (
     <div className="screen">
-      <Card title="Synchronizace">
-        <p className={"sync " + st.sync.state}>{st.sync.msg || "–"}{st.sync.at ? ` (${new Date(st.sync.at).toLocaleTimeString("cs-CZ")})` : ""}</p>
-        <label>Adresa Workeru<input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://myx-sync.….workers.dev" /></label>
-        <label>Klíč<input value={key} type="password" onChange={(e) => setKey(e.target.value)} /></label>
-        <div className="row">
-          <button className="btn primary" onClick={() => { setWorker(url, key); syncNow(); }}>Uložit a synchronizovat</button>
-        </div>
-      </Card>
-
-      <Card title="Přehled">
+      <Sec title="Zobrazení">
         <label className="check"><input type="checkbox" checked={st.lb.settings.motto !== false} onChange={(e) => saveSettings({ motto: e.target.checked })} /> Hláška nad scrubberem („Všecko v cajku…“ / „Mám warningy…“)</label>
-      </Card>
+      </Sec>
 
-      <Card title="Lahve">
-        <label>Diluent – objem vlastní lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
-        <label>O₂ – objem vlastní lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
+      <Sec title="Výbava">
+        <label>Diluent – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
+        <label>O₂ – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
         <p className="note">Externí lahve (S80 = 11,1 l, S40 = 5,7 l) se zadávají u ponoru v kartě Spotřeba plynu.</p>
-      </Card>
-
-      <Card title="Upozornění">
-        <label>Scrubber – upozornit při zbytku (%)<input inputMode="decimal" defaultValue={th.scrubPct} onBlur={(e) => setTh("scrubPct", e.target.value)} /></label>
-        <label>Setpoint – pozdní přepnutí na vysoký: víc než (min) po dosažení dna<input inputMode="decimal" defaultValue={th.spLateMin ?? 5} onBlur={(e) => { const n = parseFloat(e.target.value.replace(",", ".")); if (!Number.isNaN(n)) saveSettings({ th: { ...th, spLateMin: n }, spLateSet: true }); }} /></label>
-        <label>Setpoint – oscilace hloubky na dně (m)<input inputMode="decimal" defaultValue={th.spOsc ?? 3} onBlur={(e) => setTh("spOsc", e.target.value)} /></label>
-        <label>Setpoint – výraznější klesání s vysokým SP (m)<input inputMode="decimal" defaultValue={th.spDescM ?? 6} onBlur={(e) => setTh("spDescM", e.target.value)} /></label>
-        <label>Srovnání – pod setpointem o víc než (bar)<input inputMode="decimal" defaultValue={th.spBelow ?? 0.15} onBlur={(e) => setTh("spBelow", e.target.value)} /></label>
-        <label>Srovnání – nad setpointem o víc než (bar, mimo deko)<input inputMode="decimal" defaultValue={th.spAbove ?? 0.2} onBlur={(e) => setTh("spAbove", e.target.value)} /></label>
-        <label>Scrubber – upozornit po dnech od náplně<input inputMode="decimal" defaultValue={th.scrubDays} onBlur={(e) => setTh("scrubDays", e.target.value)} /></label>
-        <label>Baterie – rezerva nad prahem varování (V)<input inputMode="decimal" defaultValue={th.batMarginV} onBlur={(e) => setTh("batMarginV", e.target.value)} /></label>
-        <label>Čidla – životnost, když u čidla není zadaná (měsíce)<input inputMode="decimal" defaultValue={th.cellLifeM} onBlur={(e) => setTh("cellLifeM", e.target.value)} /></label>
-        <label>Čidla – výměna nejpozději po (měsíce)<input inputMode="decimal" defaultValue={th.cellMaxM} onBlur={(e) => setTh("cellMaxM", e.target.value)} /></label>
-        <label>Čidla – varování pod (mV na vzduchu)<input inputMode="decimal" defaultValue={th.cellAirWarn} onBlur={(e) => setTh("cellAirWarn", e.target.value)} /></label>
-        <label>Čidla – výměna pod (mV na vzduchu)<input inputMode="decimal" defaultValue={th.cellAirBad} onBlur={(e) => setTh("cellAirBad", e.target.value)} /></label>
-        <label>Čidla – pokles citlivosti za měsíc (%)<input inputMode="decimal" defaultValue={th.cellDropPct} onBlur={(e) => setTh("cellDropPct", e.target.value)} /></label>
-        <label>Čidla – linearita pod (current limiting)<input inputMode="decimal" defaultValue={th.cellLinWarn} onBlur={(e) => setTh("cellLinWarn", e.target.value)} /></label>
-        <label>Baterie v hlavě – varovat po hodinách pod vodou (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatHours} onBlur={(e) => setTh("headBatHours", e.target.value)} /></label>
-        <label>Baterie v hlavě – varovat po měsících od výměny (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatMonths} onBlur={(e) => setTh("headBatMonths", e.target.value)} /></label>
-        <label>pO₂ při zanoření – nízké pod (bar)<input inputMode="decimal" defaultValue={th.po2Lo ?? 0.4} onBlur={(e) => setTh("po2Lo", e.target.value)} /></label>
-        <label>pO₂ při zanoření – varovat, když minimum pod (bar)<input inputMode="decimal" defaultValue={th.po2LoMin ?? 0.3} onBlur={(e) => setTh("po2LoMin", e.target.value)} /></label>
-        <label>pO₂ při zanoření – varovat po (s pod prahem)<input inputMode="decimal" defaultValue={th.po2LoWarnS ?? 30} onBlur={(e) => setTh("po2LoWarnS", e.target.value)} /></label>
-        <label>Hypoxie? – minimum pod (bar)<input inputMode="decimal" defaultValue={th.po2Hypo ?? 0.21} onBlur={(e) => setTh("po2Hypo", e.target.value)} /></label>
-        <label>Hypoxie? – pod prahem déle než (s)<input inputMode="decimal" defaultValue={th.po2LoBadS ?? 120} onBlur={(e) => setTh("po2LoBadS", e.target.value)} /></label>
-        <label>pN₂ – zvýraznit nad (bar; END ≈ {Math.round(((th.pn2Hot ?? 3.16) / 0.79 - 1) * 10)} m)<input inputMode="decimal" defaultValue={th.pn2Hot ?? 3.16} onBlur={(e) => setTh("pn2Hot", e.target.value)} /></label>
-        <label>CO₂ – podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
           <input type="date" value={manual ? new Date(manual * 1000).toISOString().slice(0, 10) : ""} onChange={(e) => saveSettings({ manualFill: e.target.value ? Date.parse(e.target.value + "T12:00:00Z") / 1000 : null })} />
         </label>
-        <button className="btn" onClick={() => saveSettings({ th: { ...DEFAULT_ALL_TH }, manualFill: null })}>Výchozí hodnoty</button>
-      </Card>
+      </Sec>
 
-      <Card title="Data">
+      <Sec title="Logy buddyů">
+        <p className="note">Cizí logy (jen ke čtení) se načítají a spravují v záložce DB.</p>
+        <button className="btn" onClick={() => tab({ t: "hub", sub: "db" })}>Spravovat logy buddyů ›</button>
+      </Sec>
+
+      <Sec title="Sdílení"><ShareInner /></Sec>
+
+      <Sec title="Upozornění">
+        <h3 className="subh">Čidla O₂</h3>
+          <label>Životnost, když u čidla není zadaná (měsíce)<input inputMode="decimal" defaultValue={th.cellLifeM ?? 12} onBlur={(e) => setTh("cellLifeM", e.target.value)} /></label>
+          <label>Výměna nejpozději po (měsíce)<input inputMode="decimal" defaultValue={th.cellMaxM ?? 18} onBlur={(e) => setTh("cellMaxM", e.target.value)} /></label>
+          <label>Varování pod (mV na vzduchu)<input inputMode="decimal" defaultValue={th.cellAirWarn ?? 9} onBlur={(e) => setTh("cellAirWarn", e.target.value)} /></label>
+          <label>Výměna pod (mV na vzduchu)<input inputMode="decimal" defaultValue={th.cellAirBad ?? 8} onBlur={(e) => setTh("cellAirBad", e.target.value)} /></label>
+          <label>Pokles citlivosti za měsíc (%)<input inputMode="decimal" defaultValue={th.cellDropPct ?? 15} onBlur={(e) => setTh("cellDropPct", e.target.value)} /></label>
+          <label>Linearita pod (current limiting)<input inputMode="decimal" defaultValue={th.cellLinWarn ?? 0.9} onBlur={(e) => setTh("cellLinWarn", e.target.value)} /></label>
+        <h3 className="subh">pO₂ a hypoxie</h3>
+          <label>pO₂ při zanoření – nízké pod (bar)<input inputMode="decimal" defaultValue={th.po2Lo ?? 0.4} onBlur={(e) => setTh("po2Lo", e.target.value)} /></label>
+          <label>pO₂ při zanoření – varovat, když minimum pod (bar)<input inputMode="decimal" defaultValue={th.po2LoMin ?? 0.3} onBlur={(e) => setTh("po2LoMin", e.target.value)} /></label>
+          <label>pO₂ při zanoření – varovat po (s pod prahem)<input inputMode="decimal" defaultValue={th.po2LoWarnS ?? 30} onBlur={(e) => setTh("po2LoWarnS", e.target.value)} /></label>
+          <label>Hypoxie? – minimum pod (bar)<input inputMode="decimal" defaultValue={th.po2Hypo ?? 0.21} onBlur={(e) => setTh("po2Hypo", e.target.value)} /></label>
+          <label>Hypoxie? – pod prahem déle než (s)<input inputMode="decimal" defaultValue={th.po2LoBadS ?? 120} onBlur={(e) => setTh("po2LoBadS", e.target.value)} /></label>
+          <label>pN₂ – zvýraznit nad (bar; END ≈ {Math.round(((th.pn2Hot ?? 3.16) / 0.79 - 1) * 10)} m)<input inputMode="decimal" defaultValue={th.pn2Hot ?? 3.16} onBlur={(e) => setTh("pn2Hot", e.target.value)} /></label>
+        <h3 className="subh">CO₂</h3>
+          <label>Podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar ?? 5} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>
+        <h3 className="subh">Setpoint</h3>
+          <label>Pozdní přepnutí na vysoký: víc než (min) po dosažení dna<input inputMode="decimal" defaultValue={th.spLateMin ?? 5} onBlur={(e) => { const n = parseFloat(e.target.value.replace(",", ".")); if (!Number.isNaN(n)) saveSettings({ th: { ...th, spLateMin: n }, spLateSet: true }); }} /></label>
+          <label>Oscilace hloubky na dně (m)<input inputMode="decimal" defaultValue={th.spOsc ?? 3} onBlur={(e) => setTh("spOsc", e.target.value)} /></label>
+          <label>Výraznější klesání s vysokým SP (m)<input inputMode="decimal" defaultValue={th.spDescM ?? 6} onBlur={(e) => setTh("spDescM", e.target.value)} /></label>
+        <h3 className="subh">Srovnání</h3>
+          <label>Pod setpointem o víc než (bar)<input inputMode="decimal" defaultValue={th.spBelow ?? 0.15} onBlur={(e) => setTh("spBelow", e.target.value)} /></label>
+          <label>Nad setpointem o víc než (bar, mimo deko)<input inputMode="decimal" defaultValue={th.spAbove ?? 0.2} onBlur={(e) => setTh("spAbove", e.target.value)} /></label>
+        <h3 className="subh">Scrubber</h3>
+          <label>Upozornit při zbytku (%)<input inputMode="decimal" defaultValue={th.scrubPct ?? 50} onBlur={(e) => setTh("scrubPct", e.target.value)} /></label>
+          <label>Upozornit po dnech od náplně<input inputMode="decimal" defaultValue={th.scrubDays ?? 14} onBlur={(e) => setTh("scrubDays", e.target.value)} /></label>
+        <h3 className="subh">Baterie</h3>
+          <label>Rezerva nad prahem varování (V)<input inputMode="decimal" defaultValue={th.batMarginV ?? 0.05} onBlur={(e) => setTh("batMarginV", e.target.value)} /></label>
+          <label>Baterie v hlavě – varovat po hodinách pod vodou (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatHours ?? 0} onBlur={(e) => setTh("headBatHours", e.target.value)} /></label>
+          <label>Baterie v hlavě – varovat po měsících od výměny (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatMonths ?? 0} onBlur={(e) => setTh("headBatMonths", e.target.value)} /></label>
+        <button className="btn" onClick={() => saveSettings({ th: { ...DEFAULT_ALL_TH }, manualFill: null })}>Výchozí hodnoty</button>
+      </Sec>
+
+      <Sec title="Data">
         <div className="col">
           <ImportButton />
           <button className="btn" onClick={async () => {
@@ -77,28 +82,47 @@ export function SettingsScreen() {
             a.href = URL.createObjectURL(b); a.download = `myx-zaloha-${new Date().toISOString().slice(0, 10)}.json`; a.click();
           }}>Stáhnout zálohu</button>
           <button className="btn" onClick={() => fileRef.current?.click()}>Obnovit ze zálohy</button>
-          <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={async (e) => {
+          <input ref={fileRef} type="file" hidden onChange={async (e) => {
             const f = e.target.files?.[0]; e.target.value = "";
             if (f) try { toast(`Obnoveno, nových ponorů: ${await importBackup(f)}`); } catch (err) { toast((err as Error).message); }
           }} />
           <button className="btn danger" onClick={async () => {
             if (!confirm("Úplný reset logbooku: smaže všechny lokality, buddye, poznámky, hodnocení, rozpracované ponory, přiřazení jmen a cizí logy. Ponory, čidla, baterie a nastavení zůstanou. Pokračovat?")) return;
-            if (!confirm("Opravdu? Přepíše se i záloha na Workeru. Před resetem se stáhne záloha do souboru.")) return;
+            if (!confirm("Opravdu? Před resetem se stáhne záloha do souboru.")) return;
             const b = await exportBackup();
             const a = document.createElement("a");
             a.href = URL.createObjectURL(b); a.download = `myx-pred-resetem-${new Date().toISOString().slice(0, 10)}.json`; a.click();
             await resetAll(); toast("Logbook resetován");
           }}>Reset logbooku</button>
-          <button className="btn danger" onClick={async () => { if (confirm("Smazat všechna data v tomto telefonu? Data ve Workeru zůstanou.")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
+          <button className="btn danger" onClick={async () => { if (confirm("Smazat všechna data v tomto telefonu?")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
         </div>
-      </Card>
+      </Sec>
 
-      <ShareCard />
-
-      <Card title="O aplikaci">
+      <Sec title="O aplikaci" open>
         <KV rows={[["Verze", <a onClick={() => go({ t: "about" })}>{APP_VERSION} – co je nového ›</a>], ["Ponorů v telefonu", st.metas.length]]} />
-      </Card>
+        <button className="btn" onClick={() => go({ t: "help" })}>Nápověda ›</button>
+      </Sec>
+
+      <Sec title="Dev">
+        <p className="note">Vývojářská funkce: synchronizace a záloha přes vlastní Cloudflare Worker.</p>
+        <p className={"sync " + st.sync.state}>{st.sync.msg || "–"}{st.sync.at ? ` (${new Date(st.sync.at).toLocaleTimeString("cs-CZ")})` : ""}</p>
+        <label>Adresa Workeru<input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://myx-sync.….workers.dev" /></label>
+        <label>Klíč<input value={key} type="password" onChange={(e) => setKey(e.target.value)} /></label>
+        <div className="row">
+          <button className="btn primary" onClick={() => { setWorker(url, key); syncNow(); }}>Uložit a synchronizovat</button>
+        </div>
+      </Sec>
     </div>
+  );
+}
+
+/** Sbalitelná sekce nastavení. */
+function Sec({ title, children, open }: { title: string; children: React.ReactNode; open?: boolean }) {
+  return (
+    <details className="card sec" open={open}>
+      <summary><h2>{title}</h2></summary>
+      <div className="sec-b">{children}</div>
+    </details>
   );
 }
 
@@ -118,7 +142,7 @@ export function AboutScreen() {
 export const APP_URL = "https://petergramantik.github.io/myX/";
 
 /** Sdílení aplikace: systémové sdílení (nebo zkopírování odkazu) a QR kód. */
-function ShareCard() {
+function ShareInner() {
   const share = async () => {
     const data = { title: "myX", text: "myX – logbook pro rebreather, import ze Shearwater Cloud", url: APP_URL };
     try {
@@ -128,12 +152,12 @@ function ShareCard() {
     catch { toast(APP_URL); }
   };
   return (
-    <Card title="Sdílet aplikaci">
+    <>
       <button className="btn primary" onClick={share}>Sdílet aplikaci</button>
       <img className="qr" src="qr.svg" alt={"QR kód: " + APP_URL} width={180} height={180} />
       <p className="center small"><a href={APP_URL}>{APP_URL.replace("https://", "")}</a></p>
-      <p className="note">Každý má svá data jen ve svém zařízení. Klíč k synchronizaci nesdílej – s ním by se ponory slily do tvého logbooku.</p>
-    </Card>
+      <p className="note">Každý má svá data jen ve svém zařízení. Svůj log pošleš buddymu v záložce DB → Sdílet můj log.</p>
+    </>
   );
 }
 
@@ -169,7 +193,7 @@ export function GuestCard() {
   return (
     <>
       <Card title="Logy buddyů">
-        <input ref={ref} type="file" accept=".db,application/octet-stream" hidden onChange={(e) => pick(e.target.files?.[0])} />
+        <input ref={ref} type="file" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Načíst log buddyho"}</button>
         <p className="note">Export Shearwater Cloud buddyho. Jde ho poslat i přes WhatsApp nebo Quick Share → myX. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům.</p>
         {!logs.length && <p className="muted">Zatím žádné logy buddyů.</p>}

@@ -356,3 +356,12 @@ tr.muted-row td { color: var(--muted); font-style: italic; }
 /* 1.26.4 – zapnutý filtr: bílý rám a text, bez modrého obrysu */
 .gchip.cf.on, .tag.cf.on { box-shadow: none; opacity: 1; border-color: #fff; color: #fff; }
 .cf-col { gap: 3px; }
+/* nastavení – sbalitelné sekce */
+details.card.sec > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+details.card.sec > summary::-webkit-details-marker { display: none; }
+details.card.sec > summary::after { content: "▾"; color: var(--muted); }
+details.card.sec[open] > summary::after { content: "▴"; }
+details.card.sec > summary h2 { margin: 0; }
+.sec-b { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.subh { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 10px 0 0; }
+.helpbtn { font-weight: 700; font-size: 18px; }

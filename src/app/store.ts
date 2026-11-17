@@ -102,6 +102,8 @@ export const ownSerials = () => new Set(ownMetas().map((m) => (m.h.serial || 0).
 export async function importAny(file: File): Promise<{ own: number; guests: GuestLog[] }> {
   if (st.guest) closeGuest();
   const buf = new Uint8Array(await file.arrayBuffer());
+  // SQLite databáze začíná „SQLite format 3“ – jiný soubor (fotka, záloha .json…) odmítnout srozumitelně
+  if (new TextDecoder().decode(buf.subarray(0, 15)) !== "SQLite format 3") throw new Error("Soubor není databáze Shearwater (.db). V Shearwater Cloudu: Profil → Možnosti → Export (*.db).");
   const raws = readShearwaterDb(buf);
   if (!raws.length) { toast("V souboru nejsou žádné ponory"); return { own: 0, guests: [] }; }
   const groups = new Map<string, RawDive[]>();

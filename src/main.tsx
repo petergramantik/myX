@@ -1,3 +1,4 @@
+import { HelpScreen } from "./ui/Help";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { init, locate, scheduleSync, syncNow, takeShared, toast } from "./app/store";
@@ -55,6 +56,7 @@ function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
     case "cells": return "O₂ čidla";
     case "bats": return "Baterie";
     case "warn": return "Varování";
+    case "help": return "Nápověda";
     case "co2": return "Čidlo CO₂";
     case "cmp": return "Porovnání";
     case "hub": return s.sub === "db" ? "Databáze" : "Srovnání";
@@ -76,6 +78,7 @@ function Body({ s }: { s: Screen }) {
     case "cells": return <CellsScreen pos={s.pos} install={s.install} />;
     case "bats": return <BatteriesScreen pos={s.pos} />;
     case "warn": return <WarningsScreen />;
+    case "help": return <HelpScreen />;
     case "co2": return <Co2Screen />;
     case "cmp": return <CompareScreen id={s.id} other={s.other} />;
     case "hub": return <CompareHub sub={s.sub} who={s.who} />;
@@ -119,6 +122,7 @@ function App() {
       <header className="top">
         {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo">X</span>}
         <h1>{title(s, st)}</h1>
+        <button className="warnbtn none helpbtn" onClick={() => (s.t === "help" ? back() : go({ t: "help" }))} aria-label="Nápověda">?</button>
         <button className={"warnbtn " + (w.worst || "none")} onClick={() => (s.t === "warn" ? back() : (setAnim("from-left"), go({ t: "warn" })))} aria-label="Varování">
           ⚠{w.count > 0 && <span>{w.count}</span>}
         </button>

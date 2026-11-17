@@ -13,7 +13,7 @@ export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }
   return (
     <>
       <button className="btn" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : label}</button>
-      <input ref={ref} type="file" accept=".db,application/octet-stream,application/x-sqlite3,*/*" hidden onChange={async (e) => {
+      <input ref={ref} type="file" hidden onChange={async (e) => {
         const f = e.target.files?.[0];
         e.target.value = "";
         if (!f) return;
