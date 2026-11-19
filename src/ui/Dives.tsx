@@ -586,7 +586,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["GF / CNS", <Pair l={`${meta.h.gfLo}/${meta.h.gfHi}`} ll="GF" r={`${meta.h.cnsEnd} %`} rl="CNS" />],
           ["Diluent", <UseTile gas="dil" meta={meta} note={note} />], ["O₂", <UseTile gas="o2" meta={meta} note={note} />],
           ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
-          ["Scrubber", <span className="scr-v"><span className={scr.cb}>{hm(meta.h.scrubLeftStartMin)}</span> → <span className={scr.ca}>{hm(meta.h.scrubLeftEndMin)}</span>{scr.days != null && <> · <span className={scr.cd}>{scr.days} d</span></>}</span>, scr.cls ? scr.open : undefined],
+          ["Scrubber", <span className="use scr-v"><span><span className={scr.cb}>{hm(meta.h.scrubLeftStartMin).replace(" min", "")}</span> → <span className={scr.ca}>{hm(meta.h.scrubLeftEndMin).replace(" min", "")}</span></span><small>před → po{scr.days != null && <> · <span className={scr.cd}>{scr.days} d</span></>}</small></span>, scr.cls ? scr.open : undefined],
           ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
           ["Setpoint", <SpTile meta={meta} />],
           ["Hustota plynu", <span className="use">{num(meta.sum.densMax, 1)} g/l<small>max · hranice 5,2 / 6,2</small></span>],

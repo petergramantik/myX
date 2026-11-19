@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.10";
+export const APP_VERSION = "1.34.11";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.11", date: "2026-11-19", title: "Jednotná mřížka V kostce", items: [
+    "V kostce: dlaždice mají stejnou šířku i výšku, obsah se zalomí uvnitř a nepřetéká přes okraj.",
+    "Scrubber na dva řádky: „7 h 00 → 5 h 25“ a pod tím „před → po · stáří“.",
+  ] },
   { version: "1.34.10", date: "2026-11-19", title: "Dlaždice Scrubber", items: [
     "Detail ponoru: dlaždice „Scrubber“ – zbývá před → po ponoru · stáří náplně; časy žlutě pod nastavením (výchozí 1 h 30 min), červeně pod 30 min, stáří žlutě nad nastavením.",
     "Rámeček dlaždice i při Souvislosti CO₂ (žlutě) a Alarmu CO₂ z počítače (červeně); klepnutí otevře hlášení o CO₂.",
