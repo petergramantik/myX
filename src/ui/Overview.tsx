@@ -89,15 +89,22 @@ function DeepestTile() {
 
 // easter egg: dvojklik na „Kde jsem“
 const EGG = ["Cype, ty jsi pěkně v piči, když ani nevíš, kaj jsi!", "Dycky Most!", "Kaj su? Šak v prdeli, jak dycky.", "Pyčo, GPS ti nepomože, ty se ztratíš aj na hajzlu.", "Ty vole, aj kompas by s tebu skončil.", "Kaj jsi? Na šachtě, ne? Šak tma je jak v řiti.", "Cype, pod vodu nevíš kaj, nad vodu taky ne. Talent!", "Šak se podívej kolem, ty kokote, je tam voda.", "Dycky Ostrava, aj kdyby to byl Egypt.", "Kurva, dyť jsi tu byl minule, ne?", "Pyčo, buddy ví kaj je. A ty?", "Kaj jsi? V piči. Kaj jinde, cype.", "Ty se ztratíš aj s navigací v řiti.", "Šak ti to tu hlídám, ty vole, a ty eště furt nevíš.", "Cype, Strany potápěčské to vědí, jen ty ne.", "Jak se ti tu líbí, ty ztracená duše?", "Kaj su, kaj su… Šak u lomu, pyčo!", "Dycky Heřmanice. Aj když nejsou.", "Mapa je na nic, když ji čte kokot.", "Kurva, eště jednu a jdeme do hospody.", "Ty jsi tak ztracený, že tě nenajde aj Petrel.", "Pyčo, napřed se nauč, kaj je sever.", "Kaj jsi? Daleko od rozumu, cype.", "Šak se nestresuj, aj ryba neví, kaj je.", "Dycky je to tam, kaj nejsi ty.", "Cype, eště jednou klikneš a pošlu tě do Mostu.", "Ty vole, aj plovák má lepší orientaci.", "Kaj su? Šak doma neni, to je jisté.", "Pyčo, pod vodu je to jedno, tam si každý v piči.", "Ztratit se umíš líp jak ponořit, cype."];
-let eggBag: number[] = [];
+let eggBag: number[] = [], eggN = 0;
+const EGG_WARN = EGG.findIndex((x) => x.includes("eště jednou klikneš"));
 function useEgg() {
   const [text, setText] = useState<string | null>(null);
   const last = useRef(0);
   const tap = () => {
     const n = Date.now();
     if (n - last.current < 500) {
-      if (!eggBag.length) eggBag = EGG.map((_, i) => i).sort(() => Math.random() - 0.5);
-      setText(EGG[eggBag.pop()!]); last.current = 0;
+      // každé 4. zobrazení „eště jednou klikneš…“, ostatní náhodně bez opakování v kolečku
+      eggN++;
+      if (eggN % 4 === 0) setText(EGG[EGG_WARN]);
+      else {
+        if (!eggBag.length) eggBag = EGG.map((_, i) => i).filter((i) => i !== EGG_WARN).sort(() => Math.random() - 0.5);
+        setText(EGG[eggBag.pop()!]);
+      }
+      last.current = 0;
     } else last.current = n;
   };
   return { text, tap, close: () => setText(null) };
