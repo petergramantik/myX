@@ -361,21 +361,29 @@ function GuestNote({ note }: { note: DiveNote }) {
   );
 }
 
-/** Barevné události pod grafem: varování a informace, jejichž odkaz vede do tohoto grafu. Klepnutím se graf přiblíží. */
-function ChartEvents({ warns, keys }: { warns: Alert[]; keys: string[] }) {
-  const items = warns.map((a) => ({ a, bs: (a.blocks || []).filter((b) => keys.includes(b.chart)) })).filter((x) => x.bs.length);
-  if (!items.length) return null;
+/** Barevné události pod grafem (varování a informace s odkazem do tohoto grafu), chronologicky, ve sbalovacím řádku.
+ *  Klepnutí na událost nastaví posuvník; odkaz z detailu ponoru seznam rozbalí a událost zvýrazní. */
+function ChartEvents({ warns, keys, focus }: { warns: Alert[]; keys: string[]; focus?: ChartFocus | null }) {
+  const sk = "myx.ev." + keys[0];
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem(sk) === "1"; } catch { return false; } });
+  const set = (v: boolean) => { setOpen(v); try { localStorage.setItem(sk, v ? "1" : "0"); } catch { /* bez úložiště */ } };
+  const mine = !!focus && (keys.includes(focus.chart));
+  useEffect(() => { if (mine) setOpen(true); }, [focus]);
+  const rows = warns.flatMap((a) => (a.blocks || []).filter((b) => keys.includes(b.chart)).map((b) => ({ a, b, txt: (b.head || a.text.split("\n")[0]).replace(/^\d+\. /, "") })))
+    .sort((x, y) => x.b.from - y.b.from);
+  if (!rows.length) return null;
   return (
     <div className="chart-ev">
-      {items.map(({ a, bs }, i) => bs.length === 1
-        ? <p key={i} className={"small c-" + a.level} onClick={() => showInChart(bs[0])}>• {a.title}: {bs[0].head || a.text.split("\n")[0]}</p>
-        : <div key={i}><p className={"small c-" + a.level}>• {a.title}:</p>{bs.map((b, k) => <p key={k} className={"small ev-sub c-" + a.level} onClick={() => showInChart(b)}>{b.head}</p>)}</div>)}
+      <button className="ev-head" onClick={() => set(!open)}>{open ? "▾" : "▸"} Události ({rows.length})</button>
+      {open && rows.map(({ a, b, txt }, i) => (
+        <p key={i} className={"small c-" + a.level + (mine && focus!.from === b.from ? " ev-on" : "")} onClick={() => showInChart(b)}>• {/^\d+′\d+″/.test(txt) ? "" : tpt(b.from) + " "}{a.title.replace(/ – \d+×$/, "")}: {txt}</p>
+      ))}
     </div>
   );
 }
 
 /** CO₂ ve smyčce (hlavní údaj) se zátěží a hustotou plynu (doplňkově, pravá osa). */
-function Co2Card({ d, focusT, warns }: { d: Dive; focusT?: number; warns: Alert[] }) {
+function Co2Card({ d, focusT, warns, focus }: { d: Dive; focusT?: number; warns: Alert[]; focus?: ChartFocus | null }) {
   const s = d.s;
   const base = useEffortBase();
   const w = useMemo(() => workloadIndex(d, base).map((x) => (x == null ? null : Math.min(4, x))), [d, base]);
@@ -402,7 +410,7 @@ function Co2Card({ d, focusT, warns }: { d: Dive; focusT?: number; warns: Alert[
           { label: "Hustota (g/l)", color: "#4fc3f7", values: dens, unit: "g/l", width: 1.2, dash: "4 3", right: true },
         ]}
         extra={[{ label: "Zátěž", values: wTxt }, ...(hasCo2 ? [{ label: "Surová hodnota CO₂", values: s.co2raw }] : [])]} />
-      <ChartEvents warns={warns} keys={["co2", "effort"]} />
+      <ChartEvents warns={warns} keys={["co2", "effort"]} focus={focus} />
       <p className="note">{hasCo2 ? <><b>CO₂</b> ve smyčce (levá osa, mbar) je hlavní údaj. </> : null}<b>Zátěž</b> (pravá osa) = rychlost poklesu pO₂ opravená o změnu tlaku, úměrná spotřebě O₂, tedy námaze; 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Nepočítá se při klesání, u hladiny, po přepnutí SP a po ruční dávce O₂ (než se pO₂ ustálí) a 90 s po doplnění diluentu – v čáře je mezera, důvod v pruhu pod grafem. Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). <b>Hustota plynu</b> (pravá osa, g/l, čárkovaně): nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně; max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min. Fialové čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p>
     </Card>
   );
@@ -745,14 +753,14 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
             { label: cellName(1), color: C[1], values: cells[0], unit: "mV", width: 1 }, { label: cellName(2), color: C[2], values: cells[1], unit: "mV", width: 1 }, { label: cellName(3), color: C[3], values: cells[2], unit: "mV", width: 1 },
           ]} extra={[{ label: "Průměr pO₂", values: s.ppo2, unit: "bar" }, ...depthExtra]} />
         )}
-        <ChartEvents warns={warns} keys={["po2"]} />
+        <ChartEvents warns={warns} keys={["po2"]} focus={focus} />
         <p className="note">
           {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
           {dz.length > 0 && <>Světle modře úseky, kdy pO₂ nad {fmtSp(th.po2HiWarn ?? 1.4)} bar dává sám diluent v dané hloubce (není to chyba, nevaruje se; klepnutím v legendě skryješ). </>}
           Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Pásma: červené = alarm vysokého pO₂ z počítače, oranžové = alarm nízkého pO₂, žluté / sytě červené = vlastní detekce vysokého pO₂, tyrkysové = čidla se rozcházejí o víc než 0,3 bar.
         </p>
       </Card></div>
-      <div data-chart="co2"><Co2Card d={d} focusT={fT("co2") ?? fT("effort")} warns={warns} /></div>
+      <div data-chart="co2"><Co2Card d={d} focusT={fT("co2") ?? fT("effort")} warns={warns} focus={focus} /></div>
       <Card title="Dekomprese">
         <LineChart t={s.t} series={[
           { label: "NDL", color: C[0], values: s.stopt.map((v, i) => (s.stop[i] > 0 || s.t[i] > d.h.diveTimeS ? null : v)), unit: "min" },
@@ -770,7 +778,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
       </Card>
       <div data-chart="press"><Card title="Tlak v láhvích">
         <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: s.dil, unit: "bar" }, { label: "O₂", color: C[2], values: s.o2p, unit: "bar" }]} extra={depthExtra} />
-        <ChartEvents warns={warns} keys={["press"]} />
+        <ChartEvents warns={warns} keys={["press"]} focus={focus} />
         <p className="note">Hodnota kolem 8–11 bar u O₂ odpovídá mezitlaku prvního stupně, ne tlaku v láhvi.</p>
       </Card></div>
       <div data-chart="temp"><Card title="Teplota a baterie">
