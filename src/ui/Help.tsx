@@ -52,7 +52,7 @@ export function HelpScreen() {
         <p><b>O₂ čidla:</b> historie citlivosti (mV na vzduchu, stárnutí, current limiting), rozjetí v ponoru – jedno vadné čidlo, nebo vlhkost / zatékání (víc čidel najednou), vyřazené čidlo z hlasování.</p>
         <p><b>CO₂:</b> vysoké hodnoty a alarmy, věrohodnost čidla (oříznutá nula, nesmyslné hodnoty), souvislost s námahou, hustotou plynu a dávkami.</p>
         <p><b>pO₂:</b> nízké pO₂ při zanoření rozlišené podle průběhu – dohánění setpointu vs. podezření na hypoxii (zavřený ventil O₂), vysoké pO₂, pN₂ / END.</p>
-        <p><b>Setpoint:</b> kdy a jak jsi přepnul (ručně v menu), pozdní přepnutí, klesání s vysokým SP, 0,19 mimo závěr.</p>
+        <p><b>Setpoint:</b> kdy a jak jsi přepnul (ručně v menu), pozdní přepnutí (víc než 2 min po dosažení dna, hodnotí se jen první přepnutí nahoru; jako informace v Událostech, nebo po zapnutí v Nastavení jako žluté varování s tagem SP), klesání s vysokým SP, 0,19 mimo závěr.</p>
         <p><b>Plyny a lahve:</b> spotřeba onboard lahví, externí lahev, přechod z onboard na externí, nízký tlak, dávky O₂ (solenoid / ručně).</p>
         <p><b>Počítač:</b> varování na displeji a jejich potvrzení, baterie, nízké NDL.</p>
         <p><b>Vysoké pO₂:</b> kromě alarmu z počítače hlídá myX samo: žlutě nad 1,4 bar déle než 1 min mimo deko zastávky, červeně nad 1,6 bar (Nastavení → Upozornění). V seznamu tag pO₂, v grafu pásma. Když nad 1,4 bar dostane pO₂ sám diluent v hloubce, nevaruje se – v grafu je to světle modré pásmo (klepnutím v legendě skryješ); nad 1,6 bar je vždy červeně.</p>

@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.38";
+export const APP_VERSION = "1.38.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.38.1", date: "2026-11-19", title: "Pozdní přepnutí setpointu", items: [
+    "Pozdní přepnutí se hodnotí jen u prvního přepnutí na vysoký SP v ponoru.",
+    "Výchozí hranice 2 min po dosažení dna (vlastní hodnota zůstává).",
+    "Nová volba v Nastavení → Setpoint: pozdní přepnutí jako žluté varování s tagem SP (výchozí vypnuto).",
+  ] },
   { version: "1.38", date: "2026-11-19", title: "pO₂ z diluentu", items: [
     "Vysoké pO₂ nad 1,4 bar, které v hloubce dává sám diluent, už není varování – v grafu pO₂ je světle modré pásmo „pO₂ z diluentu“.",
     "Pásmo jde skrýt klepnutím v legendě, volba platí pro všechny ponory.",

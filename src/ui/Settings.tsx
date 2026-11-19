@@ -68,7 +68,8 @@ export function SettingsScreen() {
         <h3 className="subh">CO₂</h3>
           <label>Podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar ?? 5} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>
         <h3 className="subh">Setpoint</h3>
-          <label>Pozdní přepnutí na vysoký: víc než (min) po dosažení dna<input inputMode="decimal" defaultValue={th.spLateMin ?? 5} onBlur={(e) => { const n = parseFloat(e.target.value.replace(",", ".")); if (!Number.isNaN(n)) saveSettings({ th: { ...th, spLateMin: n }, spLateSet: true }); }} /></label>
+          <label>Pozdní přepnutí na vysoký: víc než (min) po dosažení dna<input inputMode="decimal" defaultValue={th.spLateMin ?? 2} onBlur={(e) => { const n = parseFloat(e.target.value.replace(",", ".")); if (!Number.isNaN(n)) saveSettings({ th: { ...th, spLateMin: n }, spLateSet: true }); }} /></label>
+          <label className="check"><input type="checkbox" checked={!!th.spLateWarn} onChange={(e) => saveSettings({ th: { ...th, spLateWarn: e.target.checked } })} /> Pozdní přepnutí jako varování (žlutě v detailu ponoru a tag SP; vypnuto = jen informace v Událostech)</label>
           <label>Oscilace hloubky na dně (m)<input inputMode="decimal" defaultValue={th.spOsc ?? 3} onBlur={(e) => setTh("spOsc", e.target.value)} /></label>
           <label>Výraznější klesání s vysokým SP (m)<input inputMode="decimal" defaultValue={th.spDescM ?? 6} onBlur={(e) => setTh("spDescM", e.target.value)} /></label>
         <h3 className="subh">Srovnání</h3>

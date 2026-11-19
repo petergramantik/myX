@@ -287,7 +287,8 @@ function diveTagsOfMeta(metas: Meta[], m: Meta, th: Parameters<typeof cellDiveWa
   const idx = metas.findIndex((x) => x.id === m.id);
   const cw = idx >= 0 ? cellDiveWarnings(metas, idx, th) : [];
   const hi = po2HiLevel(m.sum, th);
-  return diveTagsOf([...(m.warns || []), ...cw, ...(hi ? [{ level: hi, title: "Vysoké pO₂ (vlastní detekce)" }] : [])]);
+  const late = th.spLateWarn && m.sum.spLate != null && m.sum.spLate > (th.spLateMin ?? 2);
+  return diveTagsOf([...(m.warns || []), ...cw, ...(hi ? [{ level: hi, title: "Vysoké pO₂ (vlastní detekce)" }] : []), ...(late ? [{ level: "warn", title: "Pozdní přepnutí na vysoký setpoint" }] : [])]);
 }
 
 /** Nejzávažnější úroveň tagů pro rámeček kompaktního řádku. */

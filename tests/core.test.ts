@@ -120,6 +120,7 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   const w2 = spWarnings(d2, { sp }, { ...SP_RULES, lateMin: 0.5 });
   ok(w2.some((a) => a.title === "Pozdní přepnutí na vysoký setpoint" && /po dosažení dna/.test(a.text)), "pozdní setpoint měřený od dosažení dna");
   ok(!spWarnings(d2, { sp }).some((a) => a.title === "Pozdní přepnutí na vysoký setpoint" || a.title === "Klesání s vysokým setpointem"), "včasné přepnutí bez varování");
+  ok(w2.find((a) => a.title.startsWith("Pozdní"))?.level === "info" && spWarnings(d2, { sp }, { ...SP_RULES, lateMin: 0.5, lateWarn: true }).find((a) => a.title.startsWith("Pozdní"))?.level === "warn", "pozdní přepnutí: info, s přepínačem varování");
 }
 { // převzetí lokality a buddy ze Shearwater Cloud jen tam, kde nic není
   const lb = emptyLogbook(); lb.notes.b = { buddyIds: [], note: "moje", siteId: undefined, updated: 1 };

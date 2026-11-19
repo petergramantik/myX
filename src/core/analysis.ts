@@ -7,7 +7,7 @@ export interface Summary {
   avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[]; dilUse: GasUse; o2Use: GasUse; pn2Max: number;
   btnN: number; menuN: number; offMainS: number;
   densMax: number; vents: number; co2Bad: boolean; po2HiN: number; po2LoN: number; /** nejdelší čas (s) nad PO2_HI_STEPS mimo deko */ po2Hi?: number[]; /** základ zátěže (bar/min) při nízkém / vysokém SP a spotřeba O₂ z lahve (bar/min) */ wLo?: number | null; wHi?: number | null; o2Rate?: number | null; startPo2: StartPo2Level; spreadMin: number; cellIssue: CellIssue;
-  sp: SpChange[]; dose: { sol: number; man: number; amb: number; dil: number; manPreSw: number };
+  sp: SpChange[]; /** zpoždění prvního přepnutí na vysoký SP po dosažení dna (min) */ spLate?: number | null; dose: { sol: number; man: number; amb: number; dil: number; manPreSw: number };
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
 }
@@ -142,8 +142,8 @@ export function setpointChanges(d: Dive): SpChange[] {
   return out;
 }
 /** Parametry hodnocení setpointu: hranice pozdního přepnutí (min), oscilace dna (m), výraznější klesání (m). */
-export interface SpRules { lateMin: number; osc: number; descM: number; stableS: number; /** menší klesání se hlásí jen při pO₂ nad po2Bad */ descMinM?: number; po2Bad?: number }
-export const SP_RULES: SpRules = { lateMin: 5, osc: 3, descM: 6, stableS: 180, descMinM: 3, po2Bad: 1.6 };
+export interface SpRules { lateMin: number; /** pozdní přepnutí jako varování */ lateWarn?: boolean; osc: number; descM: number; stableS: number; /** menší klesání se hlásí jen při pO₂ nad po2Bad */ descMinM?: number; po2Bad?: number }
+export const SP_RULES: SpRules = { lateMin: 2, osc: 3, descM: 6, stableS: 180, descMinM: 3, po2Bad: 1.6 };
 
 /**
  * Začátek „dna“, na kterém byl vysoký setpoint přepnut: jde se zpět od přepnutí, dokud hloubka nezačne
@@ -154,6 +154,17 @@ function plateauStart(d: Dive, j: number, osc: number): number {
   let mx = s.depth[j], k = j;
   while (k > 0 && s.depth[k - 1] >= mx - osc) { k--; mx = Math.max(mx, s.depth[k]); }
   return k;
+}
+
+/** Zpoždění (min) prvního přepnutí na vysoký SP po dosažení dna (dno ≥ 10 m), jinak null – pro tag SP. */
+export function spLateDelay(d: Dive, sp: SpChange[], osc = SP_RULES.osc): number | null {
+  const s = d.s;
+  const held = (c: SpChange) => { const nx = sp.find((x) => x.t > c.t && x.to < 1.0); return (nx ? nx.t : d.h.diveTimeS) - c.t; };
+  const c = sp.find((x) => x.to >= 1.0 && x.from < 1.0 && held(x) >= 120);
+  if (!c) return null;
+  const j = s.t.findIndex((t) => t >= c.t); if (j < 0) return null;
+  const p = plateauStart(d, j, osc);
+  return s.depth[p] >= 10 ? Math.round((c.t - s.t[p]) / 6) / 10 : null;
 }
 
 export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RULES): Alert[] {
@@ -179,8 +190,10 @@ export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RU
     prevT = c.t;
     const txt = [...short, `${fmin(c.t)} min → ${fmt(c.to)} (${fmt(c.depth)} m), ${fmt(Math.round(delay * 10) / 10)} min po dosažení dna (${fmt(s.depth[p])} m)${c.manual ? ", ručně v menu Petrelu" : ""}.`].join(" ");
     const blk: AlertBlock[] = [{ head: "", steps: [], from: s.t[p], to: c.t, chart: "po2" }];
-    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: "info", title: "Pozdní přepnutí na vysoký setpoint", text: txt, blocks: blk });
-    else if (k === 0) out.push({ level: "info", title: "Přepnutí setpointu", text: txt, blocks: blk });
+    // hodnotí se jen první přepnutí nahoru; další (po návratu na nízký SP) se nehodnotí – jsou v tabulce Setpoint
+    if (k > 0) continue;
+    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: r.lateWarn ? "warn" : "info", title: "Pozdní přepnutí na vysoký setpoint", text: txt, blocks: blk });
+    else out.push({ level: "info", title: "Přepnutí setpointu", text: txt, blocks: blk });
   }
   if (!startHigh && !ups.length && d.h.maxDepth > 10) {
     // bez přepnutí: varovat jen pokud se potápěč na dně ≥ lateMin zdržel
@@ -373,6 +386,7 @@ export function summarize(d: Dive): Summary {
     menuN: d.buttons.filter((b) => b.t >= 0 && b.t <= d.h.diveTimeS && b.from === SCR_MAIN && b.to === SCR_MENU).length,
     offMainS: offMain(d),
     sp: setpointChanges(d),
+    spLate: spLateDelay(d, setpointChanges(d)),
     dose: doseSummary(d),
     densMax: Math.max(0, ...gasDensity(d).filter((x): x is number => x != null)),
     vents: dilVents(d).length,
@@ -438,8 +452,8 @@ export interface Alert { level: "warn" | "bad" | "info"; title: string; text: st
 /** Minuty jako „4 h 41 min“. */
 export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
 
-export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number; spOsc?: number; spDescM?: number; spBelow?: number; spAbove?: number; po2Lo?: number; po2LoMin?: number; po2Hypo?: number; po2LoWarnS?: number; po2LoBadS?: number; pn2Hot?: number; po2HiWarn?: number; po2HiBad?: number; po2HiWarnS?: number; scrubLeftMin?: number }
-export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 5, spOsc: 3, spDescM: 6, spBelow: 0.15, spAbove: 0.2, po2Lo: 0.4, po2LoMin: 0.3, po2Hypo: 0.21, po2LoWarnS: 30, po2LoBadS: 120, pn2Hot: 3.16, po2HiWarn: 1.4, po2HiBad: 1.6, po2HiWarnS: 60, scrubLeftMin: 90 };
+export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: number; batMarginV: number; spLateMin?: number; spOsc?: number; spDescM?: number; spBelow?: number; spAbove?: number; po2Lo?: number; po2LoMin?: number; po2Hypo?: number; po2LoWarnS?: number; po2LoBadS?: number; pn2Hot?: number; po2HiWarn?: number; po2HiBad?: number; po2HiWarnS?: number; scrubLeftMin?: number; /** pozdní přepnutí SP jako žluté varování (jinak info) */ spLateWarn?: boolean }
+export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 2, spOsc: 3, spDescM: 6, spBelow: 0.15, spAbove: 0.2, po2Lo: 0.4, po2LoMin: 0.3, po2Hypo: 0.21, po2LoWarnS: 30, po2LoBadS: 120, pn2Hot: 3.16, po2HiWarn: 1.4, po2HiBad: 1.6, po2HiWarnS: 60, scrubLeftMin: 90 };
 
 const DAY = 86400;
 const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC" });
@@ -863,7 +877,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
     if (ef.vents >= lim) { const vs = dilVents(d); out.push({ level: "info", title: "Časté doplňování diluentu", text: `${ef.vents}× doplnění diluentu bez klesání (ADV, proplach smyčky nebo masky, ruční přidání)${base?.vents != null ? ` – obvykle ${base.vents.toLocaleString("cs-CZ")}× za ponor` : ""}: ${vs.map((t) => `${tpt(t)} (${d.s.depth[at(t)].toLocaleString("cs-CZ", { maximumFractionDigits: 0 })} m)`).join(", ")}.`, blocks: vs.map((t, k) => ({ head: `${k + 1}. ${tpt(t)}`, steps: [], from: Math.max(0, t - 60), to: t + 60, chart: "effort" as ChartKey })) }); } }
   // zvýšená zátěž (skutečná námaha)
   if (ef.high.length) out.push({ level: "info", title: `Zvýšená zátěž${ef.high.length > 1 ? ` – ${ef.high.length}×` : ""}`, text: ef.high.map((h) => `${tpt(h.from)}–${tpt(h.to)} až ${h.max.toLocaleString("cs-CZ")}× obvyklé${h.o2 != null ? `, spotřeba O₂ ${h.o2.toLocaleString("cs-CZ")}×` : ""}${h.co2 ? ", následně nárůst CO₂" : ""}`).join("; ") + ".", blocks: ef.high.map((h) => ({ head: `${tpt(h.from)}–${tpt(h.to)} (${dur(h.to - h.from)}), až ${h.max.toLocaleString("cs-CZ")}×${h.co2 ? ", nárůst CO₂" : ""}`, steps: [], from: h.from, to: h.to, chart: "effort" as ChartKey })) });
-  out.push(...spWarnings(d, sum, { ...SP_RULES, lateMin: th.spLateMin ?? 5, osc: th.spOsc ?? 3, descM: th.spDescM ?? 6, po2Bad: th.po2HiBad ?? 1.6 }));
+  out.push(...spWarnings(d, sum, { ...SP_RULES, lateMin: th.spLateMin ?? 2, lateWarn: !!th.spLateWarn, osc: th.spOsc ?? 3, descM: th.spDescM ?? 6, po2Bad: th.po2HiBad ?? 1.6 }));
   const mv = [d.s.mv1, d.s.mv2, d.s.mv3];
   mv.forEach((a, k) => {
     const mid = d.s.depth.map((x, i) => (x > 1.5 ? a[i] : null)).filter((x): x is number => x != null);
