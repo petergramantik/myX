@@ -80,6 +80,7 @@ export function HelpScreen() {
       <H title="8. Přehled a nastavení">
         <p><b>Přehled:</b> stav O₂ čidel a CO₂ čidla, scrubber, baterie, nejhlubší ponory, poslední ponor; ⚠ vpravo nahoře shrnuje všechna aktuální varování.</p>
         <p><b>Nastavení:</b> objemy onboard lahví, datum náplně scrubberu, prahy upozornění po oblastech, záloha, reset logbooku.</p>
+        <p>Důležité je neklikat 2× na nadpis „Kde jsem“ na Přehledu.</p>
       </H>
     </div>
   );

@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.37.1";
+export const APP_VERSION = "1.37.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.37.2", date: "2026-11-19", title: "Drobnosti", items: [
+    "Doplněná nápověda k Přehledu.",
+  ] },
   { version: "1.37.1", date: "2026-11-19", title: "Drobnosti", items: [
     "Drobná vylepšení Přehledu.",
   ] },

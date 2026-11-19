@@ -176,7 +176,7 @@ export function OverviewScreen() {
       )}
       <div className="center"><ImportButton /></div>
 
-      <Card title="Kde jsem" onTitle={egg.tap}>
+      <Card title="Kde jsem" onTitle={egg.tap} id="where">
         {egg.text && <div className="egg"><span>{egg.text}</span><button className="egg-x" aria-label="Zavřít" onClick={egg.close}>✕</button></div>}
         {st.pos ? (
           here ? <p>📍 <a onClick={() => go({ t: "site", id: here.id })}>{here.name}</a> <small className="muted">({num(near!.km * 1000, 0)} m)</small></p> : (
