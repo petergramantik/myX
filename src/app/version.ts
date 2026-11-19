@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.36";
+export const APP_VERSION = "1.36.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.36.1", date: "2026-11-19", title: "Přejetí po celé obrazovce", items: [
+    "Swipe (např. z Varování zpět na Přehled) funguje i na prázdném místě pod obsahem.",
+  ] },
   { version: "1.36", date: "2026-11-19", title: "Zátěž podle osobního základu, scrubber, solenoid", items: [
     "Zátěž: nepočítá se 3–4 min po přepnutí SP, ruční dávce O₂ a doplnění diluentu (šedě s důvodem); 1 = tvoje obvyklá úroveň z tvých ponorů; v grafu max. 4×.",
     "Nové „Zvýšená zátěž“: nad 2× obvyklé aspoň 3 min, potvrzená spotřebou O₂ z lahve (je-li k dispozici), s údajem o následném nárůstu CO₂.",
