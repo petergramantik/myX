@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.3";
+export const APP_VERSION = "1.34.4";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.4", date: "2026-11-19", title: "Alarmy pO₂ červeně", items: [
+    "Alarm vysokého i nízkého pO₂ z počítače během ponoru je červený (detail, tag pO₂, rámeček řádku); nízké pO₂ při setpointu 0,19 před výstupem zůstává žluté.",
+  ] },
   { version: "1.34.3", date: "2026-11-19", title: "Formát časů", items: [
     "Okamžiky v ponoru jako 11′36″ (osa řešení, varování, události, popisek grafu), délky pod minutu jako „44 s“, delší 1′05″.",
     "Osa řešení: jen „alarm ztlumen“ s hodnotou.",

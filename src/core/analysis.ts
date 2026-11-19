@@ -733,7 +733,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     const tot = as.reduce((x, a) => x + alarmEnd(d, a) - a.start, 0);
     const lowSp = kind === "po2low" && as.some((a) => d.s.sp[d.s.t.findIndex((t) => t >= a.start)] < 0.3);
     const steps = as.slice(0, 3).flatMap((a, k) => [...(as.length > 1 ? [`${k + 1}. alarm ${mmss(a.start)}:`] : []), ...resolutionSteps(d, a.start, a.end, kind, th, as[k + 1]?.start ?? Infinity)]);
-    out.push({ level: kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
+    out.push({ level: kind === "po2low" && lowSp ? "warn" : "bad", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
       text: withSteps(`${as.length}× (${as.map((a) => `${mmss(a.start)}–${mmss(alarmEnd(d, a))}`).join(", ")}), celkem ${dur(tot)}.`, steps) });
   }
   const cs = cellSpread(d);
