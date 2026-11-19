@@ -188,11 +188,11 @@ export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RU
       .map((x) => { const back = sum.sp.find((y) => y.t > x.t && y.to < 1.0); return `Krátce: ${tpt(x.t)} → ${fmt(x.to)} (${fmt(x.depth)} m)${back ? `, po ${dur(back.t - x.t)} zpět na ${fmt(back.to)}` : ""}.`; });
     prevT = c.t;
     const txt = [...short, `${tpt(c.t)} → ${fmt(c.to)} (${fmt(c.depth)} m), ${dur(c.t - s.t[p])} po dosažení dna (${fmt(s.depth[p])} m)${c.manual ? ", ručně v menu Petrelu" : ""}.`].join(" ");
-    const blk: AlertBlock[] = [{ head: "", steps: [], from: s.t[p], to: c.t, chart: "po2" }];
     // hodnotí se jen první přepnutí nahoru; další (po návratu na nízký SP) se nehodnotí – jsou v tabulce Setpoint
     if (k > 0) continue;
-    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: r.lateWarn ? "warn" : "info", title: "Pozdní přepnutí na vysoký setpoint", text: txt, blocks: blk });
-    else out.push({ level: "info", title: "Přepnutí setpointu", text: txt, blocks: blk });
+    // odkaz do grafu (posuvník na okamžik přepnutí) jen u varování; modré informace zůstávají v Událostech
+    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: r.lateWarn ? "warn" : "info", title: "Pozdní přepnutí na vysoký setpoint", text: txt, ...(r.lateWarn ? { blocks: [{ head: "", steps: [], from: c.t, to: c.t + 60, chart: "po2" as ChartKey }] } : {}) });
+    else out.push({ level: "info", title: "Přepnutí setpointu", text: txt });
   }
   if (!startHigh && !ups.length && d.h.maxDepth > 10) {
     // bez přepnutí: varovat jen pokud se potápěč na dně ≥ lateMin zdržel

@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.39.1";
+export const APP_VERSION = "1.39.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.39.2", date: "2026-11-19", title: "Události pod grafy", items: [
+    "Přepnutí setpointu (a pozdní přepnutí jako informace) už pod grafem ani s odkazem do grafu není – jen v Událostech.",
+    "Pozdní přepnutí jako varování vede posuvníkem přímo na okamžik přepnutí.",
+    "Události bez krátkého popisu ukazují pod grafem svůj text.",
+  ] },
   { version: "1.39.1", date: "2026-11-19", title: "Ovládání grafů", items: [
     "Odkaz z upozornění jen posune na graf (i s nadpisem) a nastaví posuvník, nepřibližuje.",
     "Vpravo od grafů tlačítka + / 0 / − (přiblížení kolem posuvníku, celý graf, oddálení).",

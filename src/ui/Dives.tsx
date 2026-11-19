@@ -368,7 +368,7 @@ function ChartEvents({ warns, keys }: { warns: Alert[]; keys: string[] }) {
   return (
     <div className="chart-ev">
       {items.map(({ a, bs }, i) => bs.length === 1
-        ? <p key={i} className={"small c-" + a.level} onClick={() => showInChart(bs[0])}>• {a.title}{bs[0].head ? `: ${bs[0].head}` : ""}</p>
+        ? <p key={i} className={"small c-" + a.level} onClick={() => showInChart(bs[0])}>• {a.title}: {bs[0].head || a.text.split("\n")[0]}</p>
         : <div key={i}><p className={"small c-" + a.level}>• {a.title}:</p>{bs.map((b, k) => <p key={k} className={"small ev-sub c-" + a.level} onClick={() => showInChart(b)}>{b.head}</p>)}</div>)}
     </div>
   );
