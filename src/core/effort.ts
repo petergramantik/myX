@@ -47,10 +47,22 @@ export function co2Valid(d: Dive): (number | null)[] {
  * Metabolická zátěž: rychlost poklesu pO₂ (bar/min) mezi dávkami O₂ při stálé hloubce nebo výstupu (opraveno o změnu tlaku), posuvné okno 3 min.
  * Pokles pO₂ ve smyčce = spotřeba O₂ / objem smyčky a na hloubce nezávisí. Šum snímače (malé nárůsty) se odečítá.
  */
+/** Důvod, proč se v daném vzorku zátěž nepočítá (rušivý zásah do smyčky), jinak "". */
+export function workloadSkip(d: Dive): string[] {
+  const s = d.s, n = s.t.length, out: string[] = Array(n).fill("");
+  const mark = (t0: number, sec: number, why: string) => { for (let i = 0; i < n; i++) if (s.t[i] >= t0 && s.t[i] <= t0 + sec && !out[i]) out[i] = why; };
+  for (let i = 1; i < n; i++) if (Math.abs(s.sp[i] - s.sp[i - 1]) >= 0.1) mark(s.t[i], 240, "po přepnutí SP");
+  // ruční dávka (nárůst pO₂ nad setpointem) – smyčka se promíchává
+  for (let i = 1; i + 3 < n; i++) if (s.ppo2[i] > s.sp[i] + 0.05 && s.ppo2[i + 3] - s.ppo2[i] >= 0.05 && s.depth[i] > 1.5) { mark(s.t[i], 180, "po ruční dávce O₂"); i += 3; }
+  for (const t of dilVents(d)) mark(t, 180, "po doplnění diluentu");
+  return out;
+}
+
 export function workload(d: Dive, winS = 180): (number | null)[] {
-  const s = d.s, n = s.t.length;
+  const s = d.s, n = s.t.length, skip = workloadSkip(d);
   const dec: number[] = Array(n).fill(0), noise: number[] = Array(n).fill(0), ok: number[] = Array(n).fill(0);
   for (let i = 1; i < n; i++) {
+    if (skip[i]) continue;
     // klesání přidává diluent (mění podíl O₂) → jen stálá hloubka nebo výstup; úsek od 3 m k hladině vynechat
     if (!inDive(d, i) || !inDive(d, i - 1) || s.depth[i] - s.depth[i - 1] > 0.3 || s.depth[i] < 3 || s.depth[i - 1] < 3) continue;
     // pokles pO₂ opravený o změnu okolního tlaku: (podíl O₂ teď − předtím) × tlak teď = spotřeba / objem smyčky
@@ -64,7 +76,7 @@ export function workload(d: Dive, winS = 180): (number | null)[] {
   for (let i = 0; i < n; i++) {
     D += dec[i]; N += noise[i]; T += ok[i];
     while (s.t[i] - s.t[a] > winS) { D -= dec[a]; N -= noise[a]; T -= ok[a]; a++; }
-    out.push(inDive(d, i) && T >= winS * 0.4 ? Math.round(Math.max(0, D - N) / (T / 60) * 1000) / 1000 : null);
+    out.push(inDive(d, i) && !skip[i] && T >= winS * 0.4 ? Math.round(Math.max(0, D - N) / (T / 60) * 1000) / 1000 : null);
   }
   return out;
 }
@@ -73,16 +85,25 @@ export function workload(d: Dive, winS = 180): (number | null)[] {
  * Relativní zátěž (1 = obvyklá úroveň v ponoru). Rychlost poklesu pO₂ se liší mezi nízkým a vysokým setpointem
  * (jiná regulace a mísení ve smyčce), proto se normalizuje zvlášť pro každou fázi setpointu.
  */
-export function workloadIndex(d: Dive): (number | null)[] {
+/** Základ zátěže ponoru: medián rychlosti poklesu pO₂ zvlášť při nízkém a vysokém setpointu (bar/min). */
+export function workloadBase(d: Dive): { lo: number | null; hi: number | null } {
   const w = workload(d), hi = d.s.sp.map((v) => v >= 1);
-  const med = (h: boolean) => median(w.filter((x, i): x is number => x != null && hi[i] === h && x > 0));
-  const mLo = med(false), mHi = med(true);
+  const m = (h: boolean) => { const a = w.filter((x, i): x is number => x != null && hi[i] === h && x > 0); return a.length >= 24 ? median(a) : null; };
+  return { lo: m(false), hi: m(true) };
+}
+/**
+ * Relativní zátěž (1 = obvyklá úroveň). Normuje se osobním základem potápěče (medián z jeho ponorů, zvlášť nízký a vysoký setpoint),
+ * když je k dispozici; jinak základem tohoto ponoru.
+ */
+export function workloadIndex(d: Dive, base?: { lo: number | null; hi: number | null } | null): (number | null)[] {
+  const w = workload(d), hi = d.s.sp.map((v) => v >= 1), own = workloadBase(d);
+  const mLo = base?.lo ?? own.lo ?? own.hi, mHi = base?.hi ?? own.hi ?? own.lo;
   return w.map((x, i) => { const m = hi[i] ? mHi : mLo; return x == null || !m ? null : Math.round((x / m) * 100) / 100; });
 }
 
 const median = (a: number[]) => { const b = [...a].sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
 
-/** Upouštění smyčky / vyfukování masky: pokles tlaku diluentu ≥ 2 bar za ≤ 1 min bez klesání (≤ 1 m). */
+/** Doplnění diluentu (ADV, proplach smyčky nebo masky, ruční přidání): pokles tlaku diluentu ≥ 2 bar za ≤ 1 min bez klesání (≤ 1 m). */
 export function dilVents(d: Dive): number[] {
   const s = d.s, out: number[] = [];
   let last = -999;
@@ -95,16 +116,34 @@ export function dilVents(d: Dive): number[] {
   return out;
 }
 
+/** Spotřeba O₂ z tlaku onboard lahve v oknech 10 min (bar/min); null, kde lahev zavřená nebo skok tlaku. */
+export function o2RateWindows(d: Dive, winS = 600): { from: number; to: number; rate: number }[] {
+  const s = d.s, out: { from: number; to: number; rate: number }[] = [];
+  const med = (a: number[]) => median(a);
+  for (let t0 = 0; t0 + winS <= d.h.diveTimeS; t0 += winS / 2) {
+    const idx = s.t.map((t, i) => i).filter((i) => s.t[i] >= t0 && s.t[i] <= t0 + winS);
+    const p = idx.map((i) => s.o2p[i]);
+    if (p.some((v) => v == null || v < 20) || idx.length < 20) continue;
+    if (p.some((v, k) => k > 0 && Math.abs(v! - p[k - 1]!) > 15)) continue; // skok = ventil nebo dávka, ne spotřeba
+    const a = med(p.slice(0, 12) as number[]), b = med(p.slice(-12) as number[]);
+    if (a - b >= 0) out.push({ from: t0, to: t0 + winS, rate: Math.round(((a - b) / (winS / 60)) * 100) / 100 });
+  }
+  return out;
+}
+
 export interface Effort {
   wMed: number | null; wHighMin: number;           // 1 = relativní zátěž k dispozici; minuty nad 1,3× obvyklé úrovně
   densMax: number; densOver52: number; densOver62: number; // hustota max (g/l) a minuty nad hranicemi
-  vents: number;                                   // upouštění/maska (počet)
+  vents: number;                                   // doplnění diluentu (počet)
   co2Notes: { t: number; level: "info" | "warn"; text: string }[];
+  /** úseky skutečně zvýšené zátěže: index > 2× základu aspoň 3 min (a spotřeba O₂ > 1,5×, je-li k dispozici) */
+  high: { from: number; to: number; max: number; o2: number | null; co2: boolean }[];
 }
+export interface EffortBase { lo: number | null; hi: number | null; o2?: number | null; vents?: number | null }
 
 /** Souhrn zátěže ponoru a souvislosti epizod zvýšeného CO₂ se zátěží a hustotou plynu. */
-export function effortOf(d: Dive, co2Limit = 5): Effort {
-  const s = { ...d.s, co2: co2Valid(d) }, w = workloadIndex(d), dens = gasDensity(d), dt = d.h.rateS || 5;
+export function effortOf(d: Dive, co2Limit = 5, base?: EffortBase | null): Effort {
+  const s = { ...d.s, co2: co2Valid(d) }, w = workloadIndex(d, base), dens = gasDensity(d), dt = d.h.rateS || 5;
   const wv = w.filter((x): x is number => x != null);
   const wMed = wv.length >= 10 ? 1 : null;
   const notes: Effort["co2Notes"] = [];
@@ -129,7 +168,27 @@ export function effortOf(d: Dive, co2Limit = 5): Effort {
     });
     i = j + Math.round(120 / dt); // další epizoda nejdřív za 2 min
   }
+  // zvýšená zátěž: index > 2 aspoň 3 min
+  const high: Effort["high"] = [];
+  const o2w = o2RateWindows(d), o2Base = base?.o2 ?? (o2w.length >= 3 ? median(o2w.map((x) => x.rate)) : null);
+  for (let i = 0, a = -1; i <= s.t.length; i++) {
+    const on = i < s.t.length && (w[i] ?? 0) > 2;
+    if (on && a < 0) a = i;
+    if (!on && a >= 0) {
+      const from = s.t[a], to = s.t[i - 1];
+      if (to - from >= 180) {
+        const win = o2w.filter((x) => x.to >= from && x.from <= to);
+        const o2 = win.length && o2Base ? Math.max(...win.map((x) => x.rate)) / o2Base : null;
+        if (o2 == null || o2 > 1.5) {
+          const c0 = s.co2[a] ?? null, cAfter = (s.co2.slice(a, Math.min(s.t.length, i + Math.round(180 / dt))).filter((v) => v != null) as number[]);
+          high.push({ from, to, max: Math.max(...(w.slice(a, i).filter((v) => v != null) as number[])), o2: o2 != null ? Math.round(o2 * 10) / 10 : null, co2: c0 != null && cAfter.length > 0 && Math.max(...cAfter) - c0 > 1 });
+        }
+      }
+      a = -1;
+    }
+  }
   return {
+    high,
     wMed, wHighMin: wMed ? wv.filter((x) => x > wMed * 1.3).length * dt / 60 : 0,
     densMax: Math.max(0, ...dens.filter((x): x is number => x != null)),
     densOver52: dens.filter((x) => x != null && x > 5.2).length * dt / 60,

@@ -133,7 +133,7 @@ const METRICS: Metric[] = [
   { key: "cns", label: "CNS na konci", v: (s) => s.cnsEnd, txt: (s) => `${s.cnsEnd} %`, scale: 5, w: 0.5 },
   { key: "dens", label: "Hustota plynu max", v: (s) => s.densMax, txt: (s) => `${f1(s.densMax)} g/l`, scale: 0.5, w: 0.8 },
   { key: "dens52", label: "Nad 5,2 g/l", v: (s) => s.dens52, txt: (s) => `${f1(s.dens52, 0)} min`, scale: 5, w: 0.6 },
-  { key: "vents", label: "Upouštění smyčky", v: (s) => s.vents, txt: (s) => `${s.vents}×`, scale: 3, w: 0.5 },
+  { key: "vents", label: "Doplnění diluentu", v: (s) => s.vents, txt: (s) => `${s.vents}×`, scale: 3, w: 0.5 },
   { key: "dil", label: "Diluent", v: () => null, txt: (s) => s.dil, scale: 1, w: 2, cat: true },
   { key: "temp", label: "Min. teplota", v: (s) => s.tempMin, txt: (s) => `${s.tempMin} °C`, scale: 2, w: 0.3 },
   { key: "btn", label: "Stisky tlačítek", v: (s) => s.btnN, txt: (s) => `${s.btnN}`, scale: 10, w: 0.2 },

@@ -10,7 +10,7 @@ import { partIds, shareDives } from "./share";
 import { ask } from "../app/dialog";
 import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, useBackLayer, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
-import { co2BadRanges, co2Valid, dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
+import { co2BadRanges, co2Valid, dilVents, effortOf, gasDensity, workloadIndex, workloadSkip, type EffortBase } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
 import { ChartDefs, LineChart, TissueMap, ZoomCtx } from "./Chart";
 
@@ -231,6 +231,17 @@ function spPins(d: Dive) {
 }
 
 /** Sloučí upozornění se stejným nadpisem do jednoho („Nadpis – N×“), popisy pod sebe; úroveň podle nejzávažnějšího. */
+/** Osobní základ potápěče z jeho ponorů v aktuálním logu (medián): zátěž, spotřeba O₂, doplňování diluentu. */
+function useEffortBase(): EffortBase | null {
+  const st = useStore();
+  return useMemo(() => {
+    const md = (a: (number | null | undefined)[]) => { const b = a.filter((x): x is number => x != null && x > 0).sort((p, q) => p - q); return b.length >= 3 ? b[b.length >> 1] : null; };
+    const ms = st.metas;
+    if (ms.length < 3) return null;
+    return { lo: md(ms.map((m) => m.sum.wLo)), hi: md(ms.map((m) => m.sum.wHi)), o2: md(ms.map((m) => m.sum.o2Rate)), vents: (() => { const v = ms.map((m) => m.sum.vents).sort((p, q) => p - q); return v[v.length >> 1]; })() };
+  }, [st.metas]);
+}
+
 /** Odkaz z varování do grafu: přepnout na Grafy, přiblížit a ukázat místo. */
 const focusBus = new EventTarget();
 type ChartFocus = { chart: string; from: number; to: number };
@@ -352,10 +363,14 @@ function GuestNote({ note }: { note: DiveNote }) {
 /** Zátěž (rychlost spotřeby O₂ ve smyčce) s CO₂ a hustota plynu. */
 function EffortCard({ d, focusT }: { d: Dive; focusT?: number }) {
   const s = d.s;
-  const w = useMemo(() => workloadIndex(d), [d]);
+  const base = useEffortBase();
+  const w = useMemo(() => workloadIndex(d, base).map((x) => (x == null ? null : Math.min(4, x))), [d, base]);
+  const skip = useMemo(() => workloadSkip(d), [d]);
   // zobrazení: posuvný průměr 2 min (bez skoků na 0 mezi dávkami); úseky bez údaje (klesání, hladina) jako pásmo
   const wSm = useMemo(() => w.map((_, i) => { if (w[i] == null) return null; let a = 0, n = 0; for (let k = i; k >= 0 && s.t[i] - s.t[k] <= 60; k--) if (w[k] != null) { a += w[k]!; n++; } for (let k = i + 1; k < w.length && s.t[k] - s.t[i] <= 60; k++) if (w[k] != null) { a += w[k]!; n++; } return n ? Math.round((a / n) * 100) / 100 : null; }), [w]);
-  const noW = useMemo(() => { const out: { from: number; to: number; color: string; label: string }[] = []; let a = -1; for (let i = 0; i <= s.t.length; i++) { const nul = i < s.t.length && s.t[i] <= d.h.diveTimeS && w[i] == null; if (nul && a < 0) a = i; if (!nul && a >= 0) { if (s.t[i - 1] - s.t[a] >= 60) out.push({ from: s.t[a], to: s.t[i - 1], color: "#90a4ae", label: "Zátěž bez údaje (klesání / hladina)" }); a = -1; } } return out; }, [w]);
+  const noW = useMemo(() => { const out: { from: number; to: number; color: string; label: string }[] = []; let a = -1, why = ""; const reason = (i: number) => skip[i] || "klesání / hladina";
+    for (let i = 0; i <= s.t.length; i++) { const nul = i < s.t.length && s.t[i] <= d.h.diveTimeS && w[i] == null; const r = nul ? reason(i) : ""; if (a >= 0 && (!nul || r !== why)) { if (s.t[i - 1] - s.t[a] >= 30) out.push({ from: s.t[a], to: s.t[i - 1], color: "#90a4ae", label: `Zátěž bez údaje – ${why}` }); a = -1; } if (nul && a < 0) { a = i; why = r; } } return out; }, [w, skip]);
+  const ef2 = useMemo(() => effortOf(d, 5, base), [d, base]);
   const co2V = useMemo(() => co2Valid(d), [d]);
   const dens = useMemo(() => gasDensity(d), [d]);
   const ef = useMemo(() => effortOf(d), [d]);
@@ -363,11 +378,11 @@ function EffortCard({ d, focusT }: { d: Dive; focusT?: number }) {
   const hasCo2 = s.co2.some((v) => v != null && v > 0);
   return (
     <Card title="Zátěž a dechová práce">
-      <LineChart t={s.t} bands={noW} bandLegend={noW.length ? [{ color: "#90a4ae", label: "bez údaje (klesání / hladina)" }] : undefined} marks={vents.map((t) => ({ t, color: "#cfd8dc" }))} series={[
-        { label: "Zátěž (1 = obvyklá)", color: "#ffb74d", values: wSm, unit: "×", width: 2 },
+      <LineChart t={s.t} bands={[...noW, ...ef2.high.map((h) => ({ from: h.from, to: h.to, color: "#ffb74d", label: `Zvýšená zátěž až ${h.max}×${h.co2 ? ", nárůst CO₂" : ""}` }))]} bandLegend={[...(noW.length ? [{ color: "#90a4ae", label: "bez údaje (klesání, po SP, dávce, diluentu)" }] : []), ...(ef2.high.length ? [{ color: "#ffb74d", label: "zvýšená zátěž" }] : [])]} marks={vents.map((t) => ({ t, color: "#cfd8dc" }))} series={[
+        { label: "Zátěž (1 = obvyklá, max. 4)", color: "#ffb74d", values: wSm, unit: "×", width: 2 },
         ...(hasCo2 ? [{ label: "CO₂", color: "#ef5350", values: co2V, unit: "mbar", right: true }] : []),
       ]} extra={[{ label: "Hloubka", values: s.depth, unit: "m" }]} />
-      <p className="note">Zátěž = rychlost poklesu pO₂ mezi dávkami O₂ při stálé hloubce (okno 3 min), úměrná spotřebě O₂, tedy námaze. Je relativní: 1 = obvyklá úroveň v tomto ponoru, normalizovaná zvlášť pro nízký a vysoký setpoint (regulace se liší). {ef.wHighMin >= 1 ? `Nad 1,3× obvyklé úrovně ${Math.round(ef.wHighMin)} min.` : ""} Šedé čárky dole = upouštění smyčky / vyfukování masky ({vents.length}×).</p>
+      <p className="note">Zátěž = rychlost poklesu pO₂ (opravená o změnu tlaku), úměrná spotřebě O₂, tedy námaze. 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Nepočítá se při klesání, u hladiny a 3–4 min po přepnutí SP, ruční dávce O₂ nebo doplnění diluentu (šedě). Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). Šedé čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p>
       <LineChart t={s.t} height={150} focusT={focusT} series={[
         { label: "Hustota plynu", color: "#4fc3f7", values: dens, unit: "g/l", width: 2 },
         { label: "5,2 g/l", color: "#ffb74d", values: s.t.map(() => 5.2), unit: "g/l", dash: "4 3" },
@@ -554,7 +569,16 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const meta = viewMetas().find((m) => m.id === id) || st.metas.find((m) => m.id === id)!;
   const note = lb.notes[id] || { buddyIds: [], note: "", updated: 0 };
   const idx = st.metas.findIndex((m) => m.id === id);
-  const warns = mergeCellAlerts([...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)]);
+  const base = useEffortBase();
+  const warns = mergeCellAlerts([...(d ? diveWarnings(d, summarize(d), lb.settings.th, base) : []).map((w) => {
+    // chybné CO₂ čidlo: souvislost s předchozím / dalším ponorem téhož počítače
+    if (w.title !== "Čidlo CO₂ nejspíš chybné") return w;
+    const same = st.metas.filter((m) => m.h.serial === meta.h.serial), k = same.findIndex((m) => m.id === meta.id);
+    const bad = (m?: Meta) => !!m?.warns?.some((x) => x.title === "Čidlo CO₂ nejspíš chybné");
+    const prev = same[k - 1], next = same[k + 1];
+    const extra = [prev && meta.h.start - prev.h.end < 36 * 3600 && !bad(prev) ? "Předchozí ponor byl v pořádku – typicky orosení po předchozím ponoru, obvykle do druhého dne vyschne." : "", bad(next) ? "Opakuje se i v dalším ponoru – zvaž výměnu čidla." : ""].filter(Boolean).join(" ");
+    return extra ? { ...w, text: w.text.replace(" Tyto úseky", ` ${extra} Tyto úseky`) } : w;
+  }), ...cellDiveWarnings(st.metas, idx, lb.settings.th)]);
   // dlaždice Scrubber: před → po ponoru · stáří náplně; barva podle zbývajícího času, stáří a hlášení CO₂
   const scr = (() => {
     const th = lb.settings.th, lim = th.scrubLeftMin ?? 90;
@@ -594,7 +618,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
           ["Setpoint", <SpTile meta={meta} />],
           ["Hustota plynu", <span className="use">{num(meta.sum.densMax, 1)} g/l<small>max · hranice 5,2 / 6,2</small></span>],
-          ["Upouštění smyčky", <span className="use">{meta.sum.vents}×<small>diluent bez klesání</small></span>],
+          ["Doplnění diluentu", <span className="use">{meta.sum.vents}×<small>ADV, proplach, maska</small></span>],
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}

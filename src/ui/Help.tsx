@@ -42,6 +42,7 @@ export function HelpScreen() {
 
       <H title="4. Detail ponoru">
         <p><b>Logbook:</b> upozornění (klepnutím se rozbalí popis), V kostce (hloubka, doba, plyny, teplota, pO₂, pN₂, hustota), profil s deko stropem a zastávkami, spotřeba plynu (onboard / EXT), námaha, lokalita, parťáci, hodnocení a poznámka. Swipem přecházíš mezi ponory.</p>
+        <p><b>Zátěž:</b> rychlost poklesu pO₂ (spotřeba O₂) proti tvé obvyklé úrovni z tvých ponorů. Nepočítá se při klesání, u hladiny a chvíli po přepnutí SP, ruční dávce nebo doplnění diluentu. „Zvýšená zátěž“ = nad 2× aspoň 3 min.</p>
         <p><b>Grafy:</b> pO₂ s čidly a setpointem, CO₂ ve smyčce, teplota a baterie; podbarvené alarmy, dávky O₂ a rozjetí čidel.</p>
         <p><b>Hodnoty:</b> všechny údaje z hlavičky a patičky logu (GF, CNS, baterie, scrubber, kalibrace…) se značkou jistoty.</p>
         <p><b>Události:</b> přepnutí setpointu (i ručně v menu), ovládání počítače (tlačítka, menu, info obrazovky), alarmy z počítače, varování zobrazená na počítači a kdy jsi je potvrdil, zavření / otevření onboard lahve, informace (modré hlášky).</p>

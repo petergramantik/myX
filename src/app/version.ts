@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.35";
+export const APP_VERSION = "1.36";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.36", date: "2026-11-19", title: "Zátěž podle osobního základu, scrubber, solenoid", items: [
+    "Zátěž: nepočítá se 3–4 min po přepnutí SP, ruční dávce O₂ a doplnění diluentu (šedě s důvodem); 1 = tvoje obvyklá úroveň z tvých ponorů; v grafu max. 4×.",
+    "Nové „Zvýšená zátěž“: nad 2× obvyklé aspoň 3 min, potvrzená spotřebou O₂ z lahve (je-li k dispozici), s údajem o následném nárůstu CO₂.",
+    "„Scrubber vyčerpán během ponoru“ (červeně) – „Nezapomněl jsi obnovit stack time?“.",
+    "„Jen ruční doplňování O₂ – solenoid nepracoval?“ (info) i bez alarmu, když pO₂ zůstávalo pod setpointem bez dávek solenoidu.",
+    "„Upouštění smyčky“ přejmenováno na „Doplnění diluentu“ (ADV, proplach, maska); „Časté…“ jen výrazně nad tvým obvyklým počtem.",
+    "Chybné CO₂ čidlo: pravděpodobná příčina vlhkost / kondenzace, souvislost s předchozím a dalším ponorem.",
+  ] },
   { version: "1.35", date: "2026-11-19", title: "Opravy z auditu všech ponorů, srozumitelnější grafy", items: [
     "Alarmy: konec nejpozději při dalším alarmu stejného druhu nebo když se hodnota na 1 min vrátí za práh – žádné desítky minut kvůli nepotvrzenému varování.",
     "CO₂ čidlo: hodnoty vytrvale nad 100 mbar = „Čidlo CO₂ nejspíš chybné“ (žlutě) – v grafu zůstávají (šedé pásmo), z hlášení, souvislostí a srovnání se vynechají.",
