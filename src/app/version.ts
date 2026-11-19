@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.11";
+export const APP_VERSION = "1.34.12";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.12", date: "2026-11-19", title: "1:1 bez skoku, popisek Scrubber", items: [
+    "Zrušení zoomu (1:1, dvojklep, Zpět) ani zavření nabídky či dialogu už neposune stránku na začátek; Zpět z Grafů vede na začátek Logbooku.",
+    "Dlaždice Scrubber: dole „stáří N d“.",
+  ] },
   { version: "1.34.11", date: "2026-11-19", title: "Jednotná mřížka V kostce", items: [
     "V kostce: dlaždice mají stejnou šířku i výšku, obsah se zalomí uvnitř a nepřetéká přes okraj.",
     "Scrubber na dva řádky: „7 h 00 → 5 h 25“ a pod tím „před → po · stáří“.",

@@ -175,7 +175,7 @@ export function DiveScreen({ id }: { id: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("log");
   const [focus, setFocus] = useState<ChartFocus | null>(null);
-  useBackLayer(tab !== "log", () => setTab("log")); // Zpět ze záložky vede na Logbook
+  useBackLayer(tab !== "log", () => { setTab("log"); window.scrollTo(0, 0); }); // Zpět ze záložky vede na začátek Logbooku
   useEffect(() => { const on = (e: Event) => { setFocus({ ...(e as CustomEvent<ChartFocus>).detail }); setTab("charts"); }; focusBus.addEventListener("focus", on); return () => focusBus.removeEventListener("focus", on); }, []);
   const [slide, setSlide] = useState("");
   const touch = useRef<{ x: number; y: number } | null>(null);
@@ -586,7 +586,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["GF / CNS", <Pair l={`${meta.h.gfLo}/${meta.h.gfHi}`} ll="GF" r={`${meta.h.cnsEnd} %`} rl="CNS" />],
           ["Diluent", <UseTile gas="dil" meta={meta} note={note} />], ["O₂", <UseTile gas="o2" meta={meta} note={note} />],
           ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
-          ["Scrubber", <span className="use scr-v"><span><span className={scr.cb}>{hm(meta.h.scrubLeftStartMin).replace(" min", "")}</span> → <span className={scr.ca}>{hm(meta.h.scrubLeftEndMin).replace(" min", "")}</span></span><small>před → po{scr.days != null && <> · <span className={scr.cd}>{scr.days} d</span></>}</small></span>, scr.cls ? scr.open : undefined],
+          ["Scrubber", <span className="use scr-v"><span><span className={scr.cb}>{hm(meta.h.scrubLeftStartMin).replace(" min", "")}</span> → <span className={scr.ca}>{hm(meta.h.scrubLeftEndMin).replace(" min", "")}</span></span><small>{scr.days != null ? <>stáří <span className={scr.cd}>{scr.days} d</span></> : "\u00a0"}</small></span>, scr.cls ? scr.open : undefined],
           ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
           ["Setpoint", <SpTile meta={meta} />],
           ["Hustota plynu", <span className="use">{num(meta.sum.densMax, 1)} g/l<small>max · hranice 5,2 / 6,2</small></span>],

@@ -16,6 +16,8 @@ const emit = () => navSubs.forEach((f) => f());
 export const useScreen = () => useSyncExternalStore((f) => { navSubs.add(f); return () => navSubs.delete(f); }, () => stack[stack.length - 1]);
 /** Pozice stránky v okamžiku přechodu na další obrazovku (pro obnovení po návratu). */
 export let leaveY = 0;
+// pozici stránky řídí aplikace sama (jinak by prohlížeč při návratu v historii skočil nahoru)
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 /** Hloubka našich záznamů v historii prohlížeče (1 = první). */
 let curD = 1;
 let pending: Screen[] | null = null;
