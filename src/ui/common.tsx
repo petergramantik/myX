@@ -81,7 +81,7 @@ export const num = (v: number | null | undefined, d = 1) => (v == null ? "–" :
 export function Card({ title, children, right, id, onTitle }: { title?: string; children: React.ReactNode; right?: React.ReactNode; id?: string; onTitle?: () => void }) {
   return (
     <section className="card" id={id}>
-      {title && <div className="card-h"><h2 onClick={onTitle}>{title}</h2>{right}</div>}
+      {title && <div className="card-h"><h2 onClick={onTitle}>{title}</h2><div className="card-hr">{right}<span className="zslot" /></div></div>}
       {children}
     </section>
   );

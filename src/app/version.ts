@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.39.4";
+export const APP_VERSION = "1.39.5";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.39.5", date: "2026-11-20", title: "Ovládání grafů", items: [
+    "Tlačítka − 0 + jsou v řádku s nadpisem grafu, graf má zase celou šířku.",
+    "Přepínač pO₂ / mV je pod grafem vpravo; první graf se jmenuje „Profil a strop“.",
+  ] },
   { version: "1.39.4", date: "2026-11-20", title: "Odkazy do grafů", items: [
     "Vysoké CO₂ a slabá / kritická baterie mají odkaz do grafu (maximum CO₂, první pokles napětí pod práh).",
     "Popis pod grafy je ve sbalovacím řádku „Popis grafu“ (výchozí sbaleno).",

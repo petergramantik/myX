@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 // Jednoduché SVG grafy s dotykovým popiskem (bez knihoven).
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
@@ -37,7 +38,9 @@ const fmtCs = (v: number | null | undefined, d = 2) => (v == null || Number.isNa
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}′${String(r % 60).padStart(2, "0")}″`; };
 
-export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable, focusT }: {
+export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable, focusT, under }: {
+  /** Prvek hned pod grafem (nad pruhem s hodnotami), např. přepínač zobrazení. */
+  under?: React.ReactNode;
   /** Postavit posuvník na tento čas (odkaz z varování). */
   focusT?: number;
   t: number[]; series: Series[]; height?: number; invert?: boolean; zero?: boolean; markers?: number[]; rightInvert?: boolean;
@@ -95,6 +98,9 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
     }, 40);
     return () => clearInterval(id);
   }, [edge, t]);
+  // tlačítka přiblížení se vykreslí do řádku s nadpisem karty (portál)
+  const [slot, setSlot] = useState<Element | null>(null);
+  useLayoutEffect(() => { setSlot(ref.current?.closest(".card")?.querySelector(".card-h .zslot") ?? null); }, []);
   if (!t.length) return <div className="chart-empty">Bez dat</div>;
   const z = zoomable ? (zc ? zc.z : zLocal) : null;
   const setZ = zc ? zc.setZ : setZLocal;
@@ -256,12 +262,13 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
         {placed.map((p, i) => <text key={"pl" + i} x={p.lx} y={4 + p.row * 11 + 8} fill={p.color} className="strip-l">{p.label}</text>)}
       </svg>
       </div>
-      {zoomable && <div className="zbtns">
-        <button aria-label="Přiblížit" disabled={span0 <= MINSPAN + 1} onClick={() => zoomBy(0.5)}>+</button>
-        <button aria-label="Celý graf" disabled={!z} onClick={() => setZ(null)}>0</button>
-        <button aria-label="Oddálit" disabled={!z} onClick={() => zoomBy(2)}>−</button>
-      </div>}
       </div>
+      {zoomable && slot && createPortal(<div className="zbtns">
+        <button aria-label="Oddálit" disabled={!z} onClick={() => zoomBy(2)}>−</button>
+        <button aria-label="Celý graf" disabled={!z} onClick={() => setZ(null)}>0</button>
+        <button aria-label="Přiblížit" disabled={span0 <= MINSPAN + 1} onClick={() => zoomBy(0.5)}>+</button>
+      </div>, slot)}
+      {under && <div className="chart-under">{under}</div>}
 
       <div className={"chart-info" + (hover == null ? " empty" : "")}>
         {hover == null ? <span className="ci-hint">{zoomable ? "Táhni: hodnoty (u okraje posun) · +/−: přiblížení · Dvojklep: zpět" : "Táhni: hodnoty · Dvojklep: zrušit"}</span> : <>

@@ -676,7 +676,7 @@ function ProfileCard({ d }: { d: Dive }) {
   const segs = useMemo(() => gasSegments(d).map((g) => ({ ...g, color: GAS_COLOR[gasLabel(g.mix).cls], label: gasLabel(g.mix).label })), [d]);
   const gasAt = useMemo(() => s.o2.map((o, i) => gasLabel(`${o}/${s.he[i]}`).label), [d]);
   return (
-    <Card title="Profil a dekompresní strop">
+    <Card title="Profil a strop">
       <LineChart t={s.t} invert height={220} bands={((d as Dive & { surf?: { from: number; to: number }[] }).surf || []).map((b) => ({ ...b, color: "#90a4ae" }))} series={[
         { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m", fillUp: true },
         { label: "", color: C[1], values: link, width: 1 },
@@ -745,19 +745,19 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
     ...(spread?.bands?.length ? [{ color: "#26a69a", label: "rozjetá čidla" }] : []),
     ...((d as Dive & { surf?: unknown[] }).surf?.length ? [{ color: "#90a4ae", label: "hladina" }] : []),
   ];
+  const cellSeg = <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>;
   return (
     <ZoomCtx.Provider value={{ z: zoom, setZ: setZoom }}>
     <ChartDefs.Provider value={{ profile: s.depth, zoom: true }}>
       <ProfileCard d={d} />
-      <div data-chart="po2"><Card title="pO₂ a čidla" right={
-        <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
+      <div data-chart="po2"><Card title="pO₂ a čidla">
         {cellMode === "cal" ? (
-          <LineChart t={s.t} focusT={fT("po2")} toggle bandLegend={usedBands} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={po2Bands} series={[
+          <LineChart t={s.t} focusT={fT("po2")} under={cellSeg} toggle bandLegend={usedBands} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={po2Bands} series={[
             { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: cellName(1), color: C[1], values: cells[0], unit: "bar", width: 1 },
             { label: cellName(2), color: C[2], values: cells[1], unit: "bar", width: 1 }, { label: cellName(3), color: C[3], values: cells[2], unit: "bar", width: 1 }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3", width: 1 },
           ]} extra={depthExtra} />
         ) : (
-          <LineChart t={s.t} toggle bandLegend={usedBands} bands={po2Bands} series={[
+          <LineChart t={s.t} under={cellSeg} toggle bandLegend={usedBands} bands={po2Bands} series={[
             { label: cellName(1), color: C[1], values: cells[0], unit: "mV", width: 1 }, { label: cellName(2), color: C[2], values: cells[1], unit: "mV", width: 1 }, { label: cellName(3), color: C[3], values: cells[2], unit: "mV", width: 1 },
           ]} extra={[{ label: "Průměr pO₂", values: s.ppo2, unit: "bar" }, ...depthExtra]} />
         )}

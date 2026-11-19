@@ -469,6 +469,7 @@ details.card.sec > summary h2 { margin: 0; }
 .chart-ev { margin: 6px 0 2px; } .chart-ev p { margin: 3px 0; cursor: pointer; padding: 1px 4px; border-radius: 6px; } .chart-ev .ev-on { background: var(--panel2); outline: 1px solid currentColor; }
 .ev-head { background: none; border: 0; padding: 4px 0; color: var(--fg); font-size: 14px; cursor: pointer; }
 .chart-row { display: flex; align-items: flex-start; gap: 4px; } .chart-plot { flex: 1; min-width: 0; }
-.zbtns { display: flex; flex-direction: column; gap: 6px; padding-top: 14px; width: 30px; flex: none; }
-.zbtns button { width: 30px; height: 30px; padding: 0; border-radius: 8px; border: 1px solid var(--accent); background: var(--panel2); color: var(--accent); font-size: 17px; line-height: 1; }
+.zbtns { display: flex; gap: 6px; }
+.zbtns button { width: 30px; height: 28px; padding: 0; border-radius: 8px; border: 1px solid var(--accent); background: var(--panel2); color: var(--accent); font-size: 17px; line-height: 1; }
 .zbtns button:disabled { border-color: var(--line); color: var(--muted, #6b7a90); opacity: 0.5; }
+.card-hr { display: flex; align-items: center; gap: 8px; } .zslot:empty { display: none; } .chart-under { display: flex; justify-content: flex-end; margin: 2px 0 6px; }
