@@ -1,3 +1,4 @@
+import { dur } from "../core/analysis";
 import { ask, askText } from "../app/dialog";
 import { useEffect, useState } from "react";
 import { ME, adoptForeign, aliasesFor, removeAlias, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
@@ -252,7 +253,7 @@ function Drift({ serial }: { serial: string }) {
   const [d, setD] = useState<{ at: number; diff: number }[]>([]);
   useEffect(() => { clockDrift(serial).then(setD); }, [serial]);
   if (!d.length) return null;
-  const f = (s: number) => `${s >= 0 ? "+" : "−"}${Math.floor(Math.abs(s) / 60)}:${String(Math.abs(s) % 60).padStart(2, "0")}${Math.abs(Math.abs(s) - 3600) <= 900 ? " (1 h)" : ""}`;
+  const f = (s: number) => `${s >= 0 ? "+" : "−"}${dur(Math.abs(s))}${Math.abs(Math.abs(s) - 3600) <= 900 ? " (1 h)" : ""}`;
   const last = d[d.length - 1];
   return <div className="small muted">Hodiny: naposledy {f(last.diff)} min ({fmtDate(last.at)}){d.length > 1 ? ` · vývoj: ${d.slice(-6).map((x) => f(x.diff)).join(" → ")}` : ""}<br />Odhad z času začátku společných ponorů; kladné = jdou napřed.</div>;
 }

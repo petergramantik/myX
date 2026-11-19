@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, po2HighZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, dur, tpt, po2HighZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
@@ -720,14 +720,14 @@ function ValuesTab({ d }: { d: Dive }) {
 /** Varování zobrazená na počítači a jak byla potvrzena. */
 function CompWarnCard({ d }: { d: Dive }) {
   const ws = computerWarnings(d);
-  const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
+  const mmss = tpt;
   const valve = [...pressureAnalysis(d.s.t, d.s.o2p, d.h.diveTimeS).valve.map((v) => ({ ...v, g: "O₂" })), ...pressureAnalysis(d.s.t, d.s.dil, d.h.diveTimeS).valve.map((v) => ({ ...v, g: "diluent" }))].sort((a, b) => a.t - b.t);
   return (
     <Card title="Varování na počítači">
       {ws.length ? (
         <table className="kv"><thead><tr><th>Varování</th><th>Zobrazeno</th><th>Konec</th></tr></thead>
           <tbody>{ws.map((w, i) => <tr key={i}><td>{w.label}{w.c !== "✓" ? ` (${w.c})` : ""}</td><td>{mmss(w.start)}</td>
-            <td>{w.how === "open" ? <span className="muted">nepotvrzeno</span> : `${w.how === "ack" ? "potvrzeno" : "zmizelo"} ${mmss(w.end!)} (${Math.round(w.end! - w.start)} s)`}</td></tr>)}</tbody>
+            <td>{w.how === "open" ? <span className="muted">nepotvrzeno</span> : `${w.how === "ack" ? "potvrzeno" : "zmizelo"} ${mmss(w.end!)} (${dur(w.end! - w.start)})`}</td></tr>)}</tbody>
         </table>
       ) : <p className="muted">Počítač v tomto ponoru nezapsal žádné varování.</p>}
       {valve.length > 0 && <div className="valve-list">{valve.map((v, i) => <div key={i} className="small">Onboard {v.g} {v.kind === "close" ? "zavřena (přechod na externí)" : "otevřena"} v {mmss(v.t)} ({v.from} → {v.to} bar)</div>)}</div>}
@@ -763,7 +763,7 @@ function EventsTab({ d }: { d: Dive }) {
     <Card title="Alarmy z počítače">
       {d.alarms.length ? (
         <table className="kv"><thead><tr><th>Alarm</th><th>Od</th><th>Do</th><th>Délka</th></tr></thead>
-          <tbody>{d.alarms.map((a, i) => <tr key={i}><td>{a.label}</td><td>{Math.round(a.start / 60)}′</td><td>{Math.round(a.end / 60)}′</td><td>{a.end - a.start < 60 ? `${a.end - a.start} s` : `${Math.round((a.end - a.start) / 60)} min`}</td></tr>)}</tbody>
+          <tbody>{d.alarms.map((a, i) => <tr key={i}><td>{a.label}</td><td>{Math.round(a.start / 60)}′</td><td>{Math.round(a.end / 60)}′</td><td>{dur(a.end - a.start)}</td></tr>)}</tbody>
         </table>
       ) : <p className="muted">Počítač v tomto ponoru nehlásil alarm CO₂ ani pO₂.</p>}
       <p className="note">Z událostí 9 (spuštění) a 10 (ukončení). V grafech CO₂ a pO₂ jsou alarmy vyznačené podbarvením.</p>
