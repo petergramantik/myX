@@ -362,7 +362,8 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   // 0–20 min dno 30 m, 20–40 min výstup na 6 m (zastávka), pO₂ 1,45 na dně 10.–13. min, 1,5 na zastávce, 1,65 krátce ve 15. min
   const depth = t.map((x) => (x < 1200 ? 30 : x < 1500 ? 30 - ((x - 1200) / 300) * 24 : x < 3400 ? 6 : 0));
   const ppo2 = t.map((x) => (x >= 600 && x < 780 ? 1.45 : x >= 900 && x < 920 ? 1.65 : x >= 1600 && x < 3000 ? 1.5 : 1.2));
-  const d = { h: { diveTimeS: 3500 }, s: { t, depth, ppo2, ceil: t.map(() => 0) } } as any;
+  // strop i zastávka už na dně (deko ponor) – dno se přesto za zastávku nepočítá
+  const d = { h: { diveTimeS: 3500 }, s: { t, depth, ppo2, ceil: t.map((x) => (x < 3400 ? 6 : 0)), stop: t.map((x) => (x < 3400 ? 6 : 0)) } } as any;
   const z = po2HighZones(d, {});
   ok(z.some((x) => x.level === "warn" && x.from === 600) && !z.some((x) => x.level === "warn" && x.from >= 1600), "nad 1,4 na dně → žlutě, na zastávce ne");
   ok(z.some((x) => x.level === "bad" && x.from === 900), "nad 1,6 → červeně");

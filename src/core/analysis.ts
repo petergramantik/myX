@@ -444,11 +444,12 @@ export function scrubberInfo(hs: Header[], nowLocal: number, th: Thresholds, man
 
 /** Upozornění na úvodní obrazovce. hs = hlavičky ponorů, nowLocal = aktuální místní čas jako „UTC“ sekundy. */
 // ---------- vysoké pO₂ (vlastní detekce)
-/** Vzorek je na dekompresní zastávce: strop nad hladinou, nebo po nejhlubším bodě v hloubce do 9 m (P). */
+/** Vzorek je na dekompresní zastávce: po nejhlubším bodě v hloubce zastávky (do 3 m pod ní) nebo do 9 m (P). */
 export function decoMask(d: Dive): boolean[] {
   const s = d.s; let imax = 0;
   s.depth.forEach((v, i) => { if (v > s.depth[imax]) imax = i; });
-  return s.t.map((_, i) => s.ceil[i] > 0 || (i > imax && s.depth[i] <= 9 && s.depth[i] > 0.5));
+  // jen po nejhlubším bodě: v hloubce zastávky (nejvýš 3 m pod ní), nebo mělčeji než 9 m
+  return s.t.map((_, i) => i > imax && s.depth[i] > 0.5 && ((s.stop[i] > 0 && s.depth[i] <= s.stop[i] + 3) || s.depth[i] <= 9));
 }
 /** Úseky vysokého pO₂: „bad“ nad červeným prahem kdykoli, „warn“ nad žlutým déle než warnS mimo deko zastávky. */
 export function po2HighZones(d: Dive, th: Partial<Thresholds> = {}): { from: number; to: number; level: "warn" | "bad"; max: number }[] {
@@ -459,7 +460,7 @@ export function po2HighZones(d: Dive, th: Partial<Thresholds> = {}): { from: num
     for (let i = 0; i <= s.t.length; i++) {
       const ok = i < s.t.length && s.t[i] <= d.h.diveTimeS && test(i);
       if (ok && a < 0) a = i;
-      if (!ok && a >= 0) { const b = i - 1; if (s.t[b] - s.t[a] >= minS) out.push({ from: s.t[a], to: s.t[b], level, max: Math.max(...s.ppo2.slice(a, b + 1)) }); a = -1; }
+      if (!ok && a >= 0) { const b = i - 1, to = s.t[Math.min(i, s.t.length - 1)] > s.t[b] ? s.t[Math.min(i, s.t.length - 1)] : s.t[b] + (d.h.rateS || 5); if (to - s.t[a] >= minS) out.push({ from: s.t[a], to, level, max: Math.max(...s.ppo2.slice(a, b + 1)) }); a = -1; }
     }
   };
   scan((i) => s.ppo2[i] > bad, "bad", 0);
@@ -740,6 +741,19 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     const steps = blocks.flatMap((b) => [...(as.length > 1 ? [`${b.head}:`] : []), ...b.steps]);
     out.push({ level: kind === "po2low" && lowSp ? "warn" : "bad", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
       text: withSteps(`${as.length}× (${as.map((a) => `${mmss(a.start)}–${mmss(alarmEnd(d, a))}`).join(", ")}), celkem ${dur(tot)}.`, steps), blocks });
+  }
+  // vlastní detekce vysokého pO₂ – jen úseky, kdy neběžel alarm z počítače
+  {
+    const hiA = d.alarms.filter((x) => x.kind === "po2high");
+    const zs = po2HighZones(d, th).filter((z) => !hiA.some((x) => x.start <= z.to + 30 && alarmEnd(d, x) >= z.from - 30));
+    for (const lvl of ["bad", "warn"] as const) {
+      const zl = zs.filter((z) => z.level === lvl && (lvl === "bad" || !zs.some((b) => b.level === "bad" && b.from <= z.to && b.to >= z.from)));
+      if (!zl.length) continue;
+      const lim = lvl === "bad" ? th.po2HiBad ?? 1.6 : th.po2HiWarn ?? 1.4;
+      const around = (z: { from: number; to: number }) => { if (lvl !== "bad") return ""; const w = zs.find((x) => x.level === "warn" && x.from <= z.to && x.to >= z.from); return w ? ` (nad ${(th.po2HiWarn ?? 1.4).toLocaleString("cs-CZ")} bar ${dur(w.to - w.from)})` : ""; };
+      const blocks: AlertBlock[] = zl.map((z, k) => ({ head: `${zl.length > 1 ? `${k + 1}. ` : ""}${mmss(z.from)}–${mmss(z.to)} (${dur(z.to - z.from)})${around(z)}, max ${z.max.toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} bar, ${d.s.depth[at(z.from)].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m`, steps: resolutionSteps(d, z.from, z.to, "po2high", th, zl[k + 1]?.from ?? Infinity).filter((x) => !/alarm|vlastní detekce/.test(x)), from: z.from, to: z.to, chart: "po2" }));
+      out.push({ level: lvl, title: "Vysoké pO₂ (bez alarmu počítače)", text: withSteps(`Nad ${lim.toLocaleString("cs-CZ")} bar${lvl === "warn" ? ` déle než ${dur(th.po2HiWarnS ?? 60)} mimo deko zastávky` : ""}: ${zl.map((z) => `${mmss(z.from)}–${mmss(z.to)}`).join(", ")}, celkem ${dur(zl.reduce((x, z) => x + z.to - z.from, 0))}.`, blocks.flatMap((b) => [`${b.head}:`, ...b.steps])), blocks });
+    }
   }
   const cs = cellSpread(d);
   if (cs && cs.kind) {
