@@ -651,7 +651,6 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
   return (
     <ZoomCtx.Provider value={{ z: zoom, setZ: setZoom }}>
     <ChartDefs.Provider value={{ profile: s.depth, zoom: true }}>
-      <p className="note chart-hint">Grafy: posuvník jedním prstem, přiblížení roztažením dvou prstů (všechny grafy najednou), zpět dvojklepnutím nebo 1:1. Položky legendy jde zapínat a vypínat.</p>
       <ProfileCard d={d} />
       <div data-chart="po2"><Card title="pO₂ a čidla" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>

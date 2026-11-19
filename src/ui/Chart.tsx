@@ -213,7 +213,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
       </svg>
       {z && <button className="chart-reset" onClick={() => setZ(null)}>1:1</button>}
       <div className={"chart-info" + (hover == null ? " empty" : "")}>
-        {hover == null ? <span className="ci-hint">Posuň prstem po grafu</span> : <>
+        {hover == null ? <span className="ci-hint">{zoomable ? "Táhni: hodnoty · Roztáhni: přiblížit · Dvojklep: zpět" : "Táhni: hodnoty · Dvojklep: zrušit"}</span> : <>
           <button className="ci-x" aria-label="Zrušit" onClick={() => setHover(null)}>✕</button>
           <div className="ci-r"><b>{xTitle ? xTitle(t[hover]) : fmtTime(t[hover])}</b>{profile && profile[hover] != null && <span> · {fmtCs(profile[hover], 1)} m</span>}
             {bands?.filter((b) => b.label && t[hover] >= b.from && t[hover] <= b.to).map((b, i) => <span key={"bl" + i} className="tip-alarm" style={{ color: b.color }}> ⚠ {b.label}</span>)}</div>

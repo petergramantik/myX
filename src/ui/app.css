@@ -451,3 +451,4 @@ details.card.sec > summary h2 { margin: 0; }
 .ci-v span { white-space: nowrap; }
 .chart-info i { display: inline-block; width: 9px; height: 3px; margin-right: 4px; vertical-align: middle; border-radius: 2px; }
 .ci-x { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border: 0; background: transparent; color: var(--muted); font-size: 13px; }
+.ci-hint { font-size: 12px; text-align: center; }
