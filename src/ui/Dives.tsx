@@ -350,7 +350,7 @@ function GuestNote({ note }: { note: DiveNote }) {
 }
 
 /** Zátěž (rychlost spotřeby O₂ ve smyčce) s CO₂ a hustota plynu. */
-function EffortCard({ d }: { d: Dive }) {
+function EffortCard({ d, focusT }: { d: Dive; focusT?: number }) {
   const s = d.s;
   const w = useMemo(() => workloadIndex(d), [d]);
   const dens = useMemo(() => gasDensity(d), [d]);
@@ -364,7 +364,7 @@ function EffortCard({ d }: { d: Dive }) {
         ...(hasCo2 ? [{ label: "CO₂", color: "#ef5350", values: s.co2, unit: "mbar", right: true }] : []),
       ]} extra={[{ label: "Hloubka", values: s.depth, unit: "m" }]} />
       <p className="note">Zátěž = rychlost poklesu pO₂ mezi dávkami O₂ při stálé hloubce (okno 3 min), úměrná spotřebě O₂, tedy námaze. Je relativní: 1 = obvyklá úroveň v tomto ponoru, normalizovaná zvlášť pro nízký a vysoký setpoint (regulace se liší). {ef.wHighMin >= 1 ? `Nad 1,3× obvyklé úrovně ${Math.round(ef.wHighMin)} min.` : ""} Šedé čárky dole = upouštění smyčky / vyfukování masky ({vents.length}×).</p>
-      <LineChart t={s.t} height={150} series={[
+      <LineChart t={s.t} height={150} focusT={focusT} series={[
         { label: "Hustota plynu", color: "#4fc3f7", values: dens, unit: "g/l", width: 2 },
         { label: "5,2 g/l", color: "#ffb74d", values: s.t.map(() => 5.2), unit: "g/l", dash: "4 3" },
         { label: "6,2 g/l", color: "#ef5350", values: s.t.map(() => 6.2), unit: "g/l", dash: "4 3" },
@@ -691,7 +691,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
           Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Pásma: červené = alarm vysokého pO₂ z počítače, oranžové = alarm nízkého pO₂, žluté / sytě červené = vlastní detekce vysokého pO₂, tyrkysové = čidla se rozcházejí o víc než 0,3 bar.
         </p>
       </Card></div>
-      <EffortCard d={d} />
+      <div data-chart="effort"><EffortCard d={d} focusT={fT("effort")} /></div>
       <div data-chart="co2"><Card title="CO₂ v dýchací smyčce">
         {s.co2.some((v) => v != null && v > 0)
           ? <LineChart t={s.t} focusT={fT("co2")} bandLegend={d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : undefined} bands={d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" }))} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
@@ -778,7 +778,7 @@ function EventsTab({ d }: { d: Dive }) {
   const infos = groupAlerts([...(bsw ? [bsw] : []), ...diveWarnings(d, summarize(d), th).filter((a) => a.level === "info")]);
   return (
     <>
-    {infos.length > 0 && <Card title="Informace">{infos.map((a, i) => <AlertBox key={i} a={a} fold />)}</Card>}
+    {infos.length > 0 && <Card title="Informace">{infos.map((a, i) => <AlertBox key={i} a={a} fold onShow={showInChart} />)}</Card>}
     <Card title="Setpoint">
       {(() => { const sp = setpointChanges(d); return sp.length ? (
         <table className="kv"><thead><tr><th>Čas</th><th>Hloubka</th><th>Setpoint</th><th>Obsluha</th></tr></thead>

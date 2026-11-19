@@ -135,8 +135,8 @@ export function setpointChanges(d: Dive): SpChange[] {
   return out;
 }
 /** Parametry hodnocení setpointu: hranice pozdního přepnutí (min), oscilace dna (m), výraznější klesání (m). */
-export interface SpRules { lateMin: number; osc: number; descM: number; stableS: number }
-export const SP_RULES: SpRules = { lateMin: 5, osc: 3, descM: 6, stableS: 180 };
+export interface SpRules { lateMin: number; osc: number; descM: number; stableS: number; /** menší klesání se hlásí jen při pO₂ nad po2Bad */ descMinM?: number; po2Bad?: number }
+export const SP_RULES: SpRules = { lateMin: 5, osc: 3, descM: 6, stableS: 180, descMinM: 3, po2Bad: 1.6 };
 
 /**
  * Začátek „dna“, na kterém byl vysoký setpoint přepnut: jde se zpět od přepnutí, dokud hloubka nezačne
@@ -171,8 +171,9 @@ export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RU
       .map((x) => { const back = sum.sp.find((y) => y.t > x.t && y.to < 1.0); return `Krátce: ${fmin(x.t)} min → ${fmt(x.to)} (${fmt(x.depth)} m)${back ? `, po ${dur(back.t - x.t)} zpět na ${fmt(back.to)}` : ""}.`; });
     prevT = c.t;
     const txt = [...short, `${fmin(c.t)} min → ${fmt(c.to)} (${fmt(c.depth)} m), ${fmt(Math.round(delay * 10) / 10)} min po dosažení dna (${fmt(s.depth[p])} m)${c.manual ? ", ručně v menu Petrelu" : ""}.`].join(" ");
-    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: "info", title: "Pozdní přepnutí na vysoký setpoint", text: txt });
-    else if (k === 0) out.push({ level: "info", title: "Přepnutí setpointu", text: txt });
+    const blk: AlertBlock[] = [{ head: "", steps: [], from: s.t[p], to: c.t, chart: "po2" }];
+    if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: "info", title: "Pozdní přepnutí na vysoký setpoint", text: txt, blocks: blk });
+    else if (k === 0) out.push({ level: "info", title: "Přepnutí setpointu", text: txt, blocks: blk });
   }
   if (!startHigh && !ups.length && d.h.maxDepth > 10) {
     // bez přepnutí: varovat jen pokud se potápěč na dně ≥ lateMin zdržel
@@ -182,22 +183,33 @@ export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RU
   }
   // klesání s vysokým setpointem: o víc než descM od nejmělčího místa
   let minI = -1, peakI = -1, warned = false;
+  const descB: AlertBlock[] = [], descT: string[] = [];
+  let descMax = 0, descBad = false;
   for (let i = 0; i < n; i++) {
     if (s.t[i] > d.h.diveTimeS) break;
     if (s.sp[i] < 1.0) { minI = -1; warned = false; continue; }
     if (minI < 0 || s.depth[i] < s.depth[minI]) { minI = i; peakI = i; warned = false; }
     if (s.depth[i] > s.depth[peakI]) peakI = i;
     const end = s.depth[i] < s.depth[peakI] - r.osc || i === n - 1 || s.sp[i + 1] < 1.0;
-    if (!warned && s.depth[peakI] - s.depth[minI] > r.descM && end) {
-      const po2 = Math.max(...s.ppo2.slice(minI, peakI + 1));
-      out.push({ level: "warn", title: "Klesání s vysokým setpointem", text: `V ${Math.round(s.t[minI] / 60)}.–${Math.round(s.t[peakI] / 60)}. min klesání z ${fmt(s.depth[minI])} na ${fmt(s.depth[peakI])} m se setpointem ${fmt(s.sp[minI])} – před klesáním nebylo přepnuto na nízký. Nejvyšší pO₂ během klesání ${fmt(po2)} bar.` });
+    const dd = s.depth[peakI] - s.depth[minI];
+    if (!warned && end && dd > (r.descMinM ?? 3)) {
+      // pO₂ během klesání a do 3 min po něm
+      const j2 = s.t.findIndex((t) => t > s.t[peakI] + 180);
+      const po2 = Math.max(...s.ppo2.slice(minI, j2 < 0 ? n : j2));
+      const bad = po2 > (r.po2Bad ?? 1.6);
+      if (dd > r.descM || bad) {
+        descB.push({ head: `${tpt(s.t[minI])}–${tpt(s.t[peakI])}: ${fmt(s.depth[minI])} → ${fmt(s.depth[peakI])} m, SP ${fmt(s.sp[minI])}, max pO₂ ${fmt(po2)} bar`, steps: [], from: s.t[minI], to: s.t[peakI], chart: "po2" });
+        descT.push(`${tpt(s.t[minI])}–${tpt(s.t[peakI])} z ${fmt(s.depth[minI])} na ${fmt(s.depth[peakI])} m (max pO₂ ${fmt(po2)} bar)`);
+        descMax = Math.max(descMax, po2); descBad ||= bad;
+      }
       warned = true;
     }
     if (end && s.depth[i] < s.depth[peakI] - r.osc) { minI = i; peakI = i; warned = false; } // nové klesání se počítá od tohoto místa
   }
+  if (descB.length) out.push({ level: "warn", title: "Klesání s vysokým setpointem", text: `Klesání se setpointem ${fmt(descB.length ? s.sp[s.t.findIndex((t) => t >= descB[0].from)] : 1.3)} – před klesáním nebylo přepnuto na nízký: ${descT.join(", ")}.${descBad ? ` pO₂ následně přesáhlo ${fmt(r.po2Bad ?? 1.6)} bar.` : ""}`, blocks: descB });
   for (const c of sum.sp.filter((c) => c.to < 0.3)) {
     const endPhase = c.depth <= 6 && c.t >= d.h.diveTimeS - 600;
-    if (!endPhase) out.push({ level: "warn", title: `Setpoint ${fmt(c.to)} mimo závěr ponoru`, text: `Přepnuto v ${Math.round(c.t / 60)}. min v ${fmt(c.depth)} m – nízký setpoint pod 6 m nebo dřív než v posledních 10 min.` });
+    if (!endPhase) out.push({ level: "warn", title: `Setpoint ${fmt(c.to)} mimo závěr ponoru`, blocks: [{ head: "", steps: [], from: c.t, to: c.t + 60, chart: "po2" }], text: `Přepnuto v ${Math.round(c.t / 60)}. min v ${fmt(c.depth)} m – nízký setpoint pod 6 m nebo dřív než v posledních 10 min.` });
   }
   return out;
 }
@@ -408,7 +420,7 @@ export function injections(d: Dive): Injection[] {
   return out;
 }
 
-export type ChartKey = "po2" | "co2" | "press" | "temp";
+export type ChartKey = "po2" | "co2" | "press" | "temp" | "effort";
 /** Jedna situace varování / alarmu s řešením a odkazem do grafu. */
 export interface AlertBlock { head: string; steps: string[]; from: number; to: number; chart: ChartKey }
 export interface Alert { level: "warn" | "bad" | "info"; title: string; text: string; kind?: "scrubber" | "battery"; blocks?: AlertBlock[] }
@@ -537,6 +549,12 @@ export function resolutionSteps(d: Dive, from: number, to: number | null, kind: 
     out.push({ t: to, x: `${kind === "press" || kind === "cell" || kind === "other" ? "varování skončilo" : "alarm skončil"}${val ? ` (${val})` : ""}` });
   }
   if (kind === "po2high") {
+    // pravděpodobná příčina: klesání s vysokým SP nebo ruční dávka O₂ v posledních minutách před nárůstem
+    const j0 = at(Math.max(0, from - 300)), jf = at(from);
+    let mn = -1; for (let k = j0; k <= jf; k++) if (s.sp[k] >= 1 && (mn < 0 || s.depth[k] < s.depth[mn])) mn = k;
+    if (mn >= 0) { let pk = mn; for (let k = mn; k <= jf; k++) if (s.depth[k] > s.depth[pk]) pk = k;
+      if (s.depth[pk] - s.depth[mn] >= 2.5) out.push({ t: s.t[mn] - 0.5, x: `klesání ${nf(s.depth[mn], 1)} → ${nf(s.depth[pk], 1)} m (do ${mmssA(s.t[pk])}) se SP ${nf(s.sp[mn])} (P)` }); }
+    for (const x of o2Doses(d)) if (x.kind === "man" && x.t >= from - 120 && x.t < from) out.push({ t: x.t, x: `ruční dávka O₂ (+${nf(x.rise)} bar) před nárůstem (P)` });
     const z = po2HighZones(d, th).filter((z) => z.to >= from - 60 && z.from <= end);
     const w = z.filter((x) => x.level === "warn").reduce((a, x) => a + x.to - x.from, 0);
     if (w > 0) out.push({ t: Infinity, x: `vlastní detekce: nad ${nf(th.po2HiWarn ?? 1.4, 2)} bar celkem ${Math.round(w / 60) || "<1"} min mimo deko` });
@@ -769,13 +787,24 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   const ef = effortOf(d, th.co2Mbar);
   if (ef.densOver62 >= 1) out.push({ level: "info", title: "Velmi hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString("cs-CZ")} g/l, ${Math.round(ef.densOver62)} min nad 6,2 g/l – výrazně vyšší dechová práce a riziko hromadění CO₂.` });
   else if (ef.densOver52 >= 1) out.push({ level: "info", title: "Hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString("cs-CZ")} g/l, ${Math.round(ef.densOver52)} min nad doporučenými 5,2 g/l.` });
-  for (const c of ef.co2Notes) out.push({ level: c.level, title: "Souvislost CO₂", text: c.text });
+  // souvislosti CO₂: jedno hlášení (zvlášť varování a informace), každá epizoda s odkazem do grafu
+  for (const lv of ["warn", "info"] as const) {
+    const ns = ef.co2Notes.filter((c) => c.level === lv);
+    if (ns.length) out.push({ level: lv, title: `Souvislost CO₂${ns.length > 1 ? ` – ${ns.length}×` : ""}`, text: ns.map((c) => c.text).join("\n"), blocks: ns.map((c) => ({ head: c.text, steps: [], from: Math.max(0, c.t - 60), to: c.t + 60, chart: "co2" as ChartKey })) });
+  }
   if (ef.vents >= 5) out.push({ level: "info", title: "Časté upouštění smyčky", text: `${ef.vents}× pokles diluentu bez klesání (upouštění smyčky, vyfukování masky) – může souviset s vyvážením nebo stresem.` });
-  out.push(...spWarnings(d, sum, { ...SP_RULES, lateMin: th.spLateMin ?? 5, osc: th.spOsc ?? 3, descM: th.spDescM ?? 6 }));
+  out.push(...spWarnings(d, sum, { ...SP_RULES, lateMin: th.spLateMin ?? 5, osc: th.spOsc ?? 3, descM: th.spDescM ?? 6, po2Bad: th.po2HiBad ?? 1.6 }));
   const mv = [d.s.mv1, d.s.mv2, d.s.mv3];
   mv.forEach((a, k) => {
     const mid = d.s.depth.map((x, i) => (x > 1.5 ? a[i] : null)).filter((x): x is number => x != null);
     if (mid.length && Math.max(...mid) === 0) out.push({ level: "warn", title: `Čidlo ${k + 1} na nule`, text: "Čidlo během ponoru ukazovalo 0 mV – vadné nebo odpojené." });
   });
+  // odkazy do grafu u hlášení s časem, která je zatím nemají
+  for (const a of out) {
+    if (a.blocks) continue;
+    if (/při zanoření/.test(a.title)) { const r = d.s.t.findIndex((t, i) => t > 30 && d.s.ppo2[i] >= (th.po2Lo ?? 0.4)); a.blocks = [{ head: "", steps: [], from: 0, to: r > 0 ? d.s.t[r] : 300, chart: "po2" }]; }
+    else if (/^Podezření na (vlhkost|vadná|nefunkční)/.test(a.title) && cs?.bands?.length) a.blocks = [{ head: "", steps: [], from: cs.bands[0].from, to: cs.bands[cs.bands.length - 1].to, chart: "po2" }];
+    else if (/hustý plyn$/i.test(a.title)) { const g = gasDensity(d), lim = /Velmi/.test(a.title) ? 6.2 : 5.2; const i0 = g.findIndex((v) => v != null && v > lim); const i1 = g.length - 1 - [...g].reverse().findIndex((v) => v != null && v > lim); if (i0 >= 0) a.blocks = [{ head: "", steps: [], from: d.s.t[i0], to: d.s.t[i1], chart: "effort" }]; }
+  }
   return out;
 }

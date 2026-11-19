@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.13";
+export const APP_VERSION = "1.34.14";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.14", date: "2026-11-19", title: "Klesání s vysokým SP, příčiny a odkazy do grafu", items: [
+    "Klesání s vysokým setpointem: hlásí se od 3 m, pokud pO₂ následně přesáhlo 1,6 bar (od 6 m vždy); každé klesání s odkazem do grafu.",
+    "Vysoké pO₂: v ose řešení i pravděpodobná příčina – klesání se SP nebo ruční dávka O₂ před nárůstem (P).",
+    "„Ukázat v grafu ›“ i u přepnutí setpointu, SP mimo závěr, nízkého pO₂ při zanoření, Souvislosti CO₂ (každá epizoda), rozjetých čidel a hustého plynu (také v Událostech).",
+    "Oprava: popisky značek nad grafem (např. SP 0,5 na začátku) se už neořezávají.",
+  ] },
   { version: "1.34.13", date: "2026-11-19", title: "Zátěž bez vlivu výstupu", items: [
     "Zátěž a dechová práce: pokles pO₂ se opravuje o změnu okolního tlaku (při výstupu pO₂ klesá samo) – zmizí falešné špičky při výstupu; úsek od 3 m k hladině se nepočítá.",
   ] },
