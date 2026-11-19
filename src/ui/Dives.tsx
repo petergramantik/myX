@@ -692,11 +692,17 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
   const warns = useMemo(() => diveWarnings(d, summarize(d), th, evBase), [d, th, evBase]);
   const [zoom, setZoom] = useState<[number, number] | null>(null);
   useBackLayer(zoom != null, () => setZoom(null)); // Zpět nejdřív zruší přiblížení
-  // odkaz z varování: přiblížit na situaci (±2 min), posunout na graf, posuvník na začátek
+  // odkaz z varování: posunout na graf (s nadpisem), posuvník na začátek situace
   useEffect(() => {
     if (!focus) return;
-    setZoom([Math.max(0, focus.from - 120), Math.min(s.t[s.t.length - 1], focus.to + 120)]);
-    requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-chart="${focus.chart === "effort" ? "co2" : focus.chart}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" })));
+    // jen posuvník (bez přiblížení); když je výřez mimo situaci, zruší se
+    setZoom((z) => (z && (focus.from < z[0] || focus.from > z[1]) ? null : z));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-chart="${focus.chart === "effort" ? "co2" : focus.chart}"]`);
+      if (!el) return;
+      const top = (document.querySelector(".top") as HTMLElement | null)?.getBoundingClientRect().bottom ?? 0;
+      window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - top - 8, behavior: "smooth" }); // vidět i nadpis karty
+    }));
   }, [focus]);
   const fT = (k: string) => (focus && focus.chart === k ? focus.from : undefined);
   // typ čidla z Výbavy (čidlo na dané pozici v den ponoru)

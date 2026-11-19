@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, u
 /** Výchozí nastavení grafů v sekci (linka profilu, zoom). */
 export const ChartDefs = createContext<{ profile?: (number | null)[]; zoom?: boolean } | null>(null);
 /** Společný výřez (zoom) pro grafy jednoho ponoru: [od, do] v sekundách, null = celý ponor. */
-export const ZoomCtx = createContext<{ z: [number, number] | null; setZ: (z: [number, number] | null) => void } | null>(null);
+export const ZoomCtx = createContext<{ z: [number, number] | null; setZ: React.Dispatch<React.SetStateAction<[number, number] | null>> } | null>(null);
 
 export interface Series { label: string; color: string; values: (number | null)[]; unit?: string; right?: boolean; width?: number; dash?: string; fillUp?: boolean; noTip?: boolean; nullText?: string }
 
@@ -75,10 +75,31 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   const lastTap = useRef(0);
   useEffect(() => setHover(null), [t]);
   useEffect(() => { if (focusT == null || !t.length) return; const i = t.findIndex((x) => x >= focusT); setHover(i < 0 ? t.length - 1 : i); }, [focusT]);
+  // posuvník u okraje přiblíženého grafu plynule posouvá výřez (−1 vlevo, 1 vpravo)
+  const [edge, setEdge] = useState(0);
+  const live = useRef<{ setZ: (f: (z: [number, number] | null) => [number, number] | null) => void; T0: number; T1: number } | null>(null);
+  useEffect(() => {
+    if (!edge) return;
+    const id = setInterval(() => {
+      const L = live.current; if (!L) return;
+      L.setZ((z) => {
+        if (!z) return z;
+        const span = z[1] - z[0], d = edge * span * 0.012; // asi čtvrtina výřezu za sekundu
+        const lo2 = Math.min(Math.max(L.T0, z[0] + d), L.T1 - span);
+        const nz: [number, number] = [lo2, lo2 + span];
+        const te = edge < 0 ? nz[0] : nz[1];
+        let best = 0, bd = Infinity; for (let i = 0; i < t.length; i++) { const dd = Math.abs(t[i] - te); if (dd < bd) { bd = dd; best = i; } }
+        setHover(best);
+        return nz;
+      });
+    }, 40);
+    return () => clearInterval(id);
+  }, [edge, t]);
   if (!t.length) return <div className="chart-empty">Bez dat</div>;
   const z = zoomable ? (zc ? zc.z : zLocal) : null;
   const setZ = zc ? zc.setZ : setZLocal;
   const T0 = t[0], T1 = t[t.length - 1] || 1;
+  live.current = { setZ: setZ as (f: (z: [number, number] | null) => [number, number] | null) => void, T0, T1 };
   const win: [number, number] = z ? [Math.max(T0, z[0]), Math.min(T1, z[1])] : [T0, T1];
   const vis = (i: number) => t[i] >= win[0] - 1 && t[i] <= win[1] + 1;
   const series = [...series0.filter((s) => !hidden.has(s.label)), ...(profile && !hidden.has("Hloubka") ? [{ label: "", color: "#90a4ae", values: profile, width: 1, profile: true } as Series & { profile?: boolean }] : [])];
@@ -168,7 +189,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
     lastTap.current = now;
     onMove(e);
   };
-  const onUp = (e: React.PointerEvent) => { pts.current.delete(e.pointerId); if (pts.current.size < 2) pinch.current = null; };
+  const onUp = (e: React.PointerEvent) => { pts.current.delete(e.pointerId); if (pts.current.size < 2) pinch.current = null; if (!pts.current.size) setEdge(0); };
   const onPMove = (e: React.PointerEvent) => {
     if (zoomable && pts.current.has(e.pointerId)) pts.current.set(e.pointerId, pxOf(e));
     const p = pinch.current;
@@ -190,10 +211,25 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
     let best = 0, bd = Infinity;
     for (let i = 0; i < t.length; i++) { const dd = Math.abs(t[i] - tv); if (dd < bd) { bd = dd; best = i; } }
     setHover(best);
+    // tažení k okraji přiblíženého grafu (posledních 8 % šířky) posouvá výřez
+    const pw = W - m.l - m.r, held = pts.current.has(e.pointerId);
+    const ed = z && held ? (px < m.l + pw * 0.08 && x0 > T0 + 1 ? -1 : px > W - m.r - pw * 0.08 && x1 < T1 - 1 ? 1 : 0) : 0;
+    if (ed !== edge) setEdge(ed);
+  };
+  // tlačítka přiblížení: 2× kolem posuvníku (bez něj kolem středu), nejvíc na 2 min
+  const MINSPAN = 120, full = T1 - T0, span0 = x1 - x0;
+  const zoomBy = (k: number) => {
+    const c = hover != null ? t[hover] : (x0 + x1) / 2;
+    const span = Math.min(full, Math.max(MINSPAN, span0 * k));
+    if (span >= full - 1) { setZ(null); return; }
+    const f = (c - x0) / (span0 || 1); // posuvník zůstane na stejném místě grafu
+    const lo2 = Math.min(Math.max(T0, c - f * span), T1 - span);
+    setZ([lo2, lo2 + span]);
   };
   const hx = hover != null ? X(t[hover]) : 0;
   return (
-    <div className="chart" ref={ref}>
+    <div className="chart">
+      <div className="chart-row"><div className="chart-plot" ref={ref}>
       <svg width={W} height={height} onPointerMove={onPMove} onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={(e) => onUp(e)} role="img" style={zoomable ? { touchAction: "pan-y" } : undefined}>
         <defs><clipPath id={clipId}><rect x={m.l} y={0} width={Math.max(0, W - m.l - m.r)} height={height} /></clipPath></defs>
         {yt.map((v) => (
@@ -219,9 +255,16 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
         {/* popisky značek mimo ořez – na okraji se posunou dovnitř grafu */}
         {placed.map((p, i) => <text key={"pl" + i} x={p.lx} y={4 + p.row * 11 + 8} fill={p.color} className="strip-l">{p.label}</text>)}
       </svg>
-      {z && <button className="chart-reset" onClick={() => setZ(null)}>1:1</button>}
+      </div>
+      {zoomable && <div className="zbtns">
+        <button aria-label="Přiblížit" disabled={span0 <= MINSPAN + 1} onClick={() => zoomBy(0.5)}>+</button>
+        <button aria-label="Celý graf" disabled={!z} onClick={() => setZ(null)}>0</button>
+        <button aria-label="Oddálit" disabled={!z} onClick={() => zoomBy(2)}>−</button>
+      </div>}
+      </div>
+
       <div className={"chart-info" + (hover == null ? " empty" : "")}>
-        {hover == null ? <span className="ci-hint">{zoomable ? "Táhni: hodnoty · Roztáhni: přiblížit · Dvojklep: zpět" : "Táhni: hodnoty · Dvojklep: zrušit"}</span> : <>
+        {hover == null ? <span className="ci-hint">{zoomable ? "Táhni: hodnoty (u okraje posun) · +/−: přiblížení · Dvojklep: zpět" : "Táhni: hodnoty · Dvojklep: zrušit"}</span> : <>
           <button className="ci-x" aria-label="Zrušit" onClick={() => setHover(null)}>✕</button>
           <div className="ci-r"><b>{xTitle ? xTitle(t[hover]) : fmtTime(t[hover])}</b>{profile && profile[hover] != null && <span> · {fmtCs(profile[hover], 1)} m</span>}
             {bands?.filter((b) => b.label && t[hover] >= b.from && t[hover] <= b.to).map((b, i) => <span key={"bl" + i} className="tip-alarm" style={{ color: b.color }}> ⚠ {b.label}</span>)}</div>

@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.39";
+export const APP_VERSION = "1.39.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.39.1", date: "2026-11-19", title: "Ovládání grafů", items: [
+    "Odkaz z upozornění jen posune na graf (i s nadpisem) a nastaví posuvník, nepřibližuje.",
+    "Vpravo od grafů tlačítka + / 0 / − (přiblížení kolem posuvníku, celý graf, oddálení).",
+    "Posuvník u okraje přiblíženého grafu plynule posouvá výřez.",
+  ] },
   { version: "1.39", date: "2026-11-19", title: "CO₂ a dechová práce", items: [
     "Grafy CO₂ a zátěže sloučeny do jednoho: CO₂ hlavní, zátěž a hustota plynu tence na pravé ose; místo šedých pásem mezery s důvodem v pruhu pod grafem.",
     "Zátěž chybí kratší dobu: po přepnutí SP a ruční dávce jen do ustálení pO₂, po doplnění diluentu 90 s. Ruční dávky podle analýzy dávek (už ne falešně při klesání).",
