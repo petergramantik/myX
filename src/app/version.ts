@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.5";
+export const APP_VERSION = "1.34.6";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.6", date: "2026-11-19", title: "Info z posuvníku pod grafem", items: [
+    "Hodnoty z posuvníku se ukazují v pruhu pod grafem (nad legendou) – graf zůstává celý vidět; čas, hloubka, alarm a hodnoty řad kompaktně.",
+    "Posuvník zůstane na místě i po zvednutí prstu; zrušení ✕ v pruhu nebo dvojklepnutím.",
+  ] },
   { version: "1.34.5", date: "2026-11-19", title: "Každý alarm zvlášť s odkazem do grafu", items: [
     "Rozbalené varování / alarm ukáže každou situaci zvlášť (čas, délka, kroky řešení); víc než 5 situací je sbalených.",
     "„Ukázat v grafu ›“ přepne na Grafy, přiblíží situaci (±2 min), posune na příslušný graf a postaví posuvník na začátek alarmu.",

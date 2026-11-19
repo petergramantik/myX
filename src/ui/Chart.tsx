@@ -32,6 +32,8 @@ function ticks(lo: number, hi: number, n = 5): number[] {
   return out;
 }
 
+/** Hodnota v popisku s desetinnou čárkou. */
+const fmtCs = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : (Math.abs(v) >= 100 ? Math.round(v) : +v.toFixed(d)).toLocaleString("cs-CZ"));
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}′${String(r % 60).padStart(2, "0")}″`; };
 
@@ -143,7 +145,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   const tAt = (px: number, w: [number, number]) => w[0] + ((px - m.l) / (W - m.l - m.r)) * (w[1] - w[0]);
   const pxOf = (e: React.PointerEvent) => { const r = (e.currentTarget as SVGElement).getBoundingClientRect(); return ((e.clientX - r.left) / r.width) * W; };
   const onDown = (e: React.PointerEvent) => {
-    if (!zoomable) return onMove(e);
+    if (!zoomable) { const n = Date.now(); if (n - lastTap.current < 300) { setHover(null); lastTap.current = 0; return; } lastTap.current = n; return onMove(e); }
     pts.current.set(e.pointerId, pxOf(e));
     if (pts.current.size === 2) {
       const [a, b] = [...pts.current.values()];
@@ -151,7 +153,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
       setHover(null); return;
     }
     const now = Date.now();
-    if (now - lastTap.current < 300 && z) { setZ(null); lastTap.current = 0; return; }
+    if (now - lastTap.current < 300) { if (z) setZ(null); setHover(null); lastTap.current = 0; return; }
     lastTap.current = now;
     onMove(e);
   };
@@ -181,7 +183,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   const hx = hover != null ? X(t[hover]) : 0;
   return (
     <div className="chart" ref={ref}>
-      <svg width={W} height={height} onPointerMove={onPMove} onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={(e) => { onUp(e); setHover(null); }} role="img" style={zoomable ? { touchAction: "pan-y" } : undefined}>
+      <svg width={W} height={height} onPointerMove={onPMove} onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={(e) => onUp(e)} role="img" style={zoomable ? { touchAction: "pan-y" } : undefined}>
         <defs><clipPath id={clipId}><rect x={m.l} y={0} width={Math.max(0, W - m.l - m.r)} height={height} /></clipPath></defs>
         {yt.map((v) => (
           <g key={v}>
@@ -210,15 +212,17 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
         </g>
       </svg>
       {z && <button className="chart-reset" onClick={() => setZ(null)}>1:1</button>}
-      {hover != null && (
-        <div className="tip" style={{ left: Math.min(Math.max(0, hx + 10), Math.max(0, W - 170)) }}>
-          <b>{xTitle ? xTitle(t[hover]) : `Čas ${fmtTime(t[hover])}`}</b>
-          {bands?.filter((b) => b.label && t[hover] >= b.from && t[hover] <= b.to).map((b, i) => <div key={"bl" + i} className="tip-alarm" style={{ color: b.color }}>⚠ {b.label}</div>)}
-          {series.filter((s) => s.label).map((s, i) => <div key={i}><i style={{ background: s.color }} />{s.label}: {fmt(s.values[hover])} {s.unit || ""}</div>)}
-          {profile && profile[hover] != null && <div><i style={{ background: "#90a4ae" }} />Hloubka: {fmt(profile[hover], 1)} m</div>}
-          {extra?.map((s, i) => { const v = s.values[hover]; return <div key={"e" + i}>{s.label}: {typeof v === "string" ? v : fmt(v)} {s.unit || ""}</div>; })}
-        </div>
-      )}
+      <div className={"chart-info" + (hover == null ? " empty" : "")}>
+        {hover == null ? <span className="ci-hint">Posuň prstem po grafu</span> : <>
+          <button className="ci-x" aria-label="Zrušit" onClick={() => setHover(null)}>✕</button>
+          <div className="ci-r"><b>{xTitle ? xTitle(t[hover]) : fmtTime(t[hover])}</b>{profile && profile[hover] != null && <span> · {fmtCs(profile[hover], 1)} m</span>}
+            {bands?.filter((b) => b.label && t[hover] >= b.from && t[hover] <= b.to).map((b, i) => <span key={"bl" + i} className="tip-alarm" style={{ color: b.color }}> ⚠ {b.label}</span>)}</div>
+          <div className="ci-v">
+            {series.filter((s) => s.label).map((s, i) => <span key={i}><i style={{ background: s.color }} />{s.label} <b>{fmtCs(s.values[hover])}</b>{s.unit ? " " + s.unit : ""}</span>)}
+            {extra?.map((s, i) => { const v = s.values[hover]; return <span key={"e" + i}>{s.label} <b>{typeof v === "string" ? v : fmtCs(v)}</b>{s.unit ? " " + s.unit : ""}</span>; })}
+          </div>
+        </>}
+      </div>
       <div className="legend">
         {(toggle ? series0 : series).filter((s) => s.label).map((s, i) => toggle
           ? <span key={i} className={"lg-t" + (hidden.has(s.label) ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has(s.label) ? n.delete(s.label) : n.add(s.label); setHidden(n); }}><i style={{ background: s.color }} />{s.label}</span>

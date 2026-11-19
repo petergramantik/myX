@@ -443,3 +443,11 @@ details.card.sec > summary h2 { margin: 0; }
 .ablock-h { font-weight: 700; font-size: 14px; }
 .ablock-s { font-size: 14px; line-height: 1.35; }
 .ablock-l { display: inline-block; margin-top: 4px; font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }
+.chart-info { position: relative; min-height: 3.4em; margin: 4px 0 2px; padding: 5px 26px 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: rgba(10, 20, 36, .55); font-size: 12px; line-height: 1.45; }
+.chart-info.empty { display: flex; align-items: center; justify-content: center; }
+.ci-hint { color: var(--muted); }
+.ci-r { font-size: 13px; }
+.ci-v { display: flex; flex-wrap: wrap; column-gap: 12px; }
+.ci-v span { white-space: nowrap; }
+.chart-info i { display: inline-block; width: 9px; height: 3px; margin-right: 4px; vertical-align: middle; border-radius: 2px; }
+.ci-x { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border: 0; background: transparent; color: var(--muted); font-size: 13px; }
