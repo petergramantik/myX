@@ -361,6 +361,14 @@ function GuestNote({ note }: { note: DiveNote }) {
   );
 }
 
+/** Popis grafu ve sbalovacím řádku (výchozí sbaleno, stav se pamatuje pro každý graf). */
+function Desc({ k, children }: { k: string; children: React.ReactNode }) {
+  const sk = "myx.desc." + k;
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem(sk) === "1"; } catch { return false; } });
+  const set = (v: boolean) => { setOpen(v); try { localStorage.setItem(sk, v ? "1" : "0"); } catch { /* bez úložiště */ } };
+  return <div className="chart-desc"><button className="ev-head" onClick={() => set(!open)}>{open ? "▾" : "▸"} Popis grafu</button>{open && children}</div>;
+}
+
 /** Barevné události pod grafem (varování a informace s odkazem do tohoto grafu), chronologicky, ve sbalovacím řádku.
  *  Klepnutí na událost nastaví posuvník; odkaz z detailu ponoru seznam rozbalí a událost zvýrazní. */
 function ChartEvents({ warns, keys, focus }: { warns: Alert[]; keys: string[]; focus?: ChartFocus | null }) {
@@ -411,7 +419,7 @@ function Co2Card({ d, focusT, warns, focus }: { d: Dive; focusT?: number; warns:
         ]}
         extra={[{ label: "Zátěž", values: wTxt }, ...(hasCo2 ? [{ label: "Surová hodnota CO₂", values: s.co2raw }] : [])]} />
       <ChartEvents warns={warns} keys={["co2", "effort"]} focus={focus} />
-      <p className="note">{hasCo2 ? <><b>CO₂</b> ve smyčce (levá osa, mbar) je hlavní údaj. </> : null}<b>Zátěž</b> (pravá osa) = rychlost poklesu pO₂ opravená o změnu tlaku, úměrná spotřebě O₂, tedy námaze; 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Nepočítá se při klesání, u hladiny, po přepnutí SP a po ruční dávce O₂ (než se pO₂ ustálí) a 90 s po doplnění diluentu – v čáře je mezera, důvod v pruhu pod grafem. Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). <b>Hustota plynu</b> (pravá osa, g/l, čárkovaně): nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně; max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min. Fialové čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p>
+      <Desc k="co2"><p className="note">{hasCo2 ? <><b>CO₂</b> ve smyčce (levá osa, mbar) je hlavní údaj. </> : null}<b>Zátěž</b> (pravá osa) = rychlost poklesu pO₂ opravená o změnu tlaku, úměrná spotřebě O₂, tedy námaze; 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Nepočítá se při klesání, u hladiny, po přepnutí SP a po ruční dávce O₂ (než se pO₂ ustálí) a 90 s po doplnění diluentu – v čáře je mezera, důvod v pruhu pod grafem. Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). <b>Hustota plynu</b> (pravá osa, g/l, čárkovaně): nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně; max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min. Fialové čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p></Desc>
     </Card>
   );
 }
@@ -754,11 +762,11 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
           ]} extra={[{ label: "Průměr pO₂", values: s.ppo2, unit: "bar" }, ...depthExtra]} />
         )}
         <ChartEvents warns={warns} keys={["po2"]} focus={focus} />
-        <p className="note">
+        <Desc k="po2"><p className="note">
           {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
           {dz.length > 0 && <>Světle modře úseky, kdy pO₂ nad {fmtSp(th.po2HiWarn ?? 1.4)} bar dává sám diluent v dané hloubce (není to chyba, nevaruje se; klepnutím v legendě skryješ). </>}
           Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Pásma: červené = alarm vysokého pO₂ z počítače, oranžové = alarm nízkého pO₂, žluté / sytě červené = vlastní detekce vysokého pO₂, tyrkysové = čidla se rozcházejí o víc než 0,3 bar.
-        </p>
+        </p></Desc>
       </Card></div>
       <div data-chart="co2"><Co2Card d={d} focusT={fT("co2") ?? fT("effort")} warns={warns} focus={focus} /></div>
       <Card title="Dekomprese">
@@ -767,22 +775,23 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
           { label: "Čas na zastávce", color: C[2], values: s.stopt.map((v, i) => (s.stop[i] > 0 && s.t[i] <= d.h.diveTimeS ? v : null)), unit: "min" },
           { label: "TTS", color: C[1], values: s.tts, unit: "min", width: 2 }, { label: "@+5", color: C[3], values: s.at5, unit: "min", dash: "4 3" },
         ]} extra={[{ label: "Zastávka", values: s.stop.map((v) => (v > 0 ? `${v} m` : "–")) }]} />
-        <p className="note"><b>NDL</b> – kolik minut můžeš zůstat v aktuální hloubce bez povinné zastávky (99 = víc než 99). <b>Čas na zastávce</b> – zbývající čas na aktuální deko zastávce (hloubka zastávky v popisku posuvníku). <b>TTS</b> – celkový čas výstupu na hladinu včetně zastávek, kdybys začal stoupat hned. <b>@+5</b> – jaké by bylo TTS, kdybys v aktuální hloubce zůstal ještě 5 min (rozdíl proti TTS = jak rychle deko roste).</p>
+        <Desc k="deco"><p className="note"><b>NDL</b> – kolik minut můžeš zůstat v aktuální hloubce bez povinné zastávky (99 = víc než 99). <b>Čas na zastávce</b> – zbývající čas na aktuální deko zastávce (hloubka zastávky v popisku posuvníku). <b>TTS</b> – celkový čas výstupu na hladinu včetně zastávek, kdybys začal stoupat hned. <b>@+5</b> – jaké by bylo TTS, kdybys v aktuální hloubce zůstal ještě 5 min (rozdíl proti TTS = jak rychle deko roste).</p></Desc>
       </Card>
       <Card title="Tkáně a kyslík">
         <LineChart t={s.t} bands={gfLoad.map((r) => ({ ...r, color: "#90a4ae" }))} bandLegend={gfLoad.length ? [{ color: "#90a4ae", label: "nasycování (počítač ukazuje --)" }] : []} series={[
           { label: "GF99", color: C[5], values: s.gf99, unit: "%", width: 2, nullText: "--" }, { label: `GF High ${d.h.gfHi}`, color: "#b0bec5", values: s.t.map(() => d.h.gfHi), unit: "%", dash: "4 3", width: 1, noTip: true },
           { label: "CNS", color: C[4], values: s.cns, unit: "%" },
         ]} />
-        <p className="note"><b>GF99</b> – jak blízko jsou tkáně povolenému přesycení (0 % = bez přesycení, 100 % = hranice modelu Bühlmann); při výstupu roste, na zastávkách klesá. Čárkovaně tvůj GF High – výš by se jít nemělo. Šedě úseky, kdy se tkáně teprve nasycují (sestup, dno, opětovné zanoření) – přesycení není, počítač ukazuje „--“. Skok na konci je <b>Surface GF</b> po vynoření – během povrchového intervalu pak klesá. <b>CNS</b> – kumulativní kyslíková zátěž centrální nervové soustavy, limit 100 %.</p>
+        <Desc k="tissue"><p className="note"><b>GF99</b> – jak blízko jsou tkáně povolenému přesycení (0 % = bez přesycení, 100 % = hranice modelu Bühlmann); při výstupu roste, na zastávkách klesá. Čárkovaně tvůj GF High – výš by se jít nemělo. Šedě úseky, kdy se tkáně teprve nasycují (sestup, dno, opětovné zanoření) – přesycení není, počítač ukazuje „--“. Skok na konci je <b>Surface GF</b> po vynoření – během povrchového intervalu pak klesá. <b>CNS</b> – kumulativní kyslíková zátěž centrální nervové soustavy, limit 100 %.</p></Desc>
       </Card>
       <div data-chart="press"><Card title="Tlak v láhvích">
         <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: s.dil, unit: "bar" }, { label: "O₂", color: C[2], values: s.o2p, unit: "bar" }]} extra={depthExtra} />
         <ChartEvents warns={warns} keys={["press"]} focus={focus} />
-        <p className="note">Hodnota kolem 8–11 bar u O₂ odpovídá mezitlaku prvního stupně, ne tlaku v láhvi.</p>
+        <Desc k="press"><p className="note">Hodnota kolem 8–11 bar u O₂ odpovídá mezitlaku prvního stupně, ne tlaku v láhvi.</p></Desc>
       </Card></div>
       <div data-chart="temp"><Card title="Teplota a baterie">
         <LineChart t={s.t} focusT={fT("temp")} series={[{ label: "Teplota", color: C[1], values: s.temp, unit: "°C" }, { label: "Baterie", color: C[4], values: s.bv, unit: "V", right: true }]} extra={depthExtra} />
+        <ChartEvents warns={warns} keys={["temp"]} focus={focus} />
       </Card></div>
       <Card title="Rychlost (+ = výstup)">
         <LineChart t={s.t} zero series={[{ label: "Rychlost", color: C[0], values: vrate, unit: "m/min" }]} extra={depthExtra} />

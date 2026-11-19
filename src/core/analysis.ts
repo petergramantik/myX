@@ -746,7 +746,8 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
   const out: Alert[] = [];
   const co2Bad = co2BadRanges(d);
   const co2V = co2Valid(d).filter((x): x is number => x != null), co2VMax = co2V.length ? Math.max(...co2V) : null;
-  if (co2VMax != null && co2VMax >= th.co2Mbar) out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${co2VMax.toFixed(1)} mbar.` });
+  if (co2VMax != null && co2VMax >= th.co2Mbar) { const cv = co2Valid(d), ci = cv.findIndex((x) => x === co2VMax), ct = d.s.t[Math.max(0, ci)];
+    out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${co2VMax.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} mbar v ${tpt(ct)} (${d.s.depth[Math.max(0, ci)].toLocaleString("cs-CZ", { maximumFractionDigits: 0 })} m).`, blocks: [{ head: "", steps: [], from: ct, to: ct + 60, chart: "co2" }] }); }
   if (co2Bad.length) out.push({ level: "warn", title: "Čidlo CO₂ nejspíš chybné", text: `Hodnoty až ${Math.round(Math.max(...co2Bad.map((r) => r.max)))} mbar, celkem ${dur(co2Bad.reduce((x, r) => x + r.to - r.from, 0))} – fyziologicky nemožné. Pravděpodobná příčina: vlhkost / kondenzace na čidle (P) – zkontroluj a vysuš čidlo, případně ho vyměň.${co2Bad[0].from <= 180 ? " Nesmyslné hodnoty už od hladiny na začátku ponoru." : ""} Tyto úseky se do hlášení, souvislostí a srovnání nepočítají; v grafu zůstávají.`, blocks: co2Bad.map((r, k) => ({ head: co2Bad.length > 1 ? `${k + 1}. ${tpt(r.from)}–${tpt(r.to)}` : "", steps: [], from: r.from, to: r.to, chart: "co2" as ChartKey })) });
   // nízké pO₂ na začátku ponoru – podle průběhu (zavřený ventil O₂ = hypoxie)
   const sp0 = startPo2(d, th);
@@ -802,9 +803,11 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
   if (ndl.length) out.push({ level: "info", title: `Nízké NDL${ndl.length > 1 ? ` – ${ndl.length}×` : ""}`, text: ndl.map((w) => `${mmss(w.start)} (${ackTxt(w)}${w.how === "ack" ? `, za ${dur(w.end! - w.start)}` : ""})`).join(", ") + "." });
   // baterie Petrelu v tomto ponoru
   const bvs = d.s.bv.filter((v) => v > 0);
-  if (bvs.length && d.h.batWarn > 0) { const bmin = Math.min(...bvs);
-    if (bmin < d.h.batCrit) out.push({ level: "bad", title: "Kritická baterie", text: `Napětí kleslo na ${bmin.toFixed(2)} V (kritický práh ${d.h.batCrit.toFixed(2)} V).` });
-    else if (bmin < d.h.batWarn) out.push({ level: "warn", title: "Slabá baterie", text: `Napětí kleslo na ${bmin.toFixed(2)} V (práh varování ${d.h.batWarn.toFixed(2)} V).` }); }
+  if (bvs.length && d.h.batWarn > 0) { const bmin = Math.min(...bvs), V = (v: number) => v.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const lim = bmin < d.h.batCrit ? d.h.batCrit : d.h.batWarn, bi = d.s.bv.findIndex((v) => v > 0 && v < lim), bt = d.s.t[Math.max(0, bi)];
+    const blk: AlertBlock[] = [{ head: "", steps: [], from: bt, to: bt + 60, chart: "temp" }], when = bi <= 0 || bt <= 30 ? "pod prahem už od začátku ponoru" : `pod práh poprvé v ${tpt(bt)}`;
+    if (bmin < d.h.batCrit) out.push({ level: "bad", title: "Kritická baterie", text: `Napětí kleslo na ${V(bmin)} V (kritický práh ${V(d.h.batCrit)} V), ${when}.`, blocks: blk });
+    else if (bmin < d.h.batWarn) out.push({ level: "warn", title: "Slabá baterie", text: `Napětí kleslo na ${V(bmin)} V (práh varování ${V(d.h.batWarn)} V), ${when}.`, blocks: blk }); }
   const ph = lowPo2Phases(d);
   if (ph.surface) out.push({ level: "info", title: "Nízké pO₂ u hladiny", text: `Alarm nízkého pO₂ ${ph.surface}× při výstupu k hladině nebo po vynoření – pokles tlaku.` });
   for (const kind of ["co2", "po2high", "po2low"] as const) {
