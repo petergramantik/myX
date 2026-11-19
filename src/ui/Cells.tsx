@@ -50,7 +50,7 @@ export function useCells() {
     const lo = isoOf(p.prev.start), hi = isoOf(p.meta.start);
     return !cells.some((c) => c.pos === p.pos && c.installed >= lo && c.installed <= hi);
   });
-  return { ccr, series, events, current, empty, status, lastCal, lastCalNo: lastCalEv ? ccr[lastCalEv.index].i + 1 : null, prompts, changes, now, cells, answered: st.lb.answered };
+  return { ccr, series, events, current, empty, status, lastCal, lastCalNo: lastCalEv ? ccr[lastCalEv.index].i + 1 : null, prompts, changes, now, cells, answered: st.lb.answered, guest: !!st.guest };
 }
 
 /** Kontrola data výměny proti logu: najde nejbližší zjištěnou výměnu na pozici a ověří, že datum leží mezi posledním ponorem se starým a prvním s novým čidlem. */
@@ -92,7 +92,7 @@ export function CellTiles() {
             </div>
           );
           return (
-            <div key={pos} className={"celltile o2t " + s.level} onClick={() => go({ t: "cells", pos })}>
+            <div key={pos} className={"celltile o2t " + s.level} onClick={() => !c.guest && go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className={"dot " + s.level} /></div>
               <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"}<small>mV</small></div>
               <div className="ct-u"><span className="long">na vzduchu</span><span className="short">vzduch</span></div>
@@ -102,7 +102,7 @@ export function CellTiles() {
         })}
         <Co2Tile />
       </div>
-      <CellPanel c={c} />
+      {!c.guest && <CellPanel c={c} />}
     </>
   );
 }

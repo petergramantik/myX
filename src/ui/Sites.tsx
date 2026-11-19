@@ -1,7 +1,7 @@
 import { dur } from "../core/analysis";
 import { ask, askText } from "../app/dialog";
 import { useEffect, useState } from "react";
-import { ME, adoptForeign, aliasesFor, removeAlias, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
+import { ME, adoptForeign, aliasesFor, logName, removeAlias, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
 import { BLSwitch, Card, ClearInput, KV, Picker, back, fmtDate, go, num, tab, useStore } from "./common";
@@ -9,7 +9,47 @@ import { WeatherCard } from "./Weather";
 
 const MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 
+/** B&L cizího logu (jen pro čtení): jeho lokality / parťáci s počty jeho ponorů, jeho názvy a moje propojení „→“. */
+function GuestBL({ kind }: { kind: "site" | "buddy" }) {
+  const st = useStore();
+  const [pick, setPick] = useState<string | null>(null);
+  const items = Object.values((kind === "site" ? st.lb.sites : st.lb.buddies) as Record<string, { id: string; name: string; orig?: string }>);
+  const counts: Record<string, { n: number; last: number }> = {};
+  for (const m of st.metas) { const n = st.lb.notes[m.id]; const ids = kind === "site" ? (n?.siteId ? [n.siteId] : []) : n?.buddyIds || []; for (const x of ids) counts[x] = { n: (counts[x]?.n || 0) + 1, last: m.start }; }
+  const list = items.filter((x) => counts[x.id]).sort((a, b) => counts[b.id].n - counts[a.id].n);
+  const mine = Object.values(kind === "site" ? ownLb().sites : ownLb().buddies);
+  const link = async (x: { name: string; orig?: string }, id: string) => {
+    setPick(null);
+    const n = await adoptForeign(kind, x.orig ?? x.name, id, undefined, st.guest ? logName(st.guest) : undefined);
+    if (st.guest) await openGuest(st.guest); // přepočítat zobrazení s novým propojením
+    toast(n ? `Propojeno, doplněno k ${n} tvým ponorům` : "Propojeno");
+  };
+  return (
+    <>
+      {list.map((x) => {
+        const linked = x.orig != null;
+        return (
+          <div key={x.id} className="list-item">
+            <div className="li-main" onClick={() => go({ t: "dives", ...(kind === "site" ? { site: x.id } : { buddy: x.id }) })}>
+              <b>{x.orig ?? x.name}</b>{linked && <small className="muted"> → {x.name}</small>}
+              <small>{counts[x.id].n} ponorů · naposledy {fmtDate(counts[x.id].last)}</small>
+            </div>
+            {!linked && <button className="btn small" onClick={() => setPick(pick === x.id ? null : x.id)}>To je…</button>}
+            {pick === x.id && <Picker items={mine.map((m) => ({ id: m.id, name: m.name }))} placeholder={kind === "site" ? "Vyber mou lokalitu" : "Vyber mého parťáka"} onPick={(id) => link(x, id)} onCreate={() => setPick(null)} />}
+          </div>
+        );
+      })}
+      {!list.length && <p className="muted center">V tomto logu nejsou žádné {kind === "site" ? "lokality" : "parťáci"}.</p>}
+      <p className="note">Log jen pro čtení. „→“ = propojeno s tvým záznamem; „To je…“ propojí jméno z jeho logu s tvým.</p>
+    </>
+  );
+}
+
 export function SitesScreen() {
+  const st = useStore();
+  return st.guest ? <div className="screen"><BLSwitch on="sites" /><GuestBL kind="site" /></div> : <OwnSites />;
+}
+function OwnSites() {
   const st = useStore(), my = { lb: ownLb(), metas: ownMetas() };
   const [q, setQ] = useState("");
   const counts: Record<string, { n: number; last: number }> = {};
@@ -171,6 +211,10 @@ export function NameChoice({ a, b, value, onChange }: { a: string; b: string; va
 }
 
 export function BuddiesScreen() {
+  const st = useStore();
+  return st.guest ? <div className="screen"><BLSwitch on="buddies" /><GuestBL kind="buddy" /></div> : <OwnBuddies />;
+}
+function OwnBuddies() {
   const st = useStore(), my = { lb: ownLb(), metas: ownMetas() };
   const [name, setName] = useState("");
   const counts: Record<string, { n: number; last: number }> = {};

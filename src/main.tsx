@@ -40,7 +40,7 @@ const TABS: [Screen, string, string][] = [
 ];
 
 /** Titulek Přehledu: jméno aktivního logu ›, klepnutím výběr mezi mým logem a uloženými cizími (jen čtení). */
-function LogSwitch() {
+function LogSwitch({ label }: { label: string }) {
   const st = useStore();
   const [open, setOpen] = useState(false);
   useBackLayer(open, () => setOpen(false));
@@ -51,7 +51,7 @@ function LogSwitch() {
   const isCur = (l: GuestLog) => !!st.guest && (st.guest.id === l.id || (l.logs || [l]).some((x) => x.id === st.guest!.id));
   return (
     <div className="logsw">
-      <h1 className="logsw-t" onClick={() => setOpen(!open)}>myX – {cur} <span className="logsw-a">{open ? "⌄" : "›"}</span></h1>
+      <h1 className="logsw-t" onClick={() => setOpen(!open)}>{label} · <span className="logsw-n">{cur}</span> <span className="logsw-a">{open ? "⌄" : "›"}</span></h1>
       {open && <>
         <div className="logsw-bg" onClick={() => setOpen(false)} />
         <div className="logsw-m">
@@ -65,7 +65,7 @@ function LogSwitch() {
 }
 
 function title(s: Screen, st: ReturnType<typeof useStore>): string {
-  return "myX – " + screenName(s, st);
+  return screenName(s, st);
 }
 function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
   switch (s.t) {
@@ -116,6 +116,8 @@ const isTab = (s: Screen) => s.t !== "warn" && (s.t === "sites" || TABS.some(([t
 function App() {
   const s = useScreen();
   const st = useStore();
+  // DB a Nastavení vždy s mými daty – otevřený cizí log se při vstupu zavře
+  useEffect(() => { if ((s.t === "settings" || s.t === "hub") && st.guest) closeGuest(); }, [s.t]);
   useEffect(() => {
     init().then(async () => {
       if (!new URLSearchParams(location.search).has("shared")) return;
@@ -148,7 +150,7 @@ function App() {
       <DialogHost />
       <header className="top">
         {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <img className="logo" src="icons/myx-logbook.svg" alt="myX" />}
-        {s.t === "home" ? <LogSwitch /> : <h1>{title(s, st)}</h1>}
+        {s.t === "home" || s.t === "dives" && !s.site && !s.buddy || s.t === "sites" || s.t === "buddies" ? <LogSwitch label={screenName(s, st)} /> : <h1>{title(s, st)}</h1>}
         <button className="warnbtn none helpbtn" onClick={() => (s.t === "help" ? back() : go({ t: "help" }))} aria-label="Nápověda">?</button>
         <button className={"warnbtn " + (w.worst || "none")} onClick={() => (s.t === "warn" ? back() : (setAnim("from-left"), go({ t: "warn" })))} aria-label="Varování">
           ⚠{w.count > 0 && <span>{w.count}</span>}

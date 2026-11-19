@@ -348,9 +348,10 @@ function withAliases(g: Logbook, mine: Logbook): Logbook {
   const map = <T extends { name: string }>(kind: "buddy" | "site", items: Record<string, T>, my: Record<string, { name: string }>) =>
     Object.fromEntries(Object.entries(items).map(([k, v]) => {
       const a = mine.aliases?.[aliasKey(kind, v.name)];
-      if (a?.targetId === ME) return [k, { ...v, name: "Já" }];
+      // orig = jméno, jak ho má zapsané majitel logu (pro B&L cizího logu)
+      if (a?.targetId === ME) return [k, { ...v, name: "Já", orig: v.name }];
       const t = a ? my[a.targetId] : undefined;
-      return [k, t ? { ...v, name: t.name } : v];
+      return [k, t ? { ...v, name: t.name, orig: v.name } : v];
     }));
   return { ...g, buddies: map("buddy", g.buddies, mine.buddies), sites: map("site", g.sites, mine.sites) };
 }

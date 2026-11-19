@@ -42,7 +42,7 @@ function Motto() {
   const b = useBatteries();
   if (mottoHidden || st.lb.settings.motto === false || !st.metas.length) return null;
   const hide = () => { mottoHidden = true; force((x) => x + 1); };
-  const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), st.lb.settings.th, st.lb.settings.manualFill);
+  const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), st.lb.settings.th, st.guest ? null : st.lb.settings.manualFill);
   const lv: string[] = [];
   if (sc) lv.push(scrubLevel(sc, st.lb.settings.th.scrubDays).lvl);
   if (c.ccr.length) c.status.forEach((s) => lv.push(s.level));
@@ -57,7 +57,7 @@ function Motto() {
 function ScrubberTile() {
   const st = useStore();
   const lb = st.lb;
-  const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), lb.settings.th, lb.settings.manualFill);
+  const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), lb.settings.th, st.guest ? null : lb.settings.manualFill);
   if (!sc) return null;
   const { timeLvl, ageLvl, lvl } = scrubLevel(sc, lb.settings.th.scrubDays);
   return (
@@ -98,7 +98,7 @@ export function OverviewScreen() {
   for (const m of st.metas) bySerial.set(m.h.serial, [...(bySerial.get(m.h.serial) || []), m]);
   const multi = bySerial.size > 1;
   const lastSer = st.metas[st.metas.length - 1]?.h.serial;
-  const batAl = [...bySerial].filter(([ser]) => ser !== lastSer).flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null, lb.settings.batSwap?.[String(ser)])
+  const batAl = [...bySerial].filter(([ser]) => ser !== lastSer).flatMap(([ser, ms]) => alerts(ms.map((m) => m.h), localNow(), lb.settings.th, null, (st.guest ? null : lb.settings.batSwap?.[String(ser)]))
     .filter((a) => a.kind !== "scrubber").map((a) => (multi ? { ...a, title: `${a.title} (${compName(ser)})` } : a)));
   const drafts = Object.values(lb.drafts).sort((a, b) => b.created - a.created);
   const last = st.metas[st.metas.length - 1];
@@ -182,7 +182,7 @@ function BatteryMini() {
   return (
     <div className="batmini">
       <div><span>Petrel</span><br />{h ? `${h.batVStart.toFixed(2).replace(".", ",")} → ${h.batVEnd.toFixed(2).replace(".", ",")} V` : "–"}</div>
-      {b.head.map((x) => <div key={x.pos}><span>Hlava {x.pos}</span>{x.cur ? `${num(x.minutes / 60, 1)} h` : "–"}</div>)}
+      {!b.guest && b.head.map((x) => <div key={x.pos}><span>Hlava {x.pos}</span>{x.cur ? `${num(x.minutes / 60, 1)} h` : "–"}</div>)}
     </div>
   );
 }

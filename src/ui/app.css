@@ -458,3 +458,6 @@ details.card.sec > summary h2 { margin: 0; }
 
 .tile { min-width: 0; overflow-wrap: anywhere; }
 .tiles.two .tile .v .pair { flex-wrap: wrap; row-gap: 2px; }
+.logsw-n { overflow: hidden; text-overflow: ellipsis; }
+.list-item .li-main + .btn.small { flex: none; margin-left: 8px; }
+.list-item > .btn.small { padding: 4px 10px; font-size: 14px; }

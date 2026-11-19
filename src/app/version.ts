@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.36.2";
+export const APP_VERSION = "1.37";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.37", date: "2026-11-19", title: "Záhlaví s názvem karty, cizí log v B&L", items: [
+    "Záhlaví bez „myX –“: název karty; na Přehledu, Ponorech a v B&L „Karta · Jméno ›“ s přepínačem logů, jinde jen název.",
+    "B&L v cizím logu: jeho lokality a parťáci jen pro čtení (jeho názvy, počty jeho ponorů, „→“ propojení s tvými), „To je…“ propojí jméno s tvým.",
+    "DB a Nastavení vždy s tvými daty – otevřený cizí log se při vstupu zavře.",
+    "Cizí Přehled bez údajů z tvé evidence výbavy (baterie v hlavě, ruční datum sorbentu, úpravy čidel).",
+  ] },
   { version: "1.36.2", date: "2026-11-19", title: "Nová ikona aplikace", items: [
     "Nová ikona myX Logbook (plocha telefonu, záložka prohlížeče, logo v záhlaví), včetně varianty pro Android (maskable).",
   ] },
