@@ -371,5 +371,16 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(hist[2] >= 170 && po2HiLevel({ ppo2Max: 1.5, po2Hi: hist }, {}) === "warn" && po2HiLevel({ ppo2Max: 1.65, po2Hi: hist }, {}) === "bad", `souhrn pro tag (${hist})`);
 }
 
+{ // vysoké pO₂ dané diluentem v hloubce – nevaruje se, nad 1,6 ano
+  const { po2HighZones, po2DilZones } = await import("../src/core/analysis");
+  const t = [...Array(181).keys()].map((i) => i * 10);
+  const depth = t.map((x) => (x < 1200 ? 62 : 3)); // vzduch v 62 m → pO₂ diluentu ≈ 1,49
+  const ppo2 = t.map((x) => (x < 300 ? 1.45 : x < 600 ? 1.55 : x < 900 ? 1.75 : 1.2)); // 1,55 při diluentu 1,49 = diluent; 1,75 = O₂ navíc
+  const d = { h: { diveTimeS: 1700, surfP: 1013, salinity: 1000 }, s: { t, depth, ppo2, o2: t.map(() => 21), ceil: t.map(() => 0), stop: t.map(() => 0) } } as any;
+  const z = po2HighZones(d, {}), dz = po2DilZones(d, {});
+  ok(dz.length === 1 && dz[0].from === 0 && dz[0].to === 600, `úsek z diluentu 0–600 s (${JSON.stringify(dz)})`);
+  ok(!z.some((x) => x.level === "warn" && x.from < 600) && z.some((x) => x.level === "bad" && x.from === 600), "diluent nevaruje, nad 1,6 červeně");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

@@ -473,7 +473,27 @@ export function decoMask(d: Dive): boolean[] {
   // jen po nejhlubším bodě: v hloubce zastávky (nejvýš 3 m pod ní), nebo mělčeji než 9 m
   return s.t.map((_, i) => i > imax && s.depth[i] > 0.5 && ((s.stop[i] > 0 && s.depth[i] <= s.stop[i] + 3) || s.depth[i] <= 9));
 }
-/** Úseky vysokého pO₂: „bad“ nad červeným prahem kdykoli, „warn“ nad žlutým déle než warnS mimo deko zastávky. */
+/** pO₂ dýchaného plynu (diluentu) v aktuální hloubce (bar). */
+export function dilPo2(d: Dive, i: number): number {
+  const amb = (d.h.surfP || 1013) / 1000 + d.s.depth[i] * (d.h.salinity || 1000) / 1000 * 0.0981;
+  return (d.s.o2?.[i] || 0) / 100 * amb;
+}
+/** Vzorek, kde vysoké pO₂ (nad lim) dává sám diluent: pO₂ diluentu nad lim a smyčka nejvýš 0,1 bar nad ním. */
+export function dilHigh(d: Dive, i: number, lim: number): boolean {
+  const dp = dilPo2(d, i); return dp > lim && d.s.ppo2[i] <= dp + 0.1;
+}
+/** Úseky, kdy pO₂ nad žlutým prahem způsobuje samotný diluent (nevaruje se, jen se ukazuje v grafu). */
+export function po2DilZones(d: Dive, th: Partial<Thresholds> = {}): { from: number; to: number; max: number }[] {
+  const warn = th.po2HiWarn ?? 1.4, bad = th.po2HiBad ?? 1.6, s = d.s, out: { from: number; to: number; max: number }[] = [];
+  let a = -1;
+  for (let i = 0; i <= s.t.length; i++) {
+    const ok = i < s.t.length && s.t[i] <= d.h.diveTimeS && s.ppo2[i] > warn && s.ppo2[i] <= bad && dilHigh(d, i, warn);
+    if (ok && a < 0) a = i;
+    if (!ok && a >= 0) { const b = i - 1, n = s.t[Math.min(i, s.t.length - 1)]; out.push({ from: s.t[a], to: n > s.t[b] ? n : s.t[b] + (d.h.rateS || 5), max: Math.max(...s.ppo2.slice(a, b + 1)) }); a = -1; }
+  }
+  return out;
+}
+/** Úseky vysokého pO₂: „bad“ nad červeným prahem kdykoli, „warn“ nad žlutým déle než warnS mimo deko zastávky a mimo úseky, kdy ho dává sám diluent. */
 export function po2HighZones(d: Dive, th: Partial<Thresholds> = {}): { from: number; to: number; level: "warn" | "bad"; max: number }[] {
   const warn = th.po2HiWarn ?? 1.4, bad = th.po2HiBad ?? 1.6, warnS = th.po2HiWarnS ?? 60;
   const s = d.s, deco = decoMask(d), out: { from: number; to: number; level: "warn" | "bad"; max: number }[] = [];
@@ -486,7 +506,7 @@ export function po2HighZones(d: Dive, th: Partial<Thresholds> = {}): { from: num
     }
   };
   scan((i) => s.ppo2[i] > bad, "bad", 0);
-  scan((i) => s.ppo2[i] > warn && !deco[i], "warn", warnS);
+  scan((i) => s.ppo2[i] > warn && !deco[i] && !dilHigh(d, i, warn), "warn", warnS);
   return out.sort((x, y) => x.from - y.from);
 }
 /** Prahy pro souhrn ponoru (bar): nejdelší souvislý čas nad každým z nich mimo deko zastávky. */
@@ -494,7 +514,7 @@ export const PO2_HI_STEPS = [1.3, 1.35, 1.4, 1.45, 1.5, 1.55, 1.6];
 export function po2HiHist(d: Dive): number[] {
   const s = d.s, deco = decoMask(d);
   return PO2_HI_STEPS.map((lim) => { let best = 0, a = -1;
-    for (let i = 0; i <= s.t.length; i++) { const ok = i < s.t.length && s.t[i] <= d.h.diveTimeS && s.ppo2[i] > lim && !deco[i];
+    for (let i = 0; i <= s.t.length; i++) { const ok = i < s.t.length && s.t[i] <= d.h.diveTimeS && s.ppo2[i] > lim && !deco[i] && (lim >= 1.6 || !dilHigh(d, i, lim));
       if (ok && a < 0) a = i; if (!ok && a >= 0) { best = Math.max(best, s.t[i - 1] - s.t[a]); a = -1; } }
     return Math.round(best); });
 }

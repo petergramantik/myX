@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
@@ -686,10 +686,14 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
   const day = new Date(d.h.start * 1000).toISOString().slice(0, 10);
   const cellName = (k: number) => { const c = Object.values(st.lb.cells).find((x) => x.pos === k && x.installed <= day && (!x.removed || x.removed >= day)); const n = c ? (c.type || c.maker || "").trim() : ""; return `Čidlo ${k}${n ? ` (${n})` : ""}`; };
   const hz = useMemo(() => po2HighZones(d, th), [d, th]);
+  const dz = useMemo(() => po2DilZones(d, th), [d, th]);
+  const [dilOn, setDilOn] = useState(() => { try { return localStorage.getItem("myx.dilBand") !== "0"; } catch { return true; } });
+  const flipDil = () => { const v = !dilOn; setDilOn(v); try { localStorage.setItem("myx.dilBand", v ? "1" : "0"); } catch { /* bez úložiště */ } };
   const spread = cellSpread(d);
   const po2Bands = [
     ...d.alarms.filter((a) => a.kind === "po2high" || a.kind === "po2low").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d", label: `Alarm z počítače: ${a.kind === "po2high" ? "vysoké" : "nízké"} pO₂` })),
     ...hz.map((z) => ({ from: z.from, to: z.to, color: z.level === "bad" ? "#ff1744" : "#ffee58", label: z.level === "bad" ? `pO₂ nad ${fmtSp(th.po2HiBad ?? 1.6)} bar (max ${fmtSp(+z.max.toFixed(2))})` : `pO₂ nad ${fmtSp(th.po2HiWarn ?? 1.4)} bar mimo deko (max ${fmtSp(+z.max.toFixed(2))})` })),
+    ...(dilOn ? dz.map((z) => ({ from: z.from, to: z.to, color: "#4fc3f7", label: `pO₂ z diluentu nad ${fmtSp(th.po2HiWarn ?? 1.4)} bar (max ${fmtSp(+z.max.toFixed(2))})` })) : []),
     ...(spread?.bands || []).map((b) => ({ ...b, to: b.to + 5, color: "#26a69a", label: "Čidla se rozcházejí (nad 0,3 bar)" })),
     ...((d as Dive & { surf?: { from: number; to: number }[] }).surf || []).map((b) => ({ ...b, color: "#90a4ae", label: "Hladina" })),
   ];
@@ -698,6 +702,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
     ...(d.alarms.some((a) => a.kind === "po2low") ? [{ color: "#ffb74d", label: "alarm nízkého pO₂" }] : []),
     ...(hz.some((z) => z.level === "warn") ? [{ color: "#ffee58", label: `nad ${fmtSp(th.po2HiWarn ?? 1.4)} bar mimo deko` }] : []),
     ...(hz.some((z) => z.level === "bad") ? [{ color: "#ff1744", label: `nad ${fmtSp(th.po2HiBad ?? 1.6)} bar` }] : []),
+    ...(dz.length ? [{ color: "#4fc3f7", label: `pO₂ z diluentu > ${fmtSp(th.po2HiWarn ?? 1.4)}`, off: !dilOn, onClick: flipDil }] : []),
     ...(spread?.bands?.length ? [{ color: "#26a69a", label: "rozjetá čidla" }] : []),
     ...((d as Dive & { surf?: unknown[] }).surf?.length ? [{ color: "#90a4ae", label: "hladina" }] : []),
   ];
@@ -719,6 +724,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
         )}
         <p className="note">
           {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
+          {dz.length > 0 && <>Světle modře úseky, kdy pO₂ nad {fmtSp(th.po2HiWarn ?? 1.4)} bar dává sám diluent v dané hloubce (není to chyba, nevaruje se; klepnutím v legendě skryješ). </>}
           Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Pásma: červené = alarm vysokého pO₂ z počítače, oranžové = alarm nízkého pO₂, žluté / sytě červené = vlastní detekce vysokého pO₂, tyrkysové = čidla se rozcházejí o víc než 0,3 bar.
         </p>
       </Card></div>

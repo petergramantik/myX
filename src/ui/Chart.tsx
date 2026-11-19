@@ -48,7 +48,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   /** Legenda řad je klikatelná – zapnutí / vypnutí řady. */
   toggle?: boolean;
   /** Vysvětlivky pásem v legendě. */
-  bandLegend?: { color: string; label: string }[];
+  bandLegend?: { color: string; label: string; off?: boolean; onClick?: () => void }[];
   /** Zoom dvěma prsty (výřez sdílený přes ZoomCtx). */
   zoomable?: boolean;
   /** Svislé čáry od horního okraje grafu k hodnotě `to` (levá osa). */
@@ -236,7 +236,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
           ? <span key={i} className={"lg-t" + (hidden.has(s.label) ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has(s.label) ? n.delete(s.label) : n.add(s.label); setHidden(n); }}><i style={{ background: s.color }} />{s.label}</span>
           : <span key={i}><i style={{ background: s.color }} />{s.label}</span>)}
         {profile && <span className={"lg-t" + (hidden.has("Hloubka") ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has("Hloubka") ? n.delete("Hloubka") : n.add("Hloubka"); setHidden(n); }}><i style={{ background: "#90a4ae" }} />Hloubka</span>}
-        {bandLegend?.map((b, i) => <span key={"bd" + i} className="lg-band"><i style={{ background: b.color }} />{b.label}</span>)}
+        {bandLegend?.map((b, i) => <span key={"bd" + i} className={"lg-band" + (b.onClick ? " lg-t" : "") + (b.off ? " off" : "")} onClick={b.onClick}><i style={{ background: b.color }} />{b.label}</span>)}
       </div>
     </div>
   );
