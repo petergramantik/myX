@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.33";
+export const APP_VERSION = "1.34";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34", date: "2026-11-19", title: "Vysoké pO₂, řešení varování, zoom grafů", items: [
+    "Vlastní hlídání vysokého pO₂: žlutě nad 1,4 bar déle než 1 min mimo deko zastávky, červeně nad 1,6 bar (prahy v Nastavení → Upozornění) – pásma v grafu, dlaždice Max. pO₂, tag pO₂.",
+    "Varování a alarmy z počítače mají v rozbalení časovou osu řešení: potvrzení, setpoint, ruční dávky, diluent / upuštění smyčky, lahve, OC, konec alarmu ((P) = odhad).",
+    "Grafy v detailu ponoru: jemná linka profilu, zoom dvěma prsty (všechny grafy najednou, osy zůstávají, zpět 1:1 nebo dvojklepnutím), posuvník jedním prstem beze změny.",
+    "Graf pO₂ a čidel: typ čidla z Výbavy, tenčí čáry, klikatelná legenda (zapnout/vypnout), legenda pásem, rozjetá čidla tyrkysově, v posuvníku info o alarmu.",
+  ] },
   { version: "1.33", date: "2026-11-17", title: "Sdílení srovnání jako stránky", items: [
     "Srovnání: tlačítko ⤴ Sdílet srovnání pošle přes WhatsApp, Messenger, mail statickou stránku .html (hlavička, závěr, grafy, rozdíly) – příjemce nepotřebuje myX, otevře ji v prohlížeči i v náhledu na iPhonu.",
     "Bez ID počítačů a surových dat ponorů; grafy zjednodušené (~70 kB pro 3 potápěče); odkaz na myX v hlavičce i patičce.",

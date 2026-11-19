@@ -356,5 +356,19 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(back.length === 120 && back.every((r, i) => r.log_id === rows[i][0] && r.n === rows[i][3] && r.f === rows[i][4] && (r.data_bytes_1 as Uint8Array).length === (rows[i][2] as Uint8Array).length && (r.data_bytes_1 as Uint8Array).every((v, j) => v === (rows[i][2] as Uint8Array)[j])), "SQLite zapisovač: zpětné čtení");
 }
 
+{ // vysoké pO₂ – vlastní detekce (mimo deko zastávky)
+  const { po2HighZones, po2HiHist, po2HiLevel } = await import("../src/core/analysis");
+  const t = [...Array(361).keys()].map((i) => i * 10); // 60 min
+  // 0–20 min dno 30 m, 20–40 min výstup na 6 m (zastávka), pO₂ 1,45 na dně 10.–13. min, 1,5 na zastávce, 1,65 krátce ve 15. min
+  const depth = t.map((x) => (x < 1200 ? 30 : x < 1500 ? 30 - ((x - 1200) / 300) * 24 : x < 3400 ? 6 : 0));
+  const ppo2 = t.map((x) => (x >= 600 && x < 780 ? 1.45 : x >= 900 && x < 920 ? 1.65 : x >= 1600 && x < 3000 ? 1.5 : 1.2));
+  const d = { h: { diveTimeS: 3500 }, s: { t, depth, ppo2, ceil: t.map(() => 0) } } as any;
+  const z = po2HighZones(d, {});
+  ok(z.some((x) => x.level === "warn" && x.from === 600) && !z.some((x) => x.level === "warn" && x.from >= 1600), "nad 1,4 na dně → žlutě, na zastávce ne");
+  ok(z.some((x) => x.level === "bad" && x.from === 900), "nad 1,6 → červeně");
+  const hist = po2HiHist(d);
+  ok(hist[2] >= 170 && po2HiLevel({ ppo2Max: 1.5, po2Hi: hist }, {}) === "warn" && po2HiLevel({ ppo2Max: 1.65, po2Hi: hist }, {}) === "bad", `souhrn pro tag (${hist})`);
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

@@ -419,3 +419,12 @@ details.card.sec > summary h2 { margin: 0; }
 .clr-x:active { background: var(--panel2); }
 .row > .clr { flex: 1; min-width: 140px; }
 .cmp-share { margin-top: 8px; }
+.tile.bad { border: 1px solid var(--bad, #ef5350); } .tile.bad .v { color: var(--bad, #ef5350); }
+.alert.fold > div { white-space: pre-line; }
+.chart { position: relative; }
+.chart-reset { position: absolute; top: 2px; right: 2px; z-index: 3; padding: 2px 8px; font-size: 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--panel2); color: var(--accent); }
+.legend .lg-t { cursor: pointer; user-select: none; }
+.legend .lg-t.off { opacity: 0.35; text-decoration: line-through; }
+.legend .lg-band i { opacity: 0.45; border-radius: 2px; }
+.tip-alarm { font-weight: 700; }
+.chart-hint { margin: 0 2px 8px; }

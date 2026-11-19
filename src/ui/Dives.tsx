@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, po2HighZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
@@ -12,7 +12,7 @@ import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, f
 import { NoteEditor } from "./NoteEditor";
 import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
-import { LineChart, TissueMap } from "./Chart";
+import { ChartDefs, LineChart, TissueMap, ZoomCtx } from "./Chart";
 
 const C = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#fff176", "#ef5350"];
 
@@ -266,7 +266,8 @@ function DiveTags({ m }: { m: Meta }) {
 function diveTagsOfMeta(metas: Meta[], m: Meta, th: Parameters<typeof cellDiveWarnings>[2]): DiveTag[] {
   const idx = metas.findIndex((x) => x.id === m.id);
   const cw = idx >= 0 ? cellDiveWarnings(metas, idx, th) : [];
-  return diveTagsOf([...(m.warns || []), ...cw]);
+  const hi = po2HiLevel(m.sum, th);
+  return diveTagsOf([...(m.warns || []), ...cw, ...(hi ? [{ level: hi, title: "Vysoké pO₂ (vlastní detekce)" }] : [])]);
 }
 
 /** Nejzávažnější úroveň tagů pro rámeček kompaktního řádku. */
@@ -546,7 +547,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
       {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold />)}
       <PartsCard meta={meta} />
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
-        <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > 1.6 ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > (lb.settings.th.pn2Hot ?? 3.16) ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
+        <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > (lb.settings.th.po2HiBad ?? 1.6) ? "bad" : po2HiLevel(meta.sum, lb.settings.th) === "warn" ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > (lb.settings.th.pn2Hot ?? 3.16) ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
           ["Hloubka", <Pair l={`${num(meta.h.maxDepth)} m`} ll="max" r={`${num(meta.sum.avgDepth)} m`} rl="průměr" />],
           ["Doba", <Pair l={`${Math.round(meta.h.diveTimeS / 60)} min`} ll="ponor" r={meta.sum.decoMin ? `${meta.sum.decoMin} min` : "–"} rl="deko" />],
           ["Plyny", <span className="gas-list">{meta.sum.gases.map((g) => <span key={g.mix}><b>{gasLabel(g.mix).label}</b><small>{Math.round(g.s / 60)} min</small></span>)}</span>],
@@ -611,31 +612,54 @@ function ChartsTab({ d }: { d: Dive }) {
   }), [d]);
   const cells = [s.mv1, s.mv2, s.mv3].map((mv, k) => cellMode === "mv" ? mv : mv.map((v) => (cal[k] ? +(v * cal[k]!).toFixed(2) : null)));
   const hasHe = d.tissues.some((x) => x.he.some((v) => v > 0.02));
-  const depthExtra = [{ label: "Hloubka", values: s.depth, unit: "m" }];
+  const depthExtra: { label: string; values: (number | null)[]; unit: string }[] = []; // hloubku ukazuje linka profilu
+  const st = useStore(), th = st.lb.settings.th;
+  const [zoom, setZoom] = useState<[number, number] | null>(null);
+  // typ čidla z Výbavy (čidlo na dané pozici v den ponoru)
+  const day = new Date(d.h.start * 1000).toISOString().slice(0, 10);
+  const cellName = (k: number) => { const c = Object.values(st.lb.cells).find((x) => x.pos === k && x.installed <= day && (!x.removed || x.removed >= day)); const n = c ? (c.type || c.maker || "").trim() : ""; return `Čidlo ${k}${n ? ` (${n})` : ""}`; };
+  const hz = useMemo(() => po2HighZones(d, th), [d, th]);
+  const spread = cellSpread(d);
+  const po2Bands = [
+    ...d.alarms.filter((a) => a.kind === "po2high" || a.kind === "po2low").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d", label: `Alarm z počítače: ${a.kind === "po2high" ? "vysoké" : "nízké"} pO₂` })),
+    ...hz.map((z) => ({ from: z.from, to: z.to, color: z.level === "bad" ? "#ff1744" : "#ffee58", label: z.level === "bad" ? `pO₂ nad ${fmtSp(th.po2HiBad ?? 1.6)} bar (max ${fmtSp(+z.max.toFixed(2))})` : `pO₂ nad ${fmtSp(th.po2HiWarn ?? 1.4)} bar mimo deko (max ${fmtSp(+z.max.toFixed(2))})` })),
+    ...(spread?.bands || []).map((b) => ({ ...b, to: b.to + 5, color: "#26a69a", label: "Čidla se rozcházejí (nad 0,3 bar)" })),
+    ...((d as Dive & { surf?: { from: number; to: number }[] }).surf || []).map((b) => ({ ...b, color: "#90a4ae", label: "Hladina" })),
+  ];
+  const usedBands = [
+    ...(d.alarms.some((a) => a.kind === "po2high") ? [{ color: "#ef5350", label: "alarm vysokého pO₂" }] : []),
+    ...(d.alarms.some((a) => a.kind === "po2low") ? [{ color: "#ffb74d", label: "alarm nízkého pO₂" }] : []),
+    ...(hz.some((z) => z.level === "warn") ? [{ color: "#ffee58", label: `nad ${fmtSp(th.po2HiWarn ?? 1.4)} bar mimo deko` }] : []),
+    ...(hz.some((z) => z.level === "bad") ? [{ color: "#ff1744", label: `nad ${fmtSp(th.po2HiBad ?? 1.6)} bar` }] : []),
+    ...(spread?.bands?.length ? [{ color: "#26a69a", label: "rozjetá čidla" }] : []),
+    ...((d as Dive & { surf?: unknown[] }).surf?.length ? [{ color: "#90a4ae", label: "hladina" }] : []),
+  ];
   return (
-    <>
+    <ZoomCtx.Provider value={{ z: zoom, setZ: setZoom }}>
+    <ChartDefs.Provider value={{ profile: s.depth, zoom: true }}>
+      <p className="note chart-hint">Grafy: posuvník jedním prstem, přiblížení roztažením dvou prstů (všechny grafy najednou), zpět dvojklepnutím nebo 1:1. Položky legendy jde zapínat a vypínat.</p>
       <ProfileCard d={d} />
       <Card title="pO₂ a čidla" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
         {cellMode === "cal" ? (
-          <LineChart t={s.t} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={[...d.alarms.filter((a) => a.kind === "po2high" || a.kind === "po2low").map((a) => ({ from: a.start, to: a.end, color: a.kind === "po2high" ? "#ef5350" : "#ffb74d" })), ...(cellSpread(d)?.bands || []).map((b) => ({ ...b, to: b.to + 5, color: "#ce93d8" })), ...((d as Dive & { surf?: { from: number; to: number }[] }).surf || []).map((b) => ({ ...b, color: "#90a4ae" }))]} series={[
-            { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: "Čidlo 1", color: C[1], values: cells[0], unit: "bar" },
-            { label: "Čidlo 2", color: C[2], values: cells[1], unit: "bar" }, { label: "Čidlo 3", color: C[3], values: cells[2], unit: "bar" }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3" },
+          <LineChart t={s.t} toggle bandLegend={usedBands} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={po2Bands} series={[
+            { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: cellName(1), color: C[1], values: cells[0], unit: "bar", width: 1 },
+            { label: cellName(2), color: C[2], values: cells[1], unit: "bar", width: 1 }, { label: cellName(3), color: C[3], values: cells[2], unit: "bar", width: 1 }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3", width: 1 },
           ]} extra={depthExtra} />
         ) : (
-          <LineChart t={s.t} series={[
-            { label: "Čidlo 1", color: C[1], values: cells[0], unit: "mV" }, { label: "Čidlo 2", color: C[2], values: cells[1], unit: "mV" }, { label: "Čidlo 3", color: C[3], values: cells[2], unit: "mV" },
+          <LineChart t={s.t} toggle bandLegend={usedBands} bands={po2Bands} series={[
+            { label: cellName(1), color: C[1], values: cells[0], unit: "mV", width: 1 }, { label: cellName(2), color: C[2], values: cells[1], unit: "mV", width: 1 }, { label: cellName(3), color: C[3], values: cells[2], unit: "mV", width: 1 },
           ]} extra={[{ label: "Průměr pO₂", values: s.ppo2, unit: "bar" }, ...depthExtra]} />
         )}
         <p className="note">
           {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
-          Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Fialově podbarvené úseky = čidla se rozcházejí o víc než 0,3 bar.
+          Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Pásma: červené = alarm vysokého pO₂ z počítače, oranžové = alarm nízkého pO₂, žluté / sytě červené = vlastní detekce vysokého pO₂, tyrkysové = čidla se rozcházejí o víc než 0,3 bar.
         </p>
       </Card>
       <EffortCard d={d} />
       <Card title="CO₂ v dýchací smyčce">
         {s.co2.some((v) => v != null && v > 0)
-          ? <LineChart t={s.t} bands={d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350" }))} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
+          ? <LineChart t={s.t} bandLegend={d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : undefined} bands={d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" }))} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
           : <p className="muted">V tomto ponoru CO₂ čidlo nic nezaznamenalo.</p>}
       </Card>
       <Card title="Dekomprese">
@@ -658,7 +682,8 @@ function ChartsTab({ d }: { d: Dive }) {
         <TissueMap snaps={d.tissues.map((x) => ({ t: x.t, v: x.n2 }))} end={s.t[s.t.length - 1]} />
       </Card>
       {hasHe && <Card title="Nasycení tkání He"><TissueMap snaps={d.tissues.map((x) => ({ t: x.t, v: x.he }))} end={s.t[s.t.length - 1]} /></Card>}
-    </>
+    </ChartDefs.Provider>
+    </ZoomCtx.Provider>
   );
 }
 

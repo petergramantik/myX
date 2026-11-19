@@ -61,6 +61,9 @@ export function SettingsScreen() {
           <label>pO₂ při zanoření – varovat po (s pod prahem)<input inputMode="decimal" defaultValue={th.po2LoWarnS ?? 30} onBlur={(e) => setTh("po2LoWarnS", e.target.value)} /></label>
           <label>Hypoxie? – minimum pod (bar)<input inputMode="decimal" defaultValue={th.po2Hypo ?? 0.21} onBlur={(e) => setTh("po2Hypo", e.target.value)} /></label>
           <label>Hypoxie? – pod prahem déle než (s)<input inputMode="decimal" defaultValue={th.po2LoBadS ?? 120} onBlur={(e) => setTh("po2LoBadS", e.target.value)} /></label>
+          <label>Vysoké pO₂ – žlutě nad (bar; zaokrouhlí se na 0,05, 1,3–1,6)<input inputMode="decimal" defaultValue={th.po2HiWarn ?? 1.4} onBlur={(e) => setTh("po2HiWarn", e.target.value)} /></label>
+          <label>Vysoké pO₂ – žlutě, když déle než (s, mimo deko zastávky)<input inputMode="decimal" defaultValue={th.po2HiWarnS ?? 60} onBlur={(e) => setTh("po2HiWarnS", e.target.value)} /></label>
+          <label>Vysoké pO₂ – červeně nad (bar, kdykoli)<input inputMode="decimal" defaultValue={th.po2HiBad ?? 1.6} onBlur={(e) => setTh("po2HiBad", e.target.value)} /></label>
           <label>pN₂ – zvýraznit nad (bar; END ≈ {Math.round(((th.pn2Hot ?? 3.16) / 0.79 - 1) * 10)} m)<input inputMode="decimal" defaultValue={th.pn2Hot ?? 3.16} onBlur={(e) => setTh("pn2Hot", e.target.value)} /></label>
         <h3 className="subh">CO₂</h3>
           <label>Podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar ?? 5} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>

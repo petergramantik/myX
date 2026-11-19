@@ -1,5 +1,10 @@
 // Jednoduché SVG grafy s dotykovým popiskem (bez knihoven).
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+
+/** Výchozí nastavení grafů v sekci (linka profilu, zoom). */
+export const ChartDefs = createContext<{ profile?: (number | null)[]; zoom?: boolean } | null>(null);
+/** Společný výřez (zoom) pro grafy jednoho ponoru: [od, do] v sekundách, null = celý ponor. */
+export const ZoomCtx = createContext<{ z: [number, number] | null; setZ: (z: [number, number] | null) => void } | null>(null);
 
 export interface Series { label: string; color: string; values: (number | null)[]; unit?: string; right?: boolean; width?: number; dash?: string; fillUp?: boolean }
 
@@ -30,9 +35,18 @@ function ticks(lo: number, hi: number, n = 5): number[] {
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
-export function LineChart({ t, series, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks }: {
+export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable }: {
   t: number[]; series: Series[]; height?: number; invert?: boolean; zero?: boolean; markers?: number[]; rightInvert?: boolean;
-  bands?: { from: number; to: number; color: string }[];
+  /** Barevná pásma; label se ukáže v popisku posuvníku, když na pásmu stojí. */
+  bands?: { from: number; to: number; color: string; label?: string }[];
+  /** Jemná linka profilu hloubky (vlastní skrytá osa). */
+  profile?: (number | null)[];
+  /** Legenda řad je klikatelná – zapnutí / vypnutí řady. */
+  toggle?: boolean;
+  /** Vysvětlivky pásem v legendě. */
+  bandLegend?: { color: string; label: string }[];
+  /** Zoom dvěma prsty (výřez sdílený přes ZoomCtx). */
+  zoomable?: boolean;
   /** Svislé čáry od horního okraje grafu k hodnotě `to` (levá osa). */
   vlines?: { t: number; to: number; color: string }[];
   xFmt?: (v: number) => string; xTitle?: (v: number) => string;
@@ -46,12 +60,28 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
 }) {
   const [ref, W] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const zc = useContext(ZoomCtx), defs = useContext(ChartDefs);
+  if (profile === undefined && defs?.profile && !series0.some((x) => x.label === "Hloubka") && !invert) profile = defs.profile;
+  if (zoomable === undefined) zoomable = defs?.zoom;
+  const [zLocal, setZLocal] = useState<[number, number] | null>(null);
+  const clipId = useId().replace(/:/g, "");
+  const pts = useRef(new Map<number, number>());
+  const pinch = useRef<{ d0: number; c0: number; win: [number, number] } | null>(null);
+  const lastTap = useRef(0);
   useEffect(() => setHover(null), [t]);
   if (!t.length) return <div className="chart-empty">Bez dat</div>;
-  const left = series.filter((s) => !s.right), right = series.filter((s) => s.right);
+  const z = zoomable ? (zc ? zc.z : zLocal) : null;
+  const setZ = zc ? zc.setZ : setZLocal;
+  const T0 = t[0], T1 = t[t.length - 1] || 1;
+  const win: [number, number] = z ? [Math.max(T0, z[0]), Math.min(T1, z[1])] : [T0, T1];
+  const vis = (i: number) => t[i] >= win[0] - 1 && t[i] <= win[1] + 1;
+  const series = [...series0.filter((s) => !hidden.has(s.label)), ...(profile && !hidden.has("Hloubka") ? [{ label: "", color: "#90a4ae", values: profile, width: 1, profile: true } as Series & { profile?: boolean }] : [])];
+  const isProf = (s: Series) => !!(s as Series & { profile?: boolean }).profile;
+  const left = series.filter((s) => !s.right && !isProf(s)), right = series.filter((s) => s.right);
   const range = (ss: Series[], fit = false) => {
     let lo = Infinity, hi = -Infinity;
-    for (const s of ss) for (const v of s.values) if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    for (const s of ss) s.values.forEach((v, i) => { if (v != null && vis(i)) { if (v < lo) lo = v; if (v > hi) hi = v; } });
     if (lo === Infinity) return [0, 1];
     if (zero) { const a = Math.max(Math.abs(lo), Math.abs(hi)) || 1; return [-a, a]; }
     if (fit) { const pad = (hi - lo) * 0.1 || 0.1; return [lo - pad, hi + pad]; }
@@ -59,13 +89,14 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
     if (hi === lo) hi = lo + 1;
     return [lo, hi + (hi - lo) * 0.05];
   };
-  const [lo, hi] = range(left), [rlo, rhi] = range(right, !rightInvert);
-  const x0 = t[0], x1 = t[t.length - 1] || 1;
+  const [lo, hi] = range(left, !!z), [rlo, rhi] = range(right, !rightInvert || !!z);
+  const pMax = profile ? Math.max(1, ...profile.filter((v, i) => v != null && vis(i)) as number[]) * 1.05 : 1;
+  const x0 = win[0], x1 = win[1] > win[0] ? win[1] : win[0] + 1;
   // popisky značek (setpoint, přepnutí plynu) v pruhu nad grafem, rozložené do řádků bez překryvu
   const tags = [
     ...(pins || []).map((p) => ({ t: p.t, label: p.label, color: p.color, dash: "3 3" })),
     ...(strip || []).slice(1).map((g) => ({ t: g.from, label: g.label, color: g.color, dash: "2 3" })),
-  ].sort((a, b) => a.t - b.t);
+  ].filter((g) => g.t >= x0 && g.t <= x1).sort((a, b) => a.t - b.t);
   const pl = 36, pr = right.length ? 34 : 8;
   const xOf = (v: number) => pl + ((v - x0) / (x1 - x0 || 1)) * (W - pl - pr);
   const rowEnd: number[] = [];
@@ -86,7 +117,8 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
     let d = "", pen = false;
     s.values.forEach((v, i) => {
       if (v == null) { pen = false; return; }
-      const y = s.right ? Y(v, rlo, rhi, !!rightInvert) : Y(v);
+      if (!vis(i) && !(i > 0 && vis(i - 1)) && !(i + 1 < t.length && vis(i + 1))) { pen = false; return; }
+      const y = isProf(s) ? Y(v, 0, pMax, true) : s.right ? Y(v, rlo, rhi, !!rightInvert) : Y(v);
       d += (pen ? "L" : "M") + X(t[i]).toFixed(1) + "," + y.toFixed(1);
       pen = true;
     });
@@ -105,9 +137,39 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
   };
   const xs = xFmt ? 1 : 60;
   const yt = ticks(lo, hi, 4), xt = ticks(x0 / xs, x1 / xs, Math.max(2, Math.floor(W / 70)));
+  const tAt = (px: number, w: [number, number]) => w[0] + ((px - m.l) / (W - m.l - m.r)) * (w[1] - w[0]);
+  const pxOf = (e: React.PointerEvent) => { const r = (e.currentTarget as SVGElement).getBoundingClientRect(); return ((e.clientX - r.left) / r.width) * W; };
+  const onDown = (e: React.PointerEvent) => {
+    if (!zoomable) return onMove(e);
+    pts.current.set(e.pointerId, pxOf(e));
+    if (pts.current.size === 2) {
+      const [a, b] = [...pts.current.values()];
+      pinch.current = { d0: Math.max(20, Math.abs(a - b)), c0: (a + b) / 2, win: [x0, x1] };
+      setHover(null); return;
+    }
+    const now = Date.now();
+    if (now - lastTap.current < 300 && z) { setZ(null); lastTap.current = 0; return; }
+    lastTap.current = now;
+    onMove(e);
+  };
+  const onUp = (e: React.PointerEvent) => { pts.current.delete(e.pointerId); if (pts.current.size < 2) pinch.current = null; };
+  const onPMove = (e: React.PointerEvent) => {
+    if (zoomable && pts.current.has(e.pointerId)) pts.current.set(e.pointerId, pxOf(e));
+    const p = pinch.current;
+    if (zoomable && p && pts.current.size >= 2) {
+      const [a, b] = [...pts.current.values()];
+      const d = Math.max(20, Math.abs(a - b)), c = (a + b) / 2;
+      const full = T1 - T0, span = Math.min(full, Math.max(60, ((p.win[1] - p.win[0]) * p.d0) / d));
+      const tc = tAt(p.c0, p.win);
+      let lo2 = tc - ((c - m.l) / (W - m.l - m.r)) * span;
+      lo2 = Math.min(Math.max(T0, lo2), T1 - span);
+      setZ(span >= full - 1 ? null : [lo2, lo2 + span]);
+      return;
+    }
+    onMove(e);
+  };
   const onMove = (e: React.PointerEvent) => {
-    const r = (e.currentTarget as SVGElement).getBoundingClientRect();
-    const px = ((e.clientX - r.left) / r.width) * W;
+    const px = pxOf(e);
     const tv = x0 + ((px - m.l) / (W - m.l - m.r)) * (x1 - x0);
     let best = 0, bd = Infinity;
     for (let i = 0; i < t.length; i++) { const dd = Math.abs(t[i] - tv); if (dd < bd) { bd = dd; best = i; } }
@@ -116,7 +178,8 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
   const hx = hover != null ? X(t[hover]) : 0;
   return (
     <div className="chart" ref={ref}>
-      <svg width={W} height={height} onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)} role="img">
+      <svg width={W} height={height} onPointerMove={onPMove} onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={(e) => { onUp(e); setHover(null); }} role="img" style={zoomable ? { touchAction: "pan-y" } : undefined}>
+        <defs><clipPath id={clipId}><rect x={m.l} y={0} width={Math.max(0, W - m.l - m.r)} height={height} /></clipPath></defs>
         {yt.map((v) => (
           <g key={v}>
             <line x1={m.l} x2={W - m.r} y1={Y(v)} y2={Y(v)} className="grid" />
@@ -126,10 +189,11 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
         {right.length > 0 && ticks(rlo, rhi, 4).map((v) => <text key={"r" + v} x={W - m.r + 4} y={Y(v, rlo, rhi, !!rightInvert) + 3}>{fmt(v, 2)}</text>)}
         {xt.map((v) => <text key={"x" + v} x={X(v * xs)} y={height - 5} textAnchor="middle">{xFmt ? xFmt(v) : Math.round(v) + "′"}</text>)}
         {zero && <line x1={m.l} x2={W - m.r} y1={Y(0)} y2={Y(0)} className="ref" />}
+        <g clipPath={`url(#${clipId})`}>
         {markers?.map((mt, i) => <line key={"m" + i} x1={X(mt)} x2={X(mt)} y1={xFmt ? m.t : height - m.b - 7} y2={height - m.b} className="marker" />)}
         {bands?.map((b, i) => <rect key={"b" + i} x={X(b.from)} width={Math.max(2, X(b.to) - X(b.from))} y={m.t} height={height - m.t - m.b} fill={b.color} opacity={0.2} />)}
         {series.filter((s) => s.fillUp && !s.right).map((s, i) => <path key={"f" + i} d={area(s)} fill={s.color} opacity={0.18} stroke="none" />)}
-        {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={s.right ? 0.55 : 1} />)}
+        {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={isProf(s) ? 0.45 : s.right ? 0.55 : 1} />)}
         {vlines?.map((v, i) => <line key={"v" + i} x1={X(v.t)} x2={X(v.t)} y1={m.t} y2={Y(v.to)} stroke={v.color} strokeWidth={1} />)}
         {marks?.map((k, i) => <line key={"k" + i} x1={X(k.t)} x2={X(k.t)} y1={height - m.b - 9} y2={height - m.b} stroke={k.color} strokeWidth={2} />)}
         {placed.map((p, i) => (
@@ -140,15 +204,25 @@ export function LineChart({ t, series, height = 190, invert, zero, markers, extr
         ))}
         {strip?.map((g, i) => <rect key={"s" + i} x={X(g.from)} width={Math.max(1, X(g.to) - X(g.from))} y={height - m.b - 5} height={4} fill={g.color} opacity={0.85} />)}
         {hover != null && <line x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref" />}
+        </g>
       </svg>
+      {z && <button className="chart-reset" onClick={() => setZ(null)}>1:1</button>}
       {hover != null && (
         <div className="tip" style={{ left: Math.min(Math.max(0, hx + 10), Math.max(0, W - 170)) }}>
           <b>{xTitle ? xTitle(t[hover]) : `Čas ${fmtTime(t[hover])}`}</b>
+          {bands?.filter((b) => b.label && t[hover] >= b.from && t[hover] <= b.to).map((b, i) => <div key={"bl" + i} className="tip-alarm" style={{ color: b.color }}>⚠ {b.label}</div>)}
           {series.filter((s) => s.label).map((s, i) => <div key={i}><i style={{ background: s.color }} />{s.label}: {fmt(s.values[hover])} {s.unit || ""}</div>)}
+          {profile && profile[hover] != null && <div><i style={{ background: "#90a4ae" }} />Hloubka: {fmt(profile[hover], 1)} m</div>}
           {extra?.map((s, i) => { const v = s.values[hover]; return <div key={"e" + i}>{s.label}: {typeof v === "string" ? v : fmt(v)} {s.unit || ""}</div>; })}
         </div>
       )}
-      <div className="legend">{series.filter((s) => s.label).map((s, i) => <span key={i}><i style={{ background: s.color }} />{s.label}</span>)}</div>
+      <div className="legend">
+        {(toggle ? series0 : series).filter((s) => s.label).map((s, i) => toggle
+          ? <span key={i} className={"lg-t" + (hidden.has(s.label) ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has(s.label) ? n.delete(s.label) : n.add(s.label); setHidden(n); }}><i style={{ background: s.color }} />{s.label}</span>
+          : <span key={i}><i style={{ background: s.color }} />{s.label}</span>)}
+        {profile && <span className={"lg-t" + (hidden.has("Hloubka") ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has("Hloubka") ? n.delete("Hloubka") : n.add("Hloubka"); setHidden(n); }}><i style={{ background: "#90a4ae" }} />Hloubka</span>}
+        {bandLegend?.map((b, i) => <span key={"bd" + i} className="lg-band"><i style={{ background: b.color }} />{b.label}</span>)}
+      </div>
     </div>
   );
 }
