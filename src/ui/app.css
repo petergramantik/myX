@@ -461,3 +461,6 @@ details.card.sec > summary h2 { margin: 0; }
 .logsw-n { overflow: hidden; text-overflow: ellipsis; }
 .list-item .li-main + .btn.small { flex: none; margin-left: 8px; }
 .list-item > .btn.small { padding: 4px 10px; font-size: 14px; }
+.egg { position: relative; margin: 0 0 10px; padding: 10px 34px 10px 12px; border-radius: 12px; background: linear-gradient(135deg, rgba(255,183,77,.18), rgba(239,83,80,.18)); border: 1px solid var(--warn); font-weight: 700; font-size: 15px; animation: eggIn .25s ease-out; }
+.egg-x { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border: 0; background: transparent; color: var(--muted); font-size: 14px; }
+@keyframes eggIn { from { transform: scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }

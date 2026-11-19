@@ -78,10 +78,10 @@ export const fmtDateTime = (ts: number) => new Date(ts * 1000).toLocaleString("c
 export const fmtMin = (s: number) => `${Math.round(s / 60)} min`;
 export const num = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLocaleString("cs-CZ", { maximumFractionDigits: d }));
 
-export function Card({ title, children, right, id }: { title?: string; children: React.ReactNode; right?: React.ReactNode; id?: string }) {
+export function Card({ title, children, right, id, onTitle }: { title?: string; children: React.ReactNode; right?: React.ReactNode; id?: string; onTitle?: () => void }) {
   return (
     <section className="card" id={id}>
-      {title && <div className="card-h"><h2>{title}</h2>{right}</div>}
+      {title && <div className="card-h"><h2 onClick={onTitle}>{title}</h2>{right}</div>}
       {children}
     </section>
   );
