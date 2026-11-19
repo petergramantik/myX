@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.36.1";
+export const APP_VERSION = "1.36.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.36.2", date: "2026-11-19", title: "Nová ikona aplikace", items: [
+    "Nová ikona myX Logbook (plocha telefonu, záložka prohlížeče, logo v záhlaví), včetně varianty pro Android (maskable).",
+  ] },
   { version: "1.36.1", date: "2026-11-19", title: "Přejetí po celé obrazovce", items: [
     "Swipe (např. z Varování zpět na Přehled) funguje i na prázdném místě pod obsahem.",
   ] },

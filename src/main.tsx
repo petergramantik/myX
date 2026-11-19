@@ -147,7 +147,7 @@ function App() {
     <div className="app">
       <DialogHost />
       <header className="top">
-        {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo">X</span>}
+        {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <img className="logo" src="icons/myx-logbook.svg" alt="myX" />}
         {s.t === "home" ? <LogSwitch /> : <h1>{title(s, st)}</h1>}
         <button className="warnbtn none helpbtn" onClick={() => (s.t === "help" ? back() : go({ t: "help" }))} aria-label="Nápověda">?</button>
         <button className={"warnbtn " + (w.worst || "none")} onClick={() => (s.t === "warn" ? back() : (setAnim("from-left"), go({ t: "warn" })))} aria-label="Varování">
