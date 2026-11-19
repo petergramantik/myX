@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.9";
+export const APP_VERSION = "1.34.10";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.10", date: "2026-11-19", title: "Dlaždice Scrubber", items: [
+    "Detail ponoru: dlaždice „Scrubber“ – zbývá před → po ponoru · stáří náplně; časy žlutě pod nastavením (výchozí 1 h 30 min), červeně pod 30 min, stáří žlutě nad nastavením.",
+    "Rámeček dlaždice i při Souvislosti CO₂ (žlutě) a Alarmu CO₂ z počítače (červeně); klepnutí otevře hlášení o CO₂.",
+  ] },
   { version: "1.34.9", date: "2026-11-19", title: "Vysoké pO₂ i bez alarmu počítače", items: [
     "Detail ponoru: „Vysoké pO₂ (bez alarmu počítače)“ – červeně nad 1,6 bar, žlutě nad 1,4 bar déle než 1 min mimo deko; časy, max., hloubka, řešení a odkaz do grafu. Neopakuje se, když ve stejné chvíli běžel alarm z počítače.",
     "Oprava: za deko zastávku se bere jen pobyt v hloubce zastávky po nejhlubším bodě – dno deko ponoru už se z hlídání nevyjímá.",

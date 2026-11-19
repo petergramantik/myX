@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, dur, tpt, po2HighZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
 import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
@@ -551,13 +551,31 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const note = lb.notes[id] || { buddyIds: [], note: "", updated: 0 };
   const idx = st.metas.findIndex((m) => m.id === id);
   const warns = mergeCellAlerts([...(d ? diveWarnings(d, summarize(d), lb.settings.th) : []), ...cellDiveWarnings(st.metas, idx, lb.settings.th)]);
+  // dlaždice Scrubber: před → po ponoru · stáří náplně; barva podle zbývajícího času, stáří a hlášení CO₂
+  const scr = (() => {
+    const th = lb.settings.th, lim = th.scrubLeftMin ?? 90;
+    const c = (m: number) => (m < 30 ? "bad" : m < lim ? "hot" : "");
+    const hs = st.metas.filter((m) => m.h.serial === meta.h.serial && m.h.start <= meta.h.start).map((m) => m.h);
+    let fill = scrubberFill(hs)?.start ?? null;
+    const mf = lb.settings.manualFill;
+    if (!st.guest && mf != null && mf <= meta.h.start && (fill == null || mf > fill)) fill = mf;
+    const days = fill != null ? Math.floor((meta.h.start - fill) / 86400) : null;
+    const cd = days != null && days >= (th.scrubDays ?? 14) ? "hot" : "";
+    const co2 = warns.some((w) => /^Alarm CO₂/.test(w.title)) ? "bad" : warns.some((w) => w.title.startsWith("Souvislost CO₂") && w.level !== "info") ? "hot" : "";
+    const cb = c(meta.h.scrubLeftStartMin), ca = c(meta.h.scrubLeftEndMin);
+    const all = [cb, ca, cd, co2];
+    const cls = all.includes("bad") ? "bad" : all.includes("hot") ? "hot" : "";
+    const open = () => { const als = [...document.querySelectorAll(".alert")] as HTMLElement[], tt = (x: HTMLElement) => x.querySelector("b")?.textContent || "";
+      const el = als.find((x) => /^Alarm CO₂/.test(tt(x))) || als.find((x) => /^Souvislost CO₂/.test(tt(x))) || als.find((x) => /CO₂/.test(tt(x))); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); if (!el.classList.contains("open")) el.click(); } };
+    return { cb, ca, cd, cls, days, open };
+  })();
   return (
     <>
       {meta.comp && <div className="comp-line small muted">Z počítače {compModel(meta.comp)}{meta.alt && <> · <span className="pill">2 počítače</span> <a onClick={() => go({ t: "cmp", id: meta.id, other: meta.alt! })}>Srovnání počítačů ›</a></>}</div>}
       {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold onShow={d ? showInChart : undefined} />)}
       <PartsCard meta={meta} />
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
-        <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > (lb.settings.th.po2HiBad ?? 1.6) ? "bad" : po2HiLevel(meta.sum, lb.settings.th) === "warn" ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > (lb.settings.th.pn2Hot ?? 3.16) ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
+        <Tiles cols={2} cls={{ "Scrubber": scr.cls, "Max. pO₂": meta.sum.ppo2Max > (lb.settings.th.po2HiBad ?? 1.6) ? "bad" : po2HiLevel(meta.sum, lb.settings.th) === "warn" ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > (lb.settings.th.pn2Hot ?? 3.16) ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
           ["Hloubka", <Pair l={`${num(meta.h.maxDepth)} m`} ll="max" r={`${num(meta.sum.avgDepth)} m`} rl="průměr" />],
           ["Doba", <Pair l={`${Math.round(meta.h.diveTimeS / 60)} min`} ll="ponor" r={meta.sum.decoMin ? `${meta.sum.decoMin} min` : "–"} rl="deko" />],
           ["Plyny", <span className="gas-list">{meta.sum.gases.map((g) => <span key={g.mix}><b>{gasLabel(g.mix).label}</b><small>{Math.round(g.s / 60)} min</small></span>)}</span>],
@@ -568,7 +586,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["GF / CNS", <Pair l={`${meta.h.gfLo}/${meta.h.gfHi}`} ll="GF" r={`${meta.h.cnsEnd} %`} rl="CNS" />],
           ["Diluent", <UseTile gas="dil" meta={meta} note={note} />], ["O₂", <UseTile gas="o2" meta={meta} note={note} />],
           ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
-          ["Scrubber zbývá", hm(meta.h.scrubLeftEndMin)],
+          ["Scrubber", <span className="scr-v"><span className={scr.cb}>{hm(meta.h.scrubLeftStartMin)}</span> → <span className={scr.ca}>{hm(meta.h.scrubLeftEndMin)}</span>{scr.days != null && <> · <span className={scr.cd}>{scr.days} d</span></>}</span>, scr.cls ? scr.open : undefined],
           ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
           ["Setpoint", <SpTile meta={meta} />],
           ["Hustota plynu", <span className="use">{num(meta.sum.densMax, 1)} g/l<small>max · hranice 5,2 / 6,2</small></span>],

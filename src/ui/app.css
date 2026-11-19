@@ -452,3 +452,6 @@ details.card.sec > summary h2 { margin: 0; }
 .chart-info i { display: inline-block; width: 9px; height: 3px; margin-right: 4px; vertical-align: middle; border-radius: 2px; }
 .ci-x { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border: 0; background: transparent; color: var(--muted); font-size: 13px; }
 .ci-hint { font-size: 12px; text-align: center; }
+.scr-v { font-size: 0.9em; white-space: nowrap; }
+.scr-v .hot { color: var(--warn); } .scr-v .bad { color: var(--bad, #ef5350); }
+.tile.hot .scr-v, .tile.bad .scr-v { color: var(--fg); }

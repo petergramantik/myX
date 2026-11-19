@@ -77,6 +77,7 @@ export function SettingsScreen() {
         <h3 className="subh">Scrubber</h3>
           <label>Upozornit při zbytku (%)<input inputMode="decimal" defaultValue={th.scrubPct ?? 50} onBlur={(e) => setTh("scrubPct", e.target.value)} /></label>
           <label>Upozornit po dnech od náplně<input inputMode="decimal" defaultValue={th.scrubDays ?? 14} onBlur={(e) => setTh("scrubDays", e.target.value)} /></label>
+          <label>Zvýraznit v ponoru, když zbývá méně než (min; pod 30 min červeně)<input inputMode="decimal" defaultValue={th.scrubLeftMin ?? 90} onBlur={(e) => setTh("scrubLeftMin", e.target.value)} /></label>
         <h3 className="subh">Baterie</h3>
           <label>Rezerva nad prahem varování (V)<input inputMode="decimal" defaultValue={th.batMarginV ?? 0.05} onBlur={(e) => setTh("batMarginV", e.target.value)} /></label>
           <label>Baterie v hlavě – varovat po hodinách pod vodou (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatHours ?? 0} onBlur={(e) => setTh("headBatHours", e.target.value)} /></label>
