@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { onDialog, type DialogReq } from "../app/dialog";
+import { useBackLayer } from "./common";
 
 /** Zobrazení vlastních dialogů (překryv přes celou aplikaci). */
 export function DialogHost() {
   const [d, setD] = useState<DialogReq | null>(null);
   const [v, setV] = useState("");
   useEffect(() => onDialog((x) => { setD(x); setV(x?.input ?? ""); }), []);
+  useBackLayer(!!d, () => d?.done(d.input != null ? null : false));
   if (!d) return null;
   const ok = () => d.done(d.input != null ? v : true);
   return (

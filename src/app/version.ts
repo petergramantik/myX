@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.7";
+export const APP_VERSION = "1.34.8";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.8", date: "2026-11-19", title: "Tlačítko Zpět v telefonu", items: [
+    "Detail ponoru: Zpět z Grafů / Hodnot / Událostí vede na Logbook (i po „Ukázat v grafu“); přiblížený graf Zpět nejdřív vrátí na celý ponor.",
+    "Zpět zavře otevřený dialog, nabídku logů v titulku, nabídky Akce a výběr ponorů.",
+    "Z hlavních záložek (Ponory, B&L, DB, Nastavení) vede Zpět na Přehled; až z Přehledu se aplikace zavře.",
+  ] },
   { version: "1.34.7", date: "2026-11-19", title: "Nápověda ovládání v grafu", items: [
     "Prázdný pruh pod grafem: „Táhni: hodnoty · Roztáhni: přiblížit · Dvojklep: zpět“ (u grafů bez zoomu „Dvojklep: zrušit“).",
   ] },

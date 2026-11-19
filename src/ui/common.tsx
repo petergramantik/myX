@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getState, subscribe, type State } from "../app/store";
 import { norm } from "../app/model";
 
@@ -16,10 +16,59 @@ const emit = () => navSubs.forEach((f) => f());
 export const useScreen = () => useSyncExternalStore((f) => { navSubs.add(f); return () => navSubs.delete(f); }, () => stack[stack.length - 1]);
 /** Pozice stránky v okamžiku přechodu na další obrazovku (pro obnovení po návratu). */
 export let leaveY = 0;
-export function go(s: Screen) { leaveY = window.scrollY; stack = [...stack, s]; history.pushState({ d: stack.length }, ""); emit(); window.scrollTo(0, 0); }
-export function tab(s: Screen) { leaveY = window.scrollY; stack = [s]; history.replaceState({ d: 1 }, ""); emit(); window.scrollTo(0, 0); }
-export function back() { if (stack.length > 1) history.back(); }
-window.addEventListener("popstate", () => { if (stack.length > 1) { stack = stack.slice(0, -1); emit(); } });
+/** Hloubka našich záznamů v historii prohlížeče (1 = první). */
+let curD = 1;
+let pending: Screen[] | null = null;
+let ignorePop = 0;
+/** Vrstvy zavíratelné tlačítkem Zpět (záložka, zoom, nabídka, dialog) – poslední je nahoře. */
+const layers: { id: number; close: () => void }[] = [];
+let layerId = 0;
+const setStack = (st: Screen[]) => { stack = st; emit(); window.scrollTo(0, 0); };
+function applyTab(target: Screen[]) {
+  stack = [target[0]]; history.replaceState({ d: 1 }, ""); curD = 1;
+  if (target.length > 1) { stack = target; curD = 2; history.pushState({ d: 2 }, ""); }
+  emit(); window.scrollTo(0, 0);
+}
+export function go(s: Screen) {
+  leaveY = window.scrollY;
+  layers.length = 0; // otevřené vrstvy s přechodem zanikají (jejich záznamy se při návratu přeskočí)
+  curD++; history.pushState({ d: curD }, "");
+  setStack([...stack, s]);
+}
+/** Hlavní záložka: Přehled je základ, ostatní nad ním – Zpět z nich vede na Přehled. */
+export function tab(s: Screen) {
+  leaveY = window.scrollY;
+  layers.length = 0;
+  const target: Screen[] = s.t === "home" ? [s] : [{ t: "home" }, s];
+  if (curD > 1) { pending = target; history.go(-(curD - 1)); return; }
+  applyTab(target);
+}
+export function back() { if (stack.length > 1 || layers.length) history.back(); }
+window.addEventListener("popstate", (e) => {
+  const st = e.state as { d?: number; layer?: number } | null;
+  const d = st?.d ?? 1;
+  if (pending) { const t = pending; pending = null; curD = d; applyTab(t); return; }
+  curD = d;
+  if (ignorePop > 0) { ignorePop--; return; }
+  if (layers.length) { layers.pop()!.close(); return; }
+  if (stack.length > 1) { stack = stack.slice(0, -1); emit(); }
+  // přistáli jsme na záznamu zaniklé vrstvy → přeskočit
+  if (st?.layer && !layers.some((l) => l.id === st.layer)) { ignorePop++; history.back(); }
+});
+/** Dokud je `active`, tlačítko Zpět místo opuštění obrazovky zavolá `close`. */
+export function useBackLayer(active: boolean, close: () => void) {
+  const ref = useRef(close); ref.current = close;
+  useEffect(() => {
+    if (!active) return;
+    const id = ++layerId;
+    layers.push({ id, close: () => ref.current() });
+    curD++; history.pushState({ d: curD, layer: id }, "");
+    return () => {
+      const i = layers.findIndex((l) => l.id === id);
+      if (i >= 0) { layers.splice(i, 1); if (i === layers.length && (history.state as { layer?: number } | null)?.layer === id) { ignorePop++; history.back(); } }
+    };
+  }, [active]);
+}
 
 // ---------- formátování
 export const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC", day: "numeric", month: "numeric", year: "numeric" });

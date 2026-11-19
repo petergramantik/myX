@@ -3,7 +3,7 @@ import { DialogHost } from "./ui/Dialog";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { init, locate, scheduleSync, syncNow, takeShared, toast } from "./app/store";
-import { back, go, tab, useScreen, useStore, type Screen } from "./ui/common";
+import { back, go, tab, useBackLayer, useScreen, useStore, type Screen } from "./ui/common";
 import { OverviewScreen } from "./ui/Overview";
 import { DiveScreen, DivesScreen } from "./ui/Dives";
 import { BuddiesScreen, BuddyScreen, SiteScreen, SitesScreen } from "./ui/Sites";
@@ -43,6 +43,7 @@ const TABS: [Screen, string, string][] = [
 function LogSwitch() {
   const st = useStore();
   const [open, setOpen] = useState(false);
+  useBackLayer(open, () => setOpen(false));
   const [list, setList] = useState<{ log: GuestLog; n: number }[]>([]);
   useEffect(() => { if (open) guestIndexLoad().then((ix) => setList(ix.map((g) => ({ log: g.log, n: g.metas.length })))); }, [open, st.guestRev]);
   const myName = myDisplayName() || "Můj log";
@@ -157,7 +158,7 @@ function App() {
       {st.guest && (
         <div className="guestbar">
           <span>Prohlížíš log: <b>{logName(st.guest)}</b> · {st.guest.count} ponorů</span>
-          <button className="btn small" onClick={() => { closeGuest(); go({ t: "home" }); }}>Zavřít</button>
+          <button className="btn small" onClick={() => { closeGuest(); tab({ t: "home" }); }}>Zavřít</button>
         </div>
       )}
       {st.guest && !ownerName(st.guest) && st.guest.serial && <OwnerPicker log={st.guest} />}

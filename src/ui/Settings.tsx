@@ -7,7 +7,7 @@ import { OwnerPicker } from "./Owner";
 import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, adoptGuestAsOwn, ownComputers, removeOwnComputer, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
-import { Card, KV, fmtDate, go, tab, useStore } from "./common";
+import { Card, KV, fmtDate, go, tab, useBackLayer, useStore } from "./common";
 import { ImportButton } from "./Overview";
 
 export function SettingsScreen() {
@@ -198,6 +198,7 @@ export function GuestCard() {
   const [busy, setBusy] = useState(false);
   const [ownerFor, setOwnerFor] = useState<string | null>(null);
   const [actFor, setActFor] = useState<string | null>(null);
+  useBackLayer(actFor != null, () => setActFor(null));
   const [moving, setMoving] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const reload = async () => {
@@ -217,7 +218,7 @@ export function GuestCard() {
       toast([r.own ? `Přidáno ${r.own} tvých ponorů` : "", ...r.guests.map((x) => `cizí log ${logName(x)} (${x.count} ponorů)`)].filter(Boolean).join(" · ") || "Žádné nové ponory");
       if (r.guests.length > 1) await askSameOwner(r.guests);
       const g = r.guests[0];
-      if (g) { await openGuest(g); go({ t: "home" }); }
+      if (g) { await openGuest(g); tab({ t: "home" }); }
     } catch (e) { toast("Soubor se nepodařilo načíst: " + (e as Error).message); }
     finally { setBusy(false); reload(); if (ref.current) ref.current.value = ""; }
   };
@@ -260,7 +261,7 @@ export function GuestCard() {
             ))}
             <div className="row">
               {open ? <button className="btn primary" onClick={() => closeGuest()}>Zavřít</button>
-                : <button className="btn primary" onClick={async () => { await openGuest(g.log); go({ t: "home" }); }}>Otevřít (jen čtení)</button>}
+                : <button className="btn primary" onClick={async () => { await openGuest(g.log); tab({ t: "home" }); }}>Otevřít (jen čtení)</button>}
               {g.common ? <button className="btn" onClick={() => tab({ t: "hub", sub: "cmp", who: who || logName(g.log) })}>Srovnání</button> : null}
             </div>
           </section>

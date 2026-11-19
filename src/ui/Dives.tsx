@@ -8,7 +8,7 @@ import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
 import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { partIds, shareDives } from "./share";
 import { ask } from "../app/dialog";
-import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, useStore } from "./common";
+import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, useBackLayer, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
@@ -41,6 +41,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const [pickMode, setPickMode] = mem("pickMode");
   const [picked, setPicked] = mem("picked");
   const endPick = () => { setPickMode(false); setPicked([]); };
+  useBackLayer(pickMode, endPick);
   useEffect(() => { const y = dlMemo.y; if (y) requestAnimationFrame(() => window.scrollTo(0, y)); return () => { dlMemo.y = leaveY; }; }, []);
   // seznam ponorů s buddym: ponory, ke kterým mám log buddyho, se otevřou rovnou jako srovnání
   const [cmp, setCmp] = useState<Map<string, Common>>(new Map());
@@ -174,6 +175,7 @@ export function DiveScreen({ id }: { id: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("log");
   const [focus, setFocus] = useState<ChartFocus | null>(null);
+  useBackLayer(tab !== "log", () => setTab("log")); // Zpět ze záložky vede na Logbook
   useEffect(() => { const on = (e: Event) => { setFocus({ ...(e as CustomEvent<ChartFocus>).detail }); setTab("charts"); }; focusBus.addEventListener("focus", on); return () => focusBus.removeEventListener("focus", on); }, []);
   const [slide, setSlide] = useState("");
   const touch = useRef<{ x: number; y: number } | null>(null);
@@ -308,6 +310,7 @@ function SuggestCard({ meta }: { meta: Meta }) {
 function ForeignRow({ kind, v, who, diveId }: { kind: "site" | "buddy"; v: { name: string; mine: string | null }; who: string; diveId: string }) {
   const st = useStore();
   const [open, setOpen] = useState(false), [pick, setPick] = useState(false);
+  useBackLayer(open || pick, () => { setOpen(false); setPick(false); });
   const items = Object.values(kind === "site" ? st.lb.sites : st.lb.buddies);
   const mineName = v.mine ? items.find((i) => i.id === v.mine)?.name : null;
   const guess = !v.mine ? aliasGuess(kind, v.name) : null;
@@ -622,6 +625,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
   const depthExtra: { label: string; values: (number | null)[]; unit: string }[] = []; // hloubku ukazuje linka profilu
   const st = useStore(), th = st.lb.settings.th;
   const [zoom, setZoom] = useState<[number, number] | null>(null);
+  useBackLayer(zoom != null, () => setZoom(null)); // Zpět nejdřív zruší přiblížení
   // odkaz z varování: přiblížit na situaci (±2 min), posunout na graf, posuvník na začátek
   useEffect(() => {
     if (!focus) return;

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ME, adoptForeign, aliasesFor, removeAlias, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
-import { BLSwitch, Card, ClearInput, KV, Picker, back, fmtDate, go, num, useStore } from "./common";
+import { BLSwitch, Card, ClearInput, KV, Picker, back, fmtDate, go, num, tab, useStore } from "./common";
 import { WeatherCard } from "./Weather";
 
 const MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
@@ -266,7 +266,7 @@ function BuddyComputer({ id }: { id: string }) {
   if (!comps.length) return <span className="muted">–</span>;
   return <>{comps.map((c) => {
     const log = logs.find((l) => l.serial === c.id);
-    return <div key={c.id}>{c.model} {c.id}{log && st.guest?.id !== log.id && <> · <a onClick={async () => { await openGuest(log); go({ t: "home" }); }}>Otevřít jeho log ›</a></>}<Drift serial={c.id} /></div>;
+    return <div key={c.id}>{c.model} {c.id}{log && st.guest?.id !== log.id && <> · <a onClick={async () => { await openGuest(log); tab({ t: "home" }); }}>Otevřít jeho log ›</a></>}<Drift serial={c.id} /></div>;
   })}</>;
 }
 
