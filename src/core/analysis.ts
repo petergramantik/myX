@@ -480,6 +480,15 @@ export function po2HiLevel(sum: { ppo2Max: number; po2Hi?: number[] }, th: Parti
 }
 
 // ---------- řešení varování a alarmů z počítače
+/** Varování na displeji patřící k alarmu (stejný druh, začátek do 10 s). */
+export function alarmWarn(d: Dive, kind: "po2high" | "po2low" | "co2", from: number): CompWarn | undefined {
+  return computerWarnings(d).find((w) => w.kind === kind && Math.abs(w.start - from) <= 10);
+}
+/** Skutečný konec alarmu: až zmizí varování z displeje (ztlumení alarmu problém nekončí). */
+export const alarmEnd = (d: Dive, a: { kind: string; start: number; end: number }) => {
+  const w = a.kind === "po2high" || a.kind === "po2low" || a.kind === "co2" ? alarmWarn(d, a.kind, a.start) : undefined;
+  return Math.max(a.end, w?.end ?? (w ? d.h.diveTimeS : a.end));
+};
 const mmssA = (t: number) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
 /** Co se dělo od varování / alarmu do jeho konce (+ 3 min): potvrzení, setpoint, dávky, upouštění, lahve, OC, konec. */
 export function resolutionSteps(d: Dive, from: number, to: number | null, kind: "po2high" | "po2low" | "co2" | "press" | "cell" | "other", th: Partial<Thresholds> = {}, until = Infinity): string[] {
@@ -490,7 +499,20 @@ export function resolutionSteps(d: Dive, from: number, to: number | null, kind: 
   const at = (t: number) => { const i = s.t.findIndex((x) => x >= t); return i < 0 ? s.t.length - 1 : i; };
   const nf = (v: number, k = 2) => v.toLocaleString("cs-CZ", { maximumFractionDigits: k });
   let acked = -1;
-  for (const w of computerWarnings(d)) if (w.how === "ack" && w.end != null && ackKinds[kind].includes(w.kind) && w.start >= from - 10 && w.start <= (to ?? from) + 5 && inW(w.end)) { out.push({ t: w.end, x: "potvrzeno tlačítkem" }); acked = w.end; }
+  const alarmKind = kind === "po2high" || kind === "po2low" || kind === "co2";
+  const valAt = (t: number) => { const i = at(t); return kind === "co2" ? `CO₂ ${nf(s.co2[i] ?? 0, 1)} mbar` : `pO₂ ${nf(s.ppo2[i])} bar`; };
+  const thr = kind === "po2high" ? th.po2HiBad ?? 1.6 : kind === "po2low" ? th.po2Lo ?? 0.4 : th.co2Mbar ?? 5;
+  const past = (t: number) => { const i = at(t), v = kind === "co2" ? s.co2[i] ?? 0 : s.ppo2[i]; return kind === "po2low" ? v >= thr : v <= thr; };
+  if (alarmKind) {
+    const w = alarmWarn(d, kind, from);
+    out.push({ t: from, x: `alarm spuštěn, ${valAt(from)}, ${nf(s.depth[at(from)], 1)} m` });
+    if (to != null && to < d.h.diveTimeS) out.push({ t: to, x: `alarm ztlumen${w && (w.end == null || w.end > to + 2) ? ", dál na displeji" : ""}, ${valAt(to)}` });
+    if (w?.end != null && inW(w.end)) {
+      const below = past(w.end), lim = `${kind === "co2" ? "CO₂" : "pO₂"} ${kind === "po2low" ? "nad" : "pod"} ${nf(thr)}${kind === "co2" ? " mbar" : " bar"}`;
+      out.push({ t: w.end, x: w.how === "ack" ? `potvrzeno tlačítkem${below ? `, ${lim}` : `, ${valAt(w.end)}`}` : `varování zmizelo${below ? ` – ${lim}` : `, ${valAt(w.end)}`}` });
+      acked = w.end;
+    }
+  } else for (const w of computerWarnings(d)) if (w.how === "ack" && w.end != null && ackKinds[kind].includes(w.kind) && w.start >= from - 10 && w.start <= (to ?? from) + 5 && inW(w.end)) { out.push({ t: w.end, x: "potvrzeno tlačítkem" }); acked = w.end; }
   if (acts) for (const c of setpointChanges(d)) if (inW(c.t)) out.push({ t: c.t, x: `setpoint ${nf(c.from)} → ${nf(c.to)}${c.manual ? "" : " (P)"}` });
   if (acts && kind !== "cell") for (const x of o2Doses(d)) if (inW(x.t)) {
     if (x.kind === "man") out.push({ t: x.t, x: `ruční dávka O₂ (+${nf(x.rise)} bar)` });
@@ -501,7 +523,7 @@ export function resolutionSteps(d: Dive, from: number, to: number | null, kind: 
   if (acts && kind !== "cell") for (const t of dilVents(d)) if (inW(t)) out.push({ t, x: "upuštění smyčky / doplnění diluentu (P)" });
   if (acts && kind !== "cell") for (const [arr, g] of [[s.o2p, "O₂"], [s.dil, "diluent"]] as const) for (const v of pressureAnalysis(s.t, arr, d.h.diveTimeS).valve) if (inW(v.t)) out.push({ t: v.t, x: `onboard ${g} ${v.kind === "open" ? "otevřena" : "zavřena – přechod na externí"} (${v.from} → ${v.to} bar)` });
   if (acts) for (let i = 1; i < s.t.length; i++) if (inW(s.t[i]) && s.sp[i - 1] >= 0.3 && s.sp[i] < 0.05 && s.depth[i] > 2) { out.push({ t: s.t[i], x: "přechod na OC (P)" }); break; }
-  if (to != null && to < d.h.diveTimeS && Math.abs(to - acked) > 2) {
+  if (!alarmKind && to != null && to < d.h.diveTimeS && Math.abs(to - acked) > 2) {
     const i = at(to);
     const val = kind === "co2" ? `CO₂ ${nf(s.co2[i] ?? 0, 1)} mbar` : kind === "po2high" || kind === "po2low" ? `pO₂ ${nf(s.ppo2[i])} bar` : "";
     out.push({ t: to, x: `${kind === "press" || kind === "cell" || kind === "other" ? "varování skončilo" : "alarm skončil"}${val ? ` (${val})` : ""}` });
@@ -704,11 +726,11 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     const se = startEnd(d);
     const as = d.alarms.filter((a) => { if (a.kind !== kind) return false; if (kind !== "po2low") return true; const i = d.s.t.findIndex((t) => t >= a.start); return a.start < d.h.diveTimeS && i > se + 2 && d.s.depth[i] >= 3 && d.s.sp[i] >= 0.3; });
     if (!as.length) continue;
-    const min = as.reduce((x, a) => x + a.end - a.start, 0) / 60;
+    const tot = as.reduce((x, a) => x + alarmEnd(d, a) - a.start, 0);
     const lowSp = kind === "po2low" && as.some((a) => d.s.sp[d.s.t.findIndex((t) => t >= a.start)] < 0.3);
     const steps = as.slice(0, 3).flatMap((a, k) => [...(as.length > 1 ? [`${k + 1}. alarm ${mmss(a.start)}:`] : []), ...resolutionSteps(d, a.start, a.end, kind, th, as[k + 1]?.start ?? Infinity)]);
     out.push({ level: kind === "co2" ? "bad" : "warn", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
-      text: withSteps(`${as.length}× (${as.map((a) => `${Math.round(a.start / 60)}.–${Math.max(Math.round(a.start / 60), Math.round(a.end / 60))}. min`).join(", ")}), celkem ${min < 1 ? "pod 1 min" : Math.round(min) + " min"}.`, steps) });
+      text: withSteps(`${as.length}× (${as.map((a) => `${mmss(a.start)}–${mmss(alarmEnd(d, a))}`).join(", ")}), celkem ${mmss(tot)}.`, steps) });
   }
   const cs = cellSpread(d);
   if (cs && cs.kind) {

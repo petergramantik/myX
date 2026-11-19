@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.1";
+export const APP_VERSION = "1.34.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.2", date: "2026-11-19", title: "Přesnější osa řešení alarmu", items: [
+    "Alarmy pO₂ a CO₂: první krok „alarm spuštěn“ s hodnotou a hloubkou; „alarm ztlumen, dál na displeji“ – ztlumení problém nekončí.",
+    "Konec varování: potvrzeno tlačítkem (jen při zapsaném stisku) nebo „varování zmizelo“, s údajem, zda už hodnota byla pod prahem.",
+    "Délka alarmu v min:s od spuštění do zmizení varování z displeje (dřív jen do ztlumení).",
+  ] },
   { version: "1.34.1", date: "2026-11-19", title: "Přepínač logu v titulku", items: [
     "Přehled: v titulku jméno aktivního logu ›; klepnutím výběr mezi mým logem a uloženými cizími logy (otevřou se jen pro čtení).",
   ] },
