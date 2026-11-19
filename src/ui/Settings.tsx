@@ -29,7 +29,7 @@ export function SettingsScreen() {
         <label>Diluent – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
         <label>O₂ – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
         <p className="note">Externí lahve (S80 = 11,1 l, S40 = 5,7 l) se zadávají u ponoru v kartě Spotřeba plynu.</p>
-        <label>Spojit záznamy s povrchovým intervalem do (min, 0 = vypnuto)<input inputMode="decimal" defaultValue={st.lb.settings.segGap ?? 30} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v >= 0) saveSettings({ segGap: v }); }} /></label>
+        <label>Spojit záznamy s povrchovým intervalem do (minuty, 0 = vypnuto)<input inputMode="decimal" defaultValue={st.lb.settings.segGap ?? 30} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v >= 0) saveSettings({ segGap: v }); }} /></label>
         <p className="note">Víc záznamů počítače jako jeden ponor (bazén, krátký suchý přechod). Záznamy se stejným číslem ponoru v Shearwater Cloudu se spojují vždy; v detailu ponoru jdou části ručně oddělit nebo spojit.</p>
         <OwnComputers />
         <AliasCard kind="buddy" id={ME} title="Moje aliasy" />
@@ -68,7 +68,7 @@ export function SettingsScreen() {
         <h3 className="subh">CO₂</h3>
           <label>Podezřelé maximum (mbar)<input inputMode="decimal" defaultValue={th.co2Mbar ?? 5} onBlur={(e) => setTh("co2Mbar", e.target.value)} /></label>
         <h3 className="subh">Setpoint</h3>
-          <label>Pozdní přepnutí na vysoký: víc než (min) po dosažení dna<input inputMode="decimal" defaultValue={th.spLateMin ?? 2} onBlur={(e) => { const n = parseFloat(e.target.value.replace(",", ".")); if (!Number.isNaN(n)) saveSettings({ th: { ...th, spLateMin: n }, spLateSet: true }); }} /></label>
+          <label>Pozdní přepnutí na vysoký: víc než (minuty) po dosažení dna<input inputMode="decimal" defaultValue={th.spLateMin ?? 2} onBlur={(e) => { const n = parseFloat(e.target.value.replace(",", ".")); if (!Number.isNaN(n)) saveSettings({ th: { ...th, spLateMin: n }, spLateSet: true }); }} /></label>
           <label className="check"><input type="checkbox" checked={!!th.spLateWarn} onChange={(e) => saveSettings({ th: { ...th, spLateWarn: e.target.checked } })} /> Pozdní přepnutí jako varování (žlutě v detailu ponoru a tag SP; vypnuto = jen informace v Událostech)</label>
           <label>Oscilace hloubky na dně (m)<input inputMode="decimal" defaultValue={th.spOsc ?? 3} onBlur={(e) => setTh("spOsc", e.target.value)} /></label>
           <label>Výraznější klesání s vysokým SP (m)<input inputMode="decimal" defaultValue={th.spDescM ?? 6} onBlur={(e) => setTh("spDescM", e.target.value)} /></label>
@@ -78,7 +78,7 @@ export function SettingsScreen() {
         <h3 className="subh">Scrubber</h3>
           <label>Upozornit při zbytku (%)<input inputMode="decimal" defaultValue={th.scrubPct ?? 50} onBlur={(e) => setTh("scrubPct", e.target.value)} /></label>
           <label>Upozornit po dnech od náplně<input inputMode="decimal" defaultValue={th.scrubDays ?? 14} onBlur={(e) => setTh("scrubDays", e.target.value)} /></label>
-          <label>Zvýraznit v ponoru, když zbývá méně než (min; pod 30 min červeně)<input inputMode="decimal" defaultValue={th.scrubLeftMin ?? 90} onBlur={(e) => setTh("scrubLeftMin", e.target.value)} /></label>
+          <label>Zvýraznit v ponoru, když zbývá méně než (minuty; pod 30 minut červeně)<input inputMode="decimal" defaultValue={th.scrubLeftMin ?? 90} onBlur={(e) => setTh("scrubLeftMin", e.target.value)} /></label>
         <h3 className="subh">Baterie</h3>
           <label>Rezerva nad prahem varování (V)<input inputMode="decimal" defaultValue={th.batMarginV ?? 0.05} onBlur={(e) => setTh("batMarginV", e.target.value)} /></label>
           <label>Baterie v hlavě – varovat po hodinách pod vodou (0 = vypnuto)<input inputMode="decimal" defaultValue={th.headBatHours ?? 0} onBlur={(e) => setTh("headBatHours", e.target.value)} /></label>

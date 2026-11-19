@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.38.1";
+export const APP_VERSION = "1.39";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.39", date: "2026-11-19", title: "CO₂ a dechová práce", items: [
+    "Grafy CO₂ a zátěže sloučeny do jednoho: CO₂ hlavní, zátěž a hustota plynu tence na pravé ose; místo šedých pásem mezery s důvodem v pruhu pod grafem.",
+    "Zátěž chybí kratší dobu: po přepnutí SP a ruční dávce jen do ustálení pO₂, po doplnění diluentu 90 s. Ruční dávky podle analýzy dávek (už ne falešně při klesání).",
+    "Doplnění diluentu se nepočítá, když jsi během minuty klesal (ADV při sestupu); čárky v grafu jsou výraznější.",
+    "Pod legendou grafů pO₂, CO₂ a tlaku barevná upozornění, která se jich týkají; klepnutím přiblížení.",
+    "Časy: okamžik 2′15″, délka 2 min 15 s – všude stejně.",
+    "Spojené ponory: tlačítko „Spojit s následujícím“ zrušeno, spojit zpět jde jen ručně oddělenou část.",
+    "Nastavení: „minuty“ místo „min“. Drobná vylepšení Přehledu.",
+  ] },
   { version: "1.38.1", date: "2026-11-19", title: "Pozdní přepnutí setpointu", items: [
     "Pozdní přepnutí se hodnotí jen u prvního přepnutí na vysoký SP v ponoru.",
     "Výchozí hranice 2 min po dosažení dna (vlastní hodnota zůstává).",

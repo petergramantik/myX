@@ -58,7 +58,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   /** Svislé čárkované značky přes celý graf s popiskem nahoře (např. přepnutí setpointu). */
   pins?: { t: number; label: string; color: string }[];
   /** Krátké barevné značky u spodní osy (např. dávky O₂ podle druhu). */
-  marks?: { t: number; color: string }[];
+  marks?: { t: number; color: string; h?: number }[];
   /** Tenký barevný pruh dole (např. použitý plyn) se svislými značkami v místě přepnutí. */
   strip?: { from: number; to: number; color: string; label: string }[];
 }) {
@@ -211,7 +211,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
         {series.filter((s) => s.fillUp && !s.right).map((s, i) => <path key={"f" + i} d={area(s)} fill={s.color} opacity={0.18} stroke="none" />)}
         {series.map((s, i) => <path key={i} d={path(s)} fill="none" stroke={s.color} strokeWidth={s.width ?? 1.5} strokeDasharray={s.dash} opacity={isProf(s) ? 0.45 : s.right ? 0.55 : 1} />)}
         {vlines?.map((v, i) => <line key={"v" + i} x1={X(v.t)} x2={X(v.t)} y1={m.t} y2={Y(v.to)} stroke={v.color} strokeWidth={1} />)}
-        {marks?.map((k, i) => <line key={"k" + i} x1={X(k.t)} x2={X(k.t)} y1={height - m.b - 9} y2={height - m.b} stroke={k.color} strokeWidth={2} />)}
+        {marks?.map((k, i) => <line key={"k" + i} x1={X(k.t)} x2={X(k.t)} y1={height - m.b - (k.h ?? 9)} y2={height - m.b} stroke={k.color} strokeWidth={k.h ? 2.5 : 2} />)}
         {placed.map((p, i) => <line key={"p" + i} x1={p.x} x2={p.x} y1={4 + p.row * 11 + 9} y2={height - m.b} stroke={p.color} strokeWidth={1} strokeDasharray={p.dash} opacity={0.85} />)}
         {strip?.map((g, i) => <rect key={"s" + i} x={X(g.from)} width={Math.max(1, X(g.to) - X(g.from))} y={height - m.b - 5} height={4} fill={g.color} opacity={0.85} />)}
         {hover != null && <line x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref" />}

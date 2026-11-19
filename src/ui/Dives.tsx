@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize } from "../core/analysis";
+import { BTN_NAMES, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize, type Alert } from "../core/analysis";
 import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
@@ -361,36 +361,49 @@ function GuestNote({ note }: { note: DiveNote }) {
   );
 }
 
-/** Zátěž (rychlost spotřeby O₂ ve smyčce) s CO₂ a hustota plynu. */
-function EffortCard({ d, focusT }: { d: Dive; focusT?: number }) {
+/** Barevné události pod grafem: varování a informace, jejichž odkaz vede do tohoto grafu. Klepnutím se graf přiblíží. */
+function ChartEvents({ warns, keys }: { warns: Alert[]; keys: string[] }) {
+  const items = warns.map((a) => ({ a, bs: (a.blocks || []).filter((b) => keys.includes(b.chart)) })).filter((x) => x.bs.length);
+  if (!items.length) return null;
+  return (
+    <div className="chart-ev">
+      {items.map(({ a, bs }, i) => bs.length === 1
+        ? <p key={i} className={"small c-" + a.level} onClick={() => showInChart(bs[0])}>• {a.title}{bs[0].head ? `: ${bs[0].head}` : ""}</p>
+        : <div key={i}><p className={"small c-" + a.level}>• {a.title}:</p>{bs.map((b, k) => <p key={k} className={"small ev-sub c-" + a.level} onClick={() => showInChart(b)}>{b.head}</p>)}</div>)}
+    </div>
+  );
+}
+
+/** CO₂ ve smyčce (hlavní údaj) se zátěží a hustotou plynu (doplňkově, pravá osa). */
+function Co2Card({ d, focusT, warns }: { d: Dive; focusT?: number; warns: Alert[] }) {
   const s = d.s;
   const base = useEffortBase();
   const w = useMemo(() => workloadIndex(d, base).map((x) => (x == null ? null : Math.min(4, x))), [d, base]);
   const skip = useMemo(() => workloadSkip(d), [d]);
-  // zobrazení: posuvný průměr 2 min (bez skoků na 0 mezi dávkami); úseky bez údaje (klesání, hladina) jako pásmo
+  // zobrazení: posuvný průměr 2 min (bez skoků na 0 mezi dávkami); bez údaje = mezera v čáře, důvod v pruhu pod grafem
   const wSm = useMemo(() => w.map((_, i) => { if (w[i] == null) return null; let a = 0, n = 0; for (let k = i; k >= 0 && s.t[i] - s.t[k] <= 60; k--) if (w[k] != null) { a += w[k]!; n++; } for (let k = i + 1; k < w.length && s.t[k] - s.t[i] <= 60; k++) if (w[k] != null) { a += w[k]!; n++; } return n ? Math.round((a / n) * 100) / 100 : null; }), [w]);
-  const noW = useMemo(() => { const out: { from: number; to: number; color: string; label: string }[] = []; let a = -1, why = ""; const reason = (i: number) => skip[i] || "klesání / hladina";
-    for (let i = 0; i <= s.t.length; i++) { const nul = i < s.t.length && s.t[i] <= d.h.diveTimeS && w[i] == null; const r = nul ? reason(i) : ""; if (a >= 0 && (!nul || r !== why)) { if (s.t[i - 1] - s.t[a] >= 30) out.push({ from: s.t[a], to: s.t[i - 1], color: "#90a4ae", label: `Zátěž bez údaje – ${why}` }); a = -1; } if (nul && a < 0) { a = i; why = r; } } return out; }, [w, skip]);
+  const wTxt = useMemo(() => wSm.map((v, i) => (s.t[i] > d.h.diveTimeS ? "–" : v != null ? `${v.toLocaleString("cs-CZ")} ×` : `– (${skip[i] || (s.depth[i] < 3 ? "u hladiny" : "klesání")})`)), [wSm, skip]);
   const ef2 = useMemo(() => effortOf(d, 5, base), [d, base]);
   const co2V = useMemo(() => co2Valid(d), [d]);
   const dens = useMemo(() => gasDensity(d), [d]);
   const ef = useMemo(() => effortOf(d), [d]);
   const vents = useMemo(() => dilVents(d), [d]);
   const hasCo2 = s.co2.some((v) => v != null && v > 0);
+  const bad = co2BadRanges(d);
   return (
-    <Card title="Zátěž a dechová práce">
-      <LineChart t={s.t} bands={[...noW, ...ef2.high.map((h) => ({ from: h.from, to: h.to, color: "#ffb74d", label: `Zvýšená zátěž až ${h.max}×${h.co2 ? ", nárůst CO₂" : ""}` }))]} bandLegend={[...(noW.length ? [{ color: "#90a4ae", label: "bez údaje (klesání, po SP, dávce, diluentu)" }] : []), ...(ef2.high.length ? [{ color: "#ffb74d", label: "zvýšená zátěž" }] : [])]} marks={vents.map((t) => ({ t, color: "#cfd8dc" }))} series={[
-        { label: "Zátěž (1 = obvyklá, max. 4)", color: "#ffb74d", values: wSm, unit: "×", width: 2 },
-        ...(hasCo2 ? [{ label: "CO₂", color: "#ef5350", values: co2V, unit: "mbar", right: true }] : []),
-      ]} extra={[{ label: "Hloubka", values: s.depth, unit: "m" }]} />
-      <p className="note">Zátěž = rychlost poklesu pO₂ (opravená o změnu tlaku), úměrná spotřebě O₂, tedy námaze. 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Nepočítá se při klesání, u hladiny a 3–4 min po přepnutí SP, ruční dávce O₂ nebo doplnění diluentu (šedě). Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). Šedé čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p>
-      <LineChart t={s.t} height={150} focusT={focusT} series={[
-        { label: "Hustota plynu", color: "#4fc3f7", values: dens, unit: "g/l", width: 2 },
-        { label: "5,2 g/l", color: "#ffb74d", values: s.t.map(() => 5.2), unit: "g/l", dash: "4 3" },
-        { label: "6,2 g/l", color: "#ef5350", values: s.t.map(() => 6.2), unit: "g/l", dash: "4 3" },
-      ]} />
-      <p className="note">Hustota plynu ve smyčce. Nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně. Max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min.</p>
-      {ef.co2Notes.map((c, i) => <p key={i} className={"small c-" + c.level}>• {c.text}</p>)}
+    <Card title={hasCo2 ? "CO₂ a dechová práce" : "Dechová práce"}>
+      <LineChart t={s.t} focusT={focusT}
+        bands={[...d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" })), ...bad.map((r) => ({ ...r, color: "#90a4ae", label: "Čidlo CO₂ nejspíš chybné" })), ...ef2.high.map((h) => ({ from: h.from, to: h.to, color: "#ffb74d", label: `Zvýšená zátěž až ${h.max}×${h.co2 ? ", nárůst CO₂" : ""}` }))]}
+        bandLegend={[...(d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : []), ...(bad.length ? [{ color: "#90a4ae", label: "čidlo nejspíš chybné" }] : []), ...(ef2.high.length ? [{ color: "#ffb74d", label: "zvýšená zátěž" }] : []), ...(vents.length ? [{ color: "#ce93d8", label: "doplnění diluentu" }] : [])]}
+        marks={vents.map((t) => ({ t, color: "#ce93d8", h: 18 }))}
+        series={[
+          ...(hasCo2 ? [{ label: "CO₂", color: "#ef5350", values: co2V, unit: "mbar", width: 2.5 }] : []),
+          { label: "Zátěž (×)", color: "#ffb74d", values: wSm, unit: "×", width: 1.5, right: true, noTip: true },
+          { label: "Hustota (g/l)", color: "#4fc3f7", values: dens, unit: "g/l", width: 1.2, dash: "4 3", right: true },
+        ]}
+        extra={[{ label: "Zátěž", values: wTxt }, ...(hasCo2 ? [{ label: "Surová hodnota CO₂", values: s.co2raw }] : [])]} />
+      <ChartEvents warns={warns} keys={["co2", "effort"]} />
+      <p className="note">{hasCo2 ? <><b>CO₂</b> ve smyčce (levá osa, mbar) je hlavní údaj. </> : null}<b>Zátěž</b> (pravá osa) = rychlost poklesu pO₂ opravená o změnu tlaku, úměrná spotřebě O₂, tedy námaze; 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Nepočítá se při klesání, u hladiny, po přepnutí SP a po ruční dávce O₂ (než se pO₂ ustálí) a 90 s po doplnění diluentu – v čáře je mezera, důvod v pruhu pod grafem. Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). <b>Hustota plynu</b> (pravá osa, g/l, čárkovaně): nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně; max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min. Fialové čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p>
     </Card>
   );
 }
@@ -398,7 +411,7 @@ function EffortCard({ d, focusT }: { d: Dive; focusT?: number }) {
 function SpTile({ meta }: { meta: Meta }) {
   const up = meta.sum.sp.find((c) => c.to >= 1);
   const man = meta.sum.sp.filter((c) => c.manual).length;
-  return <span className="use">{up ? `${fmtSp(up.to)} v ${Math.round(up.t / 60)}. min` : "beze změny"}<small>{up ? `${num(up.depth)} m · ` : ""}{meta.sum.sp.length}× přepnuto{man ? `, ${man}× ručně` : ""}</small></span>;
+  return <span className="use">{up ? `${fmtSp(up.to)} v ${tpt(up.t)}` : "beze změny"}<small>{up ? `${num(up.depth)} m · ` : ""}{meta.sum.sp.length}× přepnuto{man ? `, ${man}× ručně` : ""}</small></span>;
 }
 
 /** Dvě hodnoty v jedné dlaždici: vlevo a vpravo, každá s malým popiskem. */
@@ -485,7 +498,7 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
           : <>Plyn z externí lahve ({gas === "o2" ? "S40" : "S80"}) – snímač ukazuje jen mezitlak. Zadej tlak start/end externí lahve.{gas === "o2" ? (rate
             ? ` Do té doby osobní odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (tvoje spotřeba ${num(rate.lo, 2)}–${num(rate.hi, 2)} l/min z ${rate.n} ponorů se známou spotřebou).`
             : ` Do té doby obecný metabolický odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (0,8–1,5 l/min; osobní odhad bude po 2 ponorech se známou spotřebou O₂).`) : ""}</>}</small>
-        {u.ext.length > 0 && <small className="c-warn">Externí plyn nebo zavřená lahev nejspíš: {u.ext.map(([a, b]) => (a === b ? `${a}. min` : `${a}.–${b}. min`)).join(", ")}</small>}
+        {u.ext.length > 0 && <small className="c-warn">Externí plyn nebo zavřená lahev nejspíš: {u.ext.map(([a, b]) => (a === b ? tpt(a * 60) : `${tpt(a * 60)}–${tpt(b * 60)}`)).join(", ")}</small>}
         {(() => {
           const mine = ext.filter((e) => e.gas === gas);
           const kind = gas === "dil" ? "S80" : "S40";
@@ -543,12 +556,13 @@ function DiveTitle({ id }: { id: string }) {
 
 /** Části spojeného ponoru (víc záznamů počítače) a ruční spojení / rozdělení. */
 function PartsCard({ meta }: { meta: Meta }) {
-  const gapMin = useStore().lb.settings.segGap ?? 30;
+  const lbS = useStore().lb.settings, gapMin = lbS.segGap ?? 30;
   const vm = viewMetas(), i = vm.findIndex((m) => m.id === meta.id), next = vm[i + 1];
   const ps = meta.parts;
   const mm = (s: number) => `${Math.round(s / 60)} min`;
   const hhmm = (t: number) => new Date(t * 1000).toISOString().slice(11, 16);
-  const canJoin = next && (next.h.serial || 0) === (meta.h.serial || 0) && next.start - (meta.parts ? meta.parts[meta.parts.length - 1] : meta).start < 6 * 3600;
+  // spojit zpět jen ručně oddělenou část (automatické spojení do segGap min, jinak se nenabízí)
+  const canJoin = next && lbS.segOv?.[next.id] === false && (next.h.serial || 0) === (meta.h.serial || 0);
   if (!ps && !canJoin) return null;
   return (
     <Card title={ps ? `Ponor z ${ps.length} částí` : "Části ponoru"}>
@@ -558,8 +572,8 @@ function PartsCard({ meta }: { meta: Meta }) {
           {k > 0 && <button className="btn small" onClick={() => setSegOverride(p.id, false)}>Oddělit</button>}
         </div>
       ))}
-      {canJoin && <button className="btn small" onClick={() => setSegOverride(next.id, true)}>Spojit s následujícím ponorem ({hhmm(next.start)})</button>}
-      <p className="note">Záznamy se stejným číslem ponoru z Cloudu nebo s povrchovým intervalem do {gapMin} min se spojují automaticky (Nastavení → Výbava).</p>
+      {canJoin && <button className="btn small" onClick={() => setSegOverride(next.id, null)}>Spojit zpět s ručně oddělenou částí ({hhmm(next.start)})</button>}
+      <p className="note">Záznamy se stejným číslem ponoru z Cloudu nebo s povrchovým intervalem do {gapMin} min se spojují automaticky (Nastavení → Výbava). Část jde oddělit a oddělenou zase spojit zpět.</p>
     </Card>
   );
 }
@@ -674,13 +688,15 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
   { let a = -1; for (let i = 0; i <= s.t.length; i++) { const nul = i < s.t.length && s.t[i] <= d.h.diveTimeS && s.gf99[i] == null; if (nul && a < 0) a = i; if (!nul && a >= 0) { gfLoad.push({ from: s.t[a], to: s.t[Math.min(i, s.t.length - 1)] }); a = -1; } } }
   const depthExtra: { label: string; values: (number | null)[]; unit: string }[] = []; // hloubku ukazuje linka profilu
   const st = useStore(), th = st.lb.settings.th;
+  const evBase = useEffortBase();
+  const warns = useMemo(() => diveWarnings(d, summarize(d), th, evBase), [d, th, evBase]);
   const [zoom, setZoom] = useState<[number, number] | null>(null);
   useBackLayer(zoom != null, () => setZoom(null)); // Zpět nejdřív zruší přiblížení
   // odkaz z varování: přiblížit na situaci (±2 min), posunout na graf, posuvník na začátek
   useEffect(() => {
     if (!focus) return;
     setZoom([Math.max(0, focus.from - 120), Math.min(s.t[s.t.length - 1], focus.to + 120)]);
-    requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-chart="${focus.chart}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" })));
+    requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-chart="${focus.chart === "effort" ? "co2" : focus.chart}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" })));
   }, [focus]);
   const fT = (k: string) => (focus && focus.chart === k ? focus.from : undefined);
   // typ čidla z Výbavy (čidlo na dané pozici v den ponoru)
@@ -723,18 +739,14 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
             { label: cellName(1), color: C[1], values: cells[0], unit: "mV", width: 1 }, { label: cellName(2), color: C[2], values: cells[1], unit: "mV", width: 1 }, { label: cellName(3), color: C[3], values: cells[2], unit: "mV", width: 1 },
           ]} extra={[{ label: "Průměr pO₂", values: s.ppo2, unit: "bar" }, ...depthExtra]} />
         )}
+        <ChartEvents warns={warns} keys={["po2"]} />
         <p className="note">
           {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
           {dz.length > 0 && <>Světle modře úseky, kdy pO₂ nad {fmtSp(th.po2HiWarn ?? 1.4)} bar dává sám diluent v dané hloubce (není to chyba, nevaruje se; klepnutím v legendě skryješ). </>}
           Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Pásma: červené = alarm vysokého pO₂ z počítače, oranžové = alarm nízkého pO₂, žluté / sytě červené = vlastní detekce vysokého pO₂, tyrkysové = čidla se rozcházejí o víc než 0,3 bar.
         </p>
       </Card></div>
-      <div data-chart="effort"><EffortCard d={d} focusT={fT("effort")} /></div>
-      <div data-chart="co2"><Card title="CO₂ v dýchací smyčce">
-        {s.co2.some((v) => v != null && v > 0)
-          ? <LineChart t={s.t} focusT={fT("co2")} bandLegend={[...(d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : []), ...(co2BadRanges(d).length ? [{ color: "#90a4ae", label: "čidlo nejspíš chybné" }] : [])]} bands={[...d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" })), ...co2BadRanges(d).map((r) => ({ ...r, color: "#90a4ae", label: "Čidlo CO₂ nejspíš chybné" }))]} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
-          : <p className="muted">V tomto ponoru CO₂ čidlo nic nezaznamenalo.</p>}
-      </Card></div>
+      <div data-chart="co2"><Co2Card d={d} focusT={fT("co2") ?? fT("effort")} warns={warns} /></div>
       <Card title="Dekomprese">
         <LineChart t={s.t} series={[
           { label: "NDL", color: C[0], values: s.stopt.map((v, i) => (s.stop[i] > 0 || s.t[i] > d.h.diveTimeS ? null : v)), unit: "min" },
@@ -752,6 +764,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
       </Card>
       <div data-chart="press"><Card title="Tlak v láhvích">
         <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: s.dil, unit: "bar" }, { label: "O₂", color: C[2], values: s.o2p, unit: "bar" }]} extra={depthExtra} />
+        <ChartEvents warns={warns} keys={["press"]} />
         <p className="note">Hodnota kolem 8–11 bar u O₂ odpovídá mezitlaku prvního stupně, ne tlaku v láhvi.</p>
       </Card></div>
       <div data-chart="temp"><Card title="Teplota a baterie">
@@ -829,7 +842,7 @@ function EventsTab({ d }: { d: Dive }) {
     <Card title="Setpoint">
       {(() => { const sp = setpointChanges(d); return sp.length ? (
         <table className="kv"><thead><tr><th>Čas</th><th>Hloubka</th><th>Setpoint</th><th>Obsluha</th></tr></thead>
-          <tbody>{sp.map((c, i) => <tr key={i}><td>{Math.round(c.t / 60)}′</td><td>{num(c.depth)} m</td><td>{fmtSp(c.from)} → {fmtSp(c.to)}{c.to < 0.3 && c.depth <= 6 ? " (před výstupem)" : ""}</td><td>{c.manual ? "ručně (menu Petrelu)" : "bez potvrzené obsluhy"}</td></tr>)}</tbody>
+          <tbody>{sp.map((c, i) => <tr key={i}><td>{tpt(c.t)}</td><td>{num(c.depth)} m</td><td>{fmtSp(c.from)} → {fmtSp(c.to)}{c.to < 0.3 && c.depth <= 6 ? " (před výstupem)" : ""}</td><td>{c.manual ? "ručně (menu Petrelu)" : "bez potvrzené obsluhy"}</td></tr>)}</tbody>
         </table>) : <p className="muted">Setpoint se během ponoru neměnil.</p>; })()}
       <p className="note">Ruční přepnutí = levé tlačítko (menu) a pravé (potvrzení první položky) 0–25 s před změnou ve vzorcích. Ruční dávky O₂ před přepnutím na vysoký setpoint: {o2Doses(d).filter((x) => x.preSw && x.kind === "man").length}×.</p>
     </Card>
@@ -845,7 +858,7 @@ function EventsTab({ d }: { d: Dive }) {
     <Card title="Alarmy z počítače">
       {d.alarms.length ? (
         <table className="kv"><thead><tr><th>Alarm</th><th>Od</th><th>Do</th><th>Délka</th></tr></thead>
-          <tbody>{d.alarms.map((a, i) => <tr key={i}><td>{a.label}</td><td>{Math.round(a.start / 60)}′</td><td>{Math.round(a.end / 60)}′</td><td>{dur(a.end - a.start)}</td></tr>)}</tbody>
+          <tbody>{d.alarms.map((a, i) => <tr key={i}><td>{a.label}</td><td>{tpt(a.start)}</td><td>{tpt(a.end)}</td><td>{dur(a.end - a.start)}</td></tr>)}</tbody>
         </table>
       ) : <p className="muted">Počítač v tomto ponoru nehlásil alarm CO₂ ani pO₂.</p>}
       <p className="note">Z událostí 9 (spuštění) a 10 (ukončení). V grafech CO₂ a pO₂ jsou alarmy vyznačené podbarvením.</p>
@@ -854,7 +867,7 @@ function EventsTab({ d }: { d: Dive }) {
     <Card title="Události v záznamu">
       <p className="note">Bez CO₂ (to je v grafu) a bez stisků tlačítek (výše). Značka (P) = pravděpodobný význam, (?) = hypotéza.</p>
       <table className="kv"><thead><tr><th>Čas</th><th>Typ</th><th>Význam / data</th></tr></thead>
-        <tbody>{d.events.map((e, i) => <tr key={i}><td>{Math.round(e.t / 60)}′</td><td>{e.kind}</td><td>{e.label}<br /><code>{e.payload}</code></td></tr>)}</tbody>
+        <tbody>{d.events.map((e, i) => <tr key={i}><td>{tpt(e.t)}</td><td>{e.kind}</td><td>{e.label}<br /><code>{e.payload}</code></td></tr>)}</tbody>
       </table>
     </Card>
     </>

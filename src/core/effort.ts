@@ -1,5 +1,6 @@
 // Zátěž a dechová práce: odhad metabolické spotřeby O₂, hustota plynu, nadbytečný diluent a souvislosti s CO₂.
 import type { Dive } from "./shearwater";
+import { o2Doses, tpt } from "./analysis";
 
 const amb = (d: Dive, i: number) => (d.h.surfP || 1013) / 1000 + d.s.depth[i] * ((d.h.salinity || 1000) / 1000) * 0.0981;
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS && d.s.depth[i] >= 1.5;
@@ -50,11 +51,19 @@ export function co2Valid(d: Dive): (number | null)[] {
 /** Důvod, proč se v daném vzorku zátěž nepočítá (rušivý zásah do smyčky), jinak "". */
 export function workloadSkip(d: Dive): string[] {
   const s = d.s, n = s.t.length, out: string[] = Array(n).fill("");
-  const mark = (t0: number, sec: number, why: string) => { for (let i = 0; i < n; i++) if (s.t[i] >= t0 && s.t[i] <= t0 + sec && !out[i]) out[i] = why; };
-  for (let i = 1; i < n; i++) if (Math.abs(s.sp[i] - s.sp[i - 1]) >= 0.1) mark(s.t[i], 240, "po přepnutí SP");
-  // ruční dávka (nárůst pO₂ nad setpointem) – smyčka se promíchává
-  for (let i = 1; i + 3 < n; i++) if (s.ppo2[i] > s.sp[i] + 0.05 && s.ppo2[i + 3] - s.ppo2[i] >= 0.05 && s.depth[i] > 1.5) { mark(s.t[i], 180, "po ruční dávce O₂"); i += 3; }
-  for (const t of dilVents(d)) mark(t, 180, "po doplnění diluentu");
+  const mark = (t0: number, t1: number, why: string) => { for (let i = 0; i < n; i++) if (s.t[i] >= t0 && s.t[i] <= t1 && !out[i]) out[i] = why; };
+  const idx = (t: number) => { const k = s.t.findIndex((x) => x >= t); return k < 0 ? n - 1 : k; };
+  // po přepnutí SP: dokud pO₂ nedosáhne nového setpointu (±0,05) + 30 s na promíchání, nejvýš 4 min
+  for (let i = 1; i < n; i++) if (Math.abs(s.sp[i] - s.sp[i - 1]) >= 0.1) {
+    let k = i; while (k < n - 1 && s.t[k] - s.t[i] < 240 && Math.abs(s.ppo2[k] - s.sp[k]) > 0.05) k++;
+    mark(s.t[i], Math.min(s.t[i] + 240, s.t[k] + 30), "po přepnutí SP");
+  }
+  // po ruční dávce O₂ (z analýzy dávek): dokud pO₂ stoupá + 30 s, nejvýš 3 min
+  for (const x of o2Doses(d)) if (x.kind === "man" || x.kind === "amb") {
+    let k = idx(x.t); const k0 = k; while (k < n - 1 && s.t[k] - s.t[k0] < 180 && s.ppo2[k + 1] > s.ppo2[k]) k++;
+    mark(x.t, Math.min(x.t + 180, s.t[k] + 30), "po ruční dávce O₂");
+  }
+  for (const t of dilVents(d)) mark(t, t + 90, "po doplnění diluentu");
   return out;
 }
 
@@ -111,7 +120,7 @@ export function dilVents(d: Dive): number[] {
     if (!inDive(d, i) || s.dil[i] == null || s.dil[i]! < 20) continue;
     const j = s.t.findIndex((t) => t >= s.t[i] + 60);
     if (j < 0 || s.dil[j] == null || s.dil[j]! < 20) continue;
-    if (s.dil[i]! - s.dil[j]! >= 2 && s.depth[j] - s.depth[i] <= 1 && s.t[i] - last > 120) { out.push(s.t[i]); last = s.t[i]; }
+    if (s.dil[i]! - s.dil[j]! >= 2 && Math.max(...s.depth.slice(i, j + 1)) - s.depth[i] <= 1 && s.t[i] - last > 120) { out.push(s.t[i]); last = s.t[i]; }
   }
   return out;
 }
@@ -163,7 +172,7 @@ export function effortOf(d: Dive, co2Limit = 5, base?: EffortBase | null): Effor
     if (dPeak > 5.2) why.push(`při vysoké hustotě plynu ${dPeak.toLocaleString("cs-CZ")} g/l (vyšší dechová práce)`);
     notes.push({
       t: s.t[pk], level: why.length ? "info" : "warn",
-      text: `CO₂ ${(s.co2[pk] ?? 0).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} mbar v ${Math.round(s.t[pk] / 60)}. min ` +
+      text: `CO₂ ${(s.co2[pk] ?? 0).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} mbar v ${tpt(s.t[pk])} ` +
         (why.length ? why.join(" a ") + "." : "bez zvýšené námahy a husté směsi – zkontroluj sorbent a smyčku."),
     });
     i = j + Math.round(120 / dt); // další epizoda nejdřív za 2 min

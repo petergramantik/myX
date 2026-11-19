@@ -1,7 +1,7 @@
 // Porovnání dvou současných ponorů (můj vs. buddyho): metriky, rozdíly a stručný závěr z dat.
 import { co2Valid } from "./effort";
 import type { Dive } from "./shearwater";
-import { atStop, setpointChanges, o2Doses, summarize, cellSpread, type SpChange, type CellIssue } from "./analysis";
+import { atStop, tpt, dur, setpointChanges, o2Doses, summarize, cellSpread, type SpChange, type CellIssue } from "./analysis";
 import { co2Plausibility, effortOf } from "./effort";
 
 const amb = (d: Dive, i: number) => (d.h.surfP || 1013) / 1000 + d.s.depth[i] * ((d.h.salinity || 1000) / 1000) * 0.0981;
@@ -101,7 +101,7 @@ export function diveStats(d: Dive, dev: SpDev = SP_DEV): DiveStats {
 
 export interface DiffRow { key: string; label: string; a: string; b: string; weight: number }
 const f1 = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLocaleString("cs-CZ", { maximumFractionDigits: d, minimumFractionDigits: d > 1 ? d : 0 }));
-const spTxt = (c: SpChange | null) => (c ? `${Math.round(c.t / 60)}. min, ${f1(c.depth)} m` : "nepřepnuto");
+const spTxt = (c: SpChange | null) => (c ? `${tpt(c.t)}, ${f1(c.depth)} m` : "nepřepnuto");
 
 /** Porovnávané veličiny: hodnota (číslo pro výpočet rozdílu), text, měřítko „podstatného“ rozdílu a váha. */
 interface Metric { key: string; label: string; v: (s: DiveStats) => number | null; txt: (s: DiveStats) => string; scale: number | ((xs: number[]) => number); w: number; cat?: boolean }
@@ -119,8 +119,8 @@ const METRICS: Metric[] = [
   { key: "po2b", label: "pO₂ na dně", v: (s) => s.po2Bottom, txt: (s) => `${f1(s.po2Bottom, 2)} bar`, scale: 0.05, w: 1 },
   { key: "po2d", label: "pO₂ během deko", v: (s) => s.po2Deco, txt: (s) => (s.po2Deco != null ? `${f1(s.po2Deco, 2)} bar` : "bez deko"), scale: 0.05, w: 1 },
   { key: "po2a", label: "pO₂ při výstupu", v: (s) => s.po2Asc, txt: (s) => (s.po2Asc != null ? `${f1(s.po2Asc, 2)} bar` : "–"), scale: 0.05, w: 0.9 },
-  { key: "below", label: "Pod setpointem", v: (s) => s.offBelow, txt: (s) => `${f1(s.offBelow, 1)} min`, scale: 2, w: 1 },
-  { key: "above", label: "Nad setpointem (mimo deko)", v: (s) => s.offAbove, txt: (s) => `${f1(s.offAbove, 1)} min`, scale: 2, w: 0.8 },
+  { key: "below", label: "Pod setpointem", v: (s) => s.offBelow, txt: (s) => `${dur((s.offBelow) * 60)}`, scale: 2, w: 1 },
+  { key: "above", label: "Nad setpointem (mimo deko)", v: (s) => s.offAbove, txt: (s) => `${dur((s.offAbove) * 60)}`, scale: 2, w: 0.8 },
   { key: "boost", label: "pO₂ zvýšené během deko", v: (s) => s.boostMin, txt: (s) => (s.boostMin >= 0.5 ? `${f1(s.boostMin, 0)} min, ${f1(s.boostPo2, 2)} bar` : "–"), scale: 2, w: 0.8 },
   { key: "gf", label: "GF", v: () => null, txt: (s) => s.gf, scale: 1, w: 2.5, cat: true },
   { key: "co2", label: "Max. CO₂", v: (s) => s.co2Max ?? 0, txt: (s) => (s.co2Max != null ? `${f1(s.co2Max)} mbar` : "–") + (s.co2Bad ? " (čidlo nevěrohodné)" : ""), scale: 1, w: 1 },
@@ -228,12 +228,12 @@ export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveSt
         const tot = Math.abs(depthPart) + Math.abs(po2Part) || 1;
         const parts: [number, string][] = [];
         if (po2Part > 0) parts.push([po2Part / tot,
-          L.x.spUp && L.y.spUp && L.x.spUp.t - L.y.spUp.t >= 120 ? `pozdější přepnutí na vysoký setpoint (${Math.round(L.x.spUp.t / 60)}. vs. ${Math.round(L.y.spUp.t / 60)}. min)`
+          L.x.spUp && L.y.spUp && L.x.spUp.t - L.y.spUp.t >= 120 ? `pozdější přepnutí na vysoký setpoint (${tpt(L.x.spUp.t)} vs. ${tpt(L.y.spUp.t)})`
           : !L.x.spUp && L.y.spUp ? "nepřepnutí na vysoký setpoint"
           : (L.x.spUpVal ?? 0) < (L.y.spUpVal ?? 0) ? `nižší vysoký setpoint (${f1(L.x.spUpVal, 2)} vs. ${f1(L.y.spUpVal, 2)})`
           : `nižší průměrné pO₂ (${f1(L.x.po2All, 2)} vs. ${f1(L.y.po2All, 2)} bar)`]);
         if (depthPart > 0) {
-          const dw = deeper ? (() => { const who = (L.who === B) === (deeper.diff > 0) ? L.who : L.other; return who === L.who ? `v ${Math.round(deeper.from / 60)}.–${Math.round(deeper.to / 60)}. min průměrně o ${f1(Math.abs(deeper.diff))} m hlouběji` : null; })() : null;
+          const dw = deeper ? (() => { const who = (L.who === B) === (deeper.diff > 0) ? L.who : L.other; return who === L.who ? `v ${tpt(deeper.from)}–${tpt(deeper.to)} průměrně o ${f1(Math.abs(deeper.diff))} m hlouběji` : null; })() : null;
           const why = depthWhy(L.x, L.y, dw);
           if (why) parts.push([depthPart / tot, why]);
         }
@@ -247,12 +247,12 @@ export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveSt
   // ---- pO₂ a setpoint
   {
     const lines: string[] = []; let level: 0 | 1 | 2 = 0;
-    if (a.spUp && b.spUp && Math.abs(a.spUp.t - b.spUp.t) >= 120) { const l = a.spUp.t > b.spUp.t ? A : B; lines.push(`${l}: později přepnutý vysoký setpoint (${Math.round(Math.max(a.spUp.t, b.spUp.t) / 60)}. vs. ${Math.round(Math.min(a.spUp.t, b.spUp.t) / 60)}. min).`); level = Math.abs(a.spUp.t - b.spUp.t) >= 300 ? 2 : 1; }
+    if (a.spUp && b.spUp && Math.abs(a.spUp.t - b.spUp.t) >= 120) { const l = a.spUp.t > b.spUp.t ? A : B; lines.push(`${l}: později přepnutý vysoký setpoint (${tpt(Math.max(a.spUp.t, b.spUp.t))} vs. ${tpt(Math.min(a.spUp.t, b.spUp.t))}).`); level = Math.abs(a.spUp.t - b.spUp.t) >= 300 ? 2 : 1; }
     else if (!!a.spUp !== !!b.spUp) { lines.push(`${a.spUp ? B : A}: vysoký setpoint nepřepnut.`); level = 2; }
     if (a.spUpVal != null && b.spUpVal != null && Math.abs(a.spUpVal - b.spUpVal) >= 0.05) { lines.push(`Jiný vysoký setpoint (${A} ${f1(a.spUpVal, 2)}, ${B} ${f1(b.spUpVal, 2)}).`); level = Math.max(level, 1) as 0 | 1 | 2; }
     if (a.po2Deco != null && b.po2Deco != null && Math.abs(a.po2Deco - b.po2Deco) >= 0.05) { const lo = a.po2Deco < b.po2Deco ? A : B; lines.push(`${lo}: nižší pO₂ během deko (${f1(Math.min(a.po2Deco, b.po2Deco), 2)} vs. ${f1(Math.max(a.po2Deco, b.po2Deco), 2)} bar) – prodlužuje zastávky.`); level = Math.max(level, 1) as 0 | 1 | 2; }
     for (const [k, lab] of [["offBelow", "pod setpointem (o víc než 0,15 bar)"], ["offAbove", "nad setpointem mimo deko (o víc než 0,2 bar)"]] as const) {
-      if (Math.abs(a[k] - b[k]) >= 2) { const w = a[k] > b[k] ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${w.who}: déle ${lab} (${f1(w.x[k], 1)} vs. ${f1(w.y[k], 1)} min)` + (k === "offBelow" && w.x.dosesMan > w.y.dosesMan + 3 ? `, častěji dávkoval O₂ ručně (${w.x.dosesMan}× vs. ${w.y.dosesMan}×).` : ".")); level = Math.max(level, k === "offBelow" ? 2 : 1) as 0 | 1 | 2; }
+      if (Math.abs(a[k] - b[k]) >= 2) { const w = a[k] > b[k] ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${w.who}: déle ${lab} (${f1(w.x[k], 1)} vs. ${dur((w.y[k]) * 60)})` + (k === "offBelow" && w.x.dosesMan > w.y.dosesMan + 3 ? `, častěji dávkoval O₂ ručně (${w.x.dosesMan}× vs. ${w.y.dosesMan}×).` : ".")); level = Math.max(level, k === "offBelow" ? 2 : 1) as 0 | 1 | 2; }
     }
     if (Math.abs(a.boostMin - b.boostMin) >= 2) { const w = a.boostMin > b.boostMin ? { who: A, x: a, y: b } : { who: B, x: b, y: a }; lines.push(`${w.who}: během deko pO₂ zvýšené na ${f1(w.x.boostPo2, 2)} bar po ${f1(w.x.boostMin, 0)} min (${w.y.boostMin >= 0.5 ? `${f1(w.y.boostMin, 0)} min` : "druhý ne"}) – zkracuje zastávky.`); level = Math.max(level, 1) as 0 | 1 | 2; }
     for (const [w, x] of [[A, a], [B, b]] as const) if (x.cellIssue) { lines.push(`${w}: ${cellIssueText(x.cellIssue)} – hodnoty pO₂ ber s rezervou.`); level = Math.max(level, 1) as 0 | 1 | 2; }
@@ -317,7 +317,7 @@ export function groupSections(names: string[], st: DiveStats[]): Section[] {
     const dIn = s.inert - inert, why: string[] = [];
     if (Math.abs(dIn) >= 10 && Math.abs(dIn) / (inert || 1) >= 0.05) {
       const dDepth = s.ambInt - amb, dPo2 = po2 - s.po2Int, tot = Math.abs(dDepth) + Math.abs(dPo2) || 1;
-      if (dPo2 > 0 && dPo2 / tot >= 0.3) why.push(s.spUp && upAvg != null && s.spUp.t - upAvg >= 120 ? `pozdější přepnutí SP (${Math.round(s.spUp.t / 60)}. min, průměr ${Math.round(upAvg / 60)}.)` : !s.spUp ? "nepřepnutý vysoký SP" : `nižší pO₂ (${f1(s.po2All, 2)} bar)`);
+      if (dPo2 > 0 && dPo2 / tot >= 0.3) why.push(s.spUp && upAvg != null && s.spUp.t - upAvg >= 120 ? `pozdější přepnutí SP (${tpt(s.spUp.t)}, průměr ${tpt(upAvg)})` : !s.spUp ? "nepřepnutý vysoký SP" : `nižší pO₂ (${f1(s.po2All, 2)} bar)`);
       if (dDepth > 0 && dDepth / tot >= 0.3) { const w = Math.abs(s.avgDepth - avg((x) => x.avgDepth)) >= 0.3 ? `vyšší průměrná hloubka (${f1(s.avgDepth)} vs. ${f1(avg((x) => x.avgDepth))} m)` : Math.abs(s.durMin - avg((x) => x.durMin)) >= 2 ? `delší ponor (${f1(s.durMin, 0)} min)` : null; if (w) why.push(w); }
     } else if (s.po2Deco != null) { const pd = avg((x) => x.po2Deco ?? s.po2Deco!); if (pd - s.po2Deco >= 0.03) why.push(`nižší pO₂ během deko (${f1(s.po2Deco, 2)} bar)`); }
     deco.push([d >= 4 || dz >= 4 ? 2 : 1, `${names[i]}: ${d >= 2 ? `delší dekomprese (TTS ${s.ttsMax} min, průměr ${f1(tts)})` : `delší čas na zastávkách (${f1(s.decoMin, 0)} min, průměr ${f1(decoAvg, 0)})`}${why.length ? " – " + why.join(", ") : ""}.`]);
@@ -326,10 +326,10 @@ export function groupSections(names: string[], st: DiveStats[]): Section[] {
   if (gfs.size > 1) deco.push([1, `Různé GF: ${st.map((s, i) => `${names[i]} ${s.gf}`).join(", ")}.`]);
   const p2: [number, string][] = [];
   st.forEach((s, i) => {
-    if (s.spUp && upAvg != null && s.spUp.t - upAvg >= 120) p2.push([s.spUp.t - upAvg >= 300 ? 2 : 1, `${names[i]}: později přepnutý vysoký SP (${Math.round(s.spUp.t / 60)}. min, průměr ${Math.round(upAvg / 60)}.).`]);
+    if (s.spUp && upAvg != null && s.spUp.t - upAvg >= 120) p2.push([s.spUp.t - upAvg >= 300 ? 2 : 1, `${names[i]}: později přepnutý vysoký SP (${tpt(s.spUp.t)}, průměr ${tpt(upAvg)}).`]);
     if (!s.spUp && ups.length) p2.push([2, `${names[i]}: vysoký SP nepřepnut.`]);
-    if (s.offBelow - avg((x) => x.offBelow) >= 2) p2.push([2, `${names[i]}: nejdéle pod setpointem (${f1(s.offBelow, 1)} min).`]);
-    if (s.offAbove - avg((x) => x.offAbove) >= 2) p2.push([1, `${names[i]}: nejdéle nad setpointem mimo deko (${f1(s.offAbove, 1)} min).`]);
+    if (s.offBelow - avg((x) => x.offBelow) >= 2) p2.push([2, `${names[i]}: nejdéle pod setpointem (${dur((s.offBelow) * 60)}).`]);
+    if (s.offAbove - avg((x) => x.offAbove) >= 2) p2.push([1, `${names[i]}: nejdéle nad setpointem mimo deko (${dur((s.offAbove) * 60)}).`]);
     if (s.boostMin - avg((x) => x.boostMin) >= 2) p2.push([1, `${names[i]}: během deko pO₂ zvýšené (${f1(s.boostPo2, 2)} bar, ${f1(s.boostMin, 0)} min).`]);
   });
   st.forEach((s, i) => { if (s.cellIssue) p2.push([1, `${names[i]}: ${cellIssueText(s.cellIssue)} – hodnoty pO₂ ber s rezervou.`]); });

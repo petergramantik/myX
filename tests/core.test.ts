@@ -383,5 +383,15 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(!z.some((x) => x.level === "warn" && x.from < 600) && z.some((x) => x.level === "bad" && x.from === 600), "diluent nevaruje, nad 1,6 červeně");
 }
 
+{ // formát délky a doplnění diluentu při klesání
+  const { dur, tpt } = await import("../src/core/analysis");
+  const { dilVents } = await import("../src/core/effort");
+  ok(dur(44) === "44 s" && dur(135) === "2 min 15 s" && dur(120) === "2 min" && tpt(135) === "2′15″", "formát: délka 2 min 15 s, okamžik 2′15″");
+  const t = [...Array(61).keys()].map((i) => i * 5);
+  const mk = (depth: number[]) => ({ h: { diveTimeS: 400 }, s: { t, depth, dil: t.map((x) => (x < 100 ? 150 : 147)) } }) as any;
+  ok(dilVents(mk(t.map(() => 20))).length === 1, "doplnění diluentu ve stálé hloubce");
+  ok(dilVents(mk(t.map((x) => (x < 80 ? 20 : x < 110 ? 20 + (x - 80) / 10 : 23 - (x - 110) / 10)))).length === 0, "ADV při klesání (i s návratem) se nepočítá");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");
