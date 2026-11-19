@@ -11,7 +11,7 @@ import { AboutScreen, SettingsScreen } from "./ui/Settings";
 import { DraftScreen } from "./ui/Draft";
 import { CellsScreen } from "./ui/Cells";
 import { BatteriesScreen } from "./ui/Batteries";
-import { closeGuest, createDraft, logName, ownerName } from "./app/store";
+import { closeGuest, createDraft, guestIndexLoad, logName, myDisplayName, openGuest, ownerName, type GuestLog } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
 import { Co2Screen } from "./ui/Cells";
 import { CompareHub, CompareScreen } from "./ui/Compare";
@@ -38,6 +38,30 @@ const TABS: [Screen, string, string][] = [
   [{ t: "home" }, "Přehled", "◉"], [{ t: "dives" }, "Ponory", "≋"], [{ t: "buddies" }, "B&L", "☺"],
   [{ t: "hub" }, "DB", "⇄"], [{ t: "settings" }, "Nastavení", "⚙"],
 ];
+
+/** Titulek Přehledu: jméno aktivního logu ›, klepnutím výběr mezi mým logem a uloženými cizími (jen čtení). */
+function LogSwitch() {
+  const st = useStore();
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<{ log: GuestLog; n: number }[]>([]);
+  useEffect(() => { if (open) guestIndexLoad().then((ix) => setList(ix.map((g) => ({ log: g.log, n: g.metas.length })))); }, [open, st.guestRev]);
+  const myName = myDisplayName() || "Můj log";
+  const cur = st.guest ? logName(st.guest) : myName;
+  const isCur = (l: GuestLog) => !!st.guest && (st.guest.id === l.id || (l.logs || [l]).some((x) => x.id === st.guest!.id));
+  return (
+    <div className="logsw">
+      <h1 className="logsw-t" onClick={() => setOpen(!open)}>myX – {cur} <span className="logsw-a">{open ? "⌄" : "›"}</span></h1>
+      {open && <>
+        <div className="logsw-bg" onClick={() => setOpen(false)} />
+        <div className="logsw-m">
+          <button className={!st.guest ? "on" : ""} onClick={() => { setOpen(false); if (st.guest) closeGuest(); }}>{!st.guest ? "✓ " : ""}{myName}{myDisplayName() ? <small>můj log</small> : null}</button>
+          {list.map((g) => <button key={g.log.id} className={isCur(g.log) ? "on" : ""} onClick={async () => { setOpen(false); if (!isCur(g.log)) await openGuest(g.log); }}>{isCur(g.log) ? "✓ " : ""}{logName(g.log)} <small>{g.n} ponorů · jen čtení</small></button>)}
+          {!list.length && <small className="muted logsw-e">Žádné uložené cizí logy (DB → Logy ostatních).</small>}
+        </div>
+      </>}
+    </div>
+  );
+}
 
 function title(s: Screen, st: ReturnType<typeof useStore>): string {
   return "myX – " + screenName(s, st);
@@ -123,7 +147,7 @@ function App() {
       <DialogHost />
       <header className="top">
         {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo">X</span>}
-        <h1>{title(s, st)}</h1>
+        {s.t === "home" ? <LogSwitch /> : <h1>{title(s, st)}</h1>}
         <button className="warnbtn none helpbtn" onClick={() => (s.t === "help" ? back() : go({ t: "help" }))} aria-label="Nápověda">?</button>
         <button className={"warnbtn " + (w.worst || "none")} onClick={() => (s.t === "warn" ? back() : (setAnim("from-left"), go({ t: "warn" })))} aria-label="Varování">
           ⚠{w.count > 0 && <span>{w.count}</span>}

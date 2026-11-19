@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34";
+export const APP_VERSION = "1.34.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.1", date: "2026-11-19", title: "Přepínač logu v titulku", items: [
+    "Přehled: v titulku jméno aktivního logu ›; klepnutím výběr mezi mým logem a uloženými cizími logy (otevřou se jen pro čtení).",
+  ] },
   { version: "1.34", date: "2026-11-19", title: "Vysoké pO₂, řešení varování, zoom grafů", items: [
     "Vlastní hlídání vysokého pO₂: žlutě nad 1,4 bar déle než 1 min mimo deko zastávky, červeně nad 1,6 bar (prahy v Nastavení → Upozornění) – pásma v grafu, dlaždice Max. pO₂, tag pO₂.",
     "Varování a alarmy z počítače mají v rozbalení časovou osu řešení: potvrzení, setpoint, ruční dávky, diluent / upuštění smyčky, lahve, OC, konec alarmu ((P) = odhad).",

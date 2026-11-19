@@ -428,3 +428,13 @@ details.card.sec > summary h2 { margin: 0; }
 .legend .lg-band i { opacity: 0.45; border-radius: 2px; }
 .tip-alarm { font-weight: 700; }
 .chart-hint { margin: 0 2px 8px; }
+.logsw { position: relative; flex: 1; min-width: 0; }
+.logsw-t { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.logsw-a { color: var(--accent); font-weight: 700; margin-left: 2px; }
+.logsw-bg { position: fixed; inset: 0; z-index: 40; }
+.logsw-m { position: absolute; left: 0; top: calc(100% + 6px); z-index: 41; min-width: 240px; max-width: 86vw; display: flex; flex-direction: column; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+.logsw-m button { background: transparent; border: 0; border-top: 1px solid var(--line); color: var(--fg, #e6edf3); text-align: left; padding: 11px 14px; font-size: 16px; }
+.logsw-m button:first-child { border-top: 0; }
+.logsw-m button.on { color: var(--accent); font-weight: 700; }
+.logsw-m small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+.logsw-e { padding: 10px 14px; }

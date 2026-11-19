@@ -68,6 +68,7 @@ export function HelpScreen() {
         <p><b>Sdílet srovnání:</b> ⤴ Sdílet srovnání nahoře na srovnání pošle statickou stránku .html (závěr, grafy, rozdíly) – příjemce ji otevře v prohlížeči i bez myX. Neobsahuje ID počítačů ani surová data; „Já“ nahradí tvé jméno z Nastavení → Sdílení.</p>
         <p><b>Převzaté údaje:</b> když má parťák u společného ponoru lokalitu nebo jména, myX je ukáže v detailu ponoru v kartě „Z logů ostatních“. U každého jména je Akce: To je… (propojit s tvým parťákem / lokalitou – vznikne alias), Přidat k ponoru, Založit nového, To jsem já. U podobného jména nabídne např. „To je Radek Patak?“.</p>
         <p><b>Aliasy:</b> propojení platí pro všechny ponory a zůstane i po smazání nebo aktualizaci cizího logu. Zrušit jde v B&L v detailu parťáka / lokality (karta Aliasy), tvoje jména v Nastavení → Výbava → Moje aliasy.</p>
+        <p><b>Přepínání logů:</b> na Přehledu klepni na jméno v titulku (›) – vybereš svůj log nebo uložený cizí log; cizí se otevře jen pro čtení.</p>
         <p><b>Logy ostatních v DB:</b> u každého počítače tlačítko Akce (majitel, hlavní počítač, To je můj počítač, Smazat); Otevřít a Srovnání jsou u majitele. ID počítače se ukazuje jen tady, jinde jméno majitele.</p>
       </H>
 

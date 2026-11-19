@@ -649,6 +649,8 @@ export async function buddyDivesFor(m: Meta): Promise<{ log: GuestLog; meta: Met
   }));
 }
 /** Jméno cizího logu pro zobrazení: majitel, jinak model počítače (bez sériového čísla). */
+/** Moje jméno (Nastavení → Sdílení), i když je otevřený cizí log. */
+export const myDisplayName = (): string | undefined => ownLb().settings.myName;
 export const logName = (log: GuestLog): string => ownerName(log) || log.model || "Cizí log";
 export const ownerName = (log: GuestLog): string | null => {
   const lb = ownLb(); const c = log.serial ? lb.computers?.[log.serial] : undefined;
