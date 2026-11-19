@@ -6,7 +6,7 @@ export const ChartDefs = createContext<{ profile?: (number | null)[]; zoom?: boo
 /** Společný výřez (zoom) pro grafy jednoho ponoru: [od, do] v sekundách, null = celý ponor. */
 export const ZoomCtx = createContext<{ z: [number, number] | null; setZ: (z: [number, number] | null) => void } | null>(null);
 
-export interface Series { label: string; color: string; values: (number | null)[]; unit?: string; right?: boolean; width?: number; dash?: string; fillUp?: boolean }
+export interface Series { label: string; color: string; values: (number | null)[]; unit?: string; right?: boolean; width?: number; dash?: string; fillUp?: boolean; noTip?: boolean; nullText?: string }
 
 function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
   const ref = useRef<T>(null);
@@ -226,7 +226,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
           <div className="ci-r"><b>{xTitle ? xTitle(t[hover]) : fmtTime(t[hover])}</b>{profile && profile[hover] != null && <span> · {fmtCs(profile[hover], 1)} m</span>}
             {bands?.filter((b) => b.label && t[hover] >= b.from && t[hover] <= b.to).map((b, i) => <span key={"bl" + i} className="tip-alarm" style={{ color: b.color }}> ⚠ {b.label}</span>)}</div>
           <div className="ci-v">
-            {series.filter((s) => s.label).map((s, i) => <span key={i}><i style={{ background: s.color }} />{s.label} <b>{fmtCs(s.values[hover])}</b>{s.unit ? " " + s.unit : ""}</span>)}
+            {series.filter((s) => s.label && !s.noTip).map((s, i) => { const v = s.values[hover]; return <span key={i}><i style={{ background: s.color }} />{s.label} <b>{v == null && s.nullText ? s.nullText : fmtCs(v)}</b>{v == null && s.nullText ? "" : s.unit ? " " + s.unit : ""}</span>; })}
             {extra?.map((s, i) => { const v = s.values[hover]; return <span key={"e" + i}>{s.label} <b>{typeof v === "string" ? v : fmtCs(v)}</b>{s.unit ? " " + s.unit : ""}</span>; })}
           </div>
         </>}

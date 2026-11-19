@@ -668,6 +668,9 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
   }), [d]);
   const cells = [s.mv1, s.mv2, s.mv3].map((mv, k) => cellMode === "mv" ? mv : mv.map((v) => (cal[k] ? +(v * cal[k]!).toFixed(2) : null)));
   const hasHe = d.tissues.some((x) => x.he.some((v) => v > 0.02));
+  // úseky, kdy počítač GF99 neukládá (tkáně se nasycují, displej ukazuje „--“)
+  const gfLoad: { from: number; to: number }[] = [];
+  { let a = -1; for (let i = 0; i <= s.t.length; i++) { const nul = i < s.t.length && s.t[i] <= d.h.diveTimeS && s.gf99[i] == null; if (nul && a < 0) a = i; if (!nul && a >= 0) { gfLoad.push({ from: s.t[a], to: s.t[Math.min(i, s.t.length - 1)] }); a = -1; } } }
   const depthExtra: { label: string; values: (number | null)[]; unit: string }[] = []; // hloubku ukazuje linka profilu
   const st = useStore(), th = st.lb.settings.th;
   const [zoom, setZoom] = useState<[number, number] | null>(null);
@@ -734,11 +737,11 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
         <p className="note"><b>NDL</b> – kolik minut můžeš zůstat v aktuální hloubce bez povinné zastávky (99 = víc než 99). <b>Čas na zastávce</b> – zbývající čas na aktuální deko zastávce (hloubka zastávky v popisku posuvníku). <b>TTS</b> – celkový čas výstupu na hladinu včetně zastávek, kdybys začal stoupat hned. <b>@+5</b> – jaké by bylo TTS, kdybys v aktuální hloubce zůstal ještě 5 min (rozdíl proti TTS = jak rychle deko roste).</p>
       </Card>
       <Card title="Tkáně a kyslík">
-        <LineChart t={s.t} series={[
-          { label: "GF99", color: C[5], values: s.gf99, unit: "%", width: 2 }, { label: `GF High ${d.h.gfHi}`, color: C[5], values: s.t.map(() => d.h.gfHi), unit: "%", dash: "4 3", width: 1 },
+        <LineChart t={s.t} bands={gfLoad.map((r) => ({ ...r, color: "#90a4ae" }))} bandLegend={gfLoad.length ? [{ color: "#90a4ae", label: "nasycování (počítač ukazuje --)" }] : []} series={[
+          { label: "GF99", color: C[5], values: s.gf99, unit: "%", width: 2, nullText: "--" }, { label: `GF High ${d.h.gfHi}`, color: "#b0bec5", values: s.t.map(() => d.h.gfHi), unit: "%", dash: "4 3", width: 1, noTip: true },
           { label: "CNS", color: C[4], values: s.cns, unit: "%" },
         ]} />
-        <p className="note"><b>GF99</b> – jak blízko jsou tkáně povolenému přesycení (0 % = bez přesycení, 100 % = hranice modelu Bühlmann); při výstupu roste, na zastávkách klesá. Čárkovaně tvůj GF High – výš by se jít nemělo. <b>CNS</b> – kumulativní kyslíková zátěž centrální nervové soustavy, limit 100 %.</p>
+        <p className="note"><b>GF99</b> – jak blízko jsou tkáně povolenému přesycení (0 % = bez přesycení, 100 % = hranice modelu Bühlmann); při výstupu roste, na zastávkách klesá. Čárkovaně tvůj GF High – výš by se jít nemělo. Šedě úseky, kdy se tkáně teprve nasycují (sestup, dno, opětovné zanoření) – přesycení není, počítač ukazuje „--“. Skok na konci je <b>Surface GF</b> po vynoření – během povrchového intervalu pak klesá. <b>CNS</b> – kumulativní kyslíková zátěž centrální nervové soustavy, limit 100 %.</p>
       </Card>
       <div data-chart="press"><Card title="Tlak v láhvích">
         <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: s.dil, unit: "bar" }, { label: "O₂", color: C[2], values: s.o2p, unit: "bar" }]} extra={depthExtra} />
