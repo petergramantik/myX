@@ -16,6 +16,33 @@ export function gasDensity(d: Dive): (number | null)[] {
   });
 }
 
+/** Hranice pro nesmyslné CO₂ (mbar): vytrvale nad ní = chyba čidla, ne skutečná hodnota. */
+export const CO2_BAD = 100;
+/** Úseky, kdy čidlo CO₂ ukazovalo nesmysl (nad 100 mbar aspoň minutu, včetně náběhu nad 20 mbar kolem). */
+export function co2BadRanges(d: Dive): { from: number; to: number; max: number }[] {
+  const s = d.s, n = s.t.length, out: { from: number; to: number; max: number }[] = [];
+  let i = 0;
+  while (i < n) {
+    if ((s.co2[i] ?? 0) <= CO2_BAD) { i++; continue; }
+    let a = i, b = i;
+    while (b + 1 < n && ((s.co2[b + 1] ?? CO2_BAD + 1) > CO2_BAD || (s.co2[b + 1] == null))) b++;
+    if (s.t[b] - s.t[a] >= 60) {
+      while (a > 0 && (s.co2[a - 1] ?? 21) > 20) a--;
+      while (b + 1 < n && (s.co2[b + 1] ?? 21) > 20) b++;
+      const prev = out[out.length - 1];
+      const max = Math.max(...(s.co2.slice(a, b + 1).filter((v) => v != null) as number[]));
+      if (prev && s.t[a] - prev.to <= 120) { prev.to = s.t[b]; prev.max = Math.max(prev.max, max); } else out.push({ from: s.t[a], to: s.t[b], max });
+    }
+    i = b + 1;
+  }
+  return out;
+}
+/** CO₂ bez úseků chybného čidla (pro hlášení, souvislosti a srovnání). */
+export function co2Valid(d: Dive): (number | null)[] {
+  const r = co2BadRanges(d);
+  return r.length ? d.s.co2.map((v, i) => (r.some((x) => d.s.t[i] >= x.from && d.s.t[i] <= x.to) ? null : v)) : d.s.co2;
+}
+
 /**
  * Metabolická zátěž: rychlost poklesu pO₂ (bar/min) mezi dávkami O₂ při stálé hloubce nebo výstupu (opraveno o změnu tlaku), posuvné okno 3 min.
  * Pokles pO₂ ve smyčce = spotřeba O₂ / objem smyčky a na hloubce nezávisí. Šum snímače (malé nárůsty) se odečítá.
@@ -77,7 +104,7 @@ export interface Effort {
 
 /** Souhrn zátěže ponoru a souvislosti epizod zvýšeného CO₂ se zátěží a hustotou plynu. */
 export function effortOf(d: Dive, co2Limit = 5): Effort {
-  const s = d.s, w = workloadIndex(d), dens = gasDensity(d), dt = d.h.rateS || 5;
+  const s = { ...d.s, co2: co2Valid(d) }, w = workloadIndex(d), dens = gasDensity(d), dt = d.h.rateS || 5;
   const wv = w.filter((x): x is number => x != null);
   const wMed = wv.length >= 10 ? 1 : null;
   const notes: Effort["co2Notes"] = [];

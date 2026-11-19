@@ -1,4 +1,5 @@
 // Porovnání dvou současných ponorů (můj vs. buddyho): metriky, rozdíly a stručný závěr z dat.
+import { co2Valid } from "./effort";
 import type { Dive } from "./shearwater";
 import { atStop, setpointChanges, o2Doses, summarize, cellSpread, type SpChange, type CellIssue } from "./analysis";
 import { co2Plausibility, effortOf } from "./effort";
@@ -77,7 +78,7 @@ export function diveStats(d: Dive, dev: SpDev = SP_DEV): DiveStats {
   const sp = setpointChanges(d);
   const up = sp.find((c) => c.to >= 1) || null;
   const doses = o2Doses(d);
-  const co2 = s.co2.filter((x): x is number => x != null);
+  const co2 = co2Valid(d).filter((x): x is number => x != null);
   const ef = effortOf(d);
   const sd = spDeviation(d, dev);
   let asc = 0, ascW = 0, obl = 0;

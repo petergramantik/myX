@@ -1,6 +1,6 @@
 // Odvozené hodnoty: souhrn ponoru, kalibrace čidel, odhad vstřiků solenoidu, upozornění.
 import { computerWarnings, deviatingCell, type CompWarn } from "./compwarn";
-import { co2Plausibility, dilVents, effortOf, gasDensity } from "./effort";
+import { co2BadRanges, co2Plausibility, co2Valid, dilVents, effortOf, gasDensity } from "./effort";
 import type { Dive, Header } from "./shearwater";
 
 export interface Summary {
@@ -40,12 +40,12 @@ export interface ValveEvent { t: number; kind: "close" | "open"; from: number; t
  * Prudké změny (> 15 bar/min) jsou zavření / otevření ventilu nebo odvzdušnění, ne spotřeba.
  * Hodnoty pod 20 bar = mezitlak externí lahve (onboard zavřená).
  */
-export function pressureAnalysis(t: number[], p: (number | null)[], diveS: number): { use: GasUse; valve: ValveEvent[] } {
+export function pressureAnalysis(t: number[], p: (number | null)[], diveS: number): { use: GasUse; valve: ValveEvent[]; dips: number[] } {
   // 0 = vysílač zatím neposlal údaj (po zapnutí) – vynechat
   const idx = t.map((_, i) => i).filter((i) => t[i] <= diveS && p[i] != null && p[i]! > 0);
   const raw = idx.map((i) => p[i]!), tt = idx.map((i) => t[i]);
   const valid = raw.filter((v) => v >= MIN_BAR);
-  const empty = { use: { ok: false, start: raw[0] ?? null, end: raw[raw.length - 1] ?? null, bar: 0, ext: [], noisy: false } as GasUse, valve: [] as ValveEvent[] };
+  const empty = { use: { ok: false, start: raw[0] ?? null, end: raw[raw.length - 1] ?? null, bar: 0, ext: [], noisy: false } as GasUse, valve: [] as ValveEvent[], dips: [] as number[] };
   if (!raw.length) return empty;
   // rychlost změny přes ~30 s: prudký pokles / nárůst = ventil, ne spotřeba
   const RATE = 15;
@@ -57,14 +57,21 @@ export function pressureAnalysis(t: number[], p: (number | null)[], diveS: numbe
     return r > RATE ? -1 : r < -RATE ? 1 : 0;
   });
   // ventil: přechody mezi mezitlakem (< 20) a plným tlakem
-  const valve: ValveEvent[] = [];
-  let lastHigh: number | null = null, lastHighT = 0, low = raw[0] < MIN_BAR;
+  const valve0: (ValveEvent & { lowAt?: number })[] = [];
+  let lastHigh: number | null = null, lastHighT = 0, low = raw[0] < MIN_BAR, lowAt = 0;
   raw.forEach((v, k) => {
     if (v >= 50 && jump[k] === 0) { lastHigh = v; lastHighT = tt[k]; }
-    if (!low && v < MIN_BAR) { low = true; if (lastHigh != null && lastHigh >= 50) valve.push({ t: lastHighT, kind: "close", from: Math.round(lastHigh), to: Math.round(v) }); }
-    else if (low && v >= MIN_BAR + 30) { low = false; valve.push({ t: tt[k], kind: "open", from: Math.round(raw[Math.max(0, k - 1)]), to: Math.round(v) }); }
+    if (!low && v < MIN_BAR) { low = true; lowAt = tt[k]; if (lastHigh != null && lastHigh >= 50) valve0.push({ t: lastHighT, kind: "close", from: Math.round(lastHigh), to: Math.round(v), lowAt }); }
+    else if (low && v >= MIN_BAR + 30) { low = false; valve0.push({ t: tt[k], kind: "open", from: Math.round(raw[Math.max(0, k - 1)]), to: Math.round(v), lowAt }); }
   });
-  if (valid.length < Math.max(5, raw.length * 0.2)) return { ...empty, valve };
+  // krátký pokles a návrat do 90 s = průtok při ruční dávce (tlak na vysílači se dorovná), ne zavření lahve
+  const valve: ValveEvent[] = [], dips: number[] = [];
+  for (let q = 0; q < valve0.length; q++) {
+    const c = valve0[q], o = valve0[q + 1];
+    if (c.kind === "close" && o?.kind === "open" && o.t - (c.lowAt ?? c.t) <= 90) { dips.push(c.lowAt ?? c.t); q++; continue; }
+    valve.push({ t: c.t, kind: c.kind, from: c.from, to: c.to });
+  }
+  if (valid.length < Math.max(5, raw.length * 0.2)) return { ...empty, valve, dips };
   // medián z 7 vzorků (~35 s) jen z ustálených hodnot nad mezitlakem
   const ok = (k: number) => raw[k] >= MIN_BAR && jump[k] === 0;
   const sm = raw.map((_, k) => {
@@ -96,7 +103,7 @@ export function pressureAnalysis(t: number[], p: (number | null)[], diveS: numbe
   }
   const firstV = sm.find((v) => v != null) ?? null, lastV = [...sm].reverse().find((v) => v != null) ?? null;
   const net = Math.max(0, bar);
-  return { use: { ok: true, start: firstV, end: lastV, bar: Math.round(net), ext: ext.map(([a, b]) => [Math.round(a), Math.round(b)]), noisy: rise + wiggle > Math.max(60, net * 4) }, valve };
+  return { use: { ok: true, start: firstV, end: lastV, bar: Math.round(net), ext: ext.map(([a, b]) => [Math.round(a), Math.round(b)]), noisy: rise + wiggle > Math.max(60, net * 4) }, valve, dips };
 }
 
 // ---------- ovládání počítače (záznamy 0x51)
@@ -226,6 +233,8 @@ export function o2Doses(d: Dive): Dose[] {
   const P = s.depth.map((x) => d.h.surfP / 1000 + x * 0.0981);
   const f = s.ppo2.map((v, i) => v / P[i]);
   const ups = setpointChanges(d).filter((c) => c.to > c.from).map((c) => c.t);
+  // krátký pokles tlaku O₂ na vysílači (průtok) potvrzuje ruční dávku O₂
+  const dips = pressureAnalysis(s.t, s.o2p, d.h.diveTimeS).dips;
   let i = 1;
   while (i < n - 3) {
     if (s.depth[i] < 1.5 || !inDive(d, i)) { i++; continue; }
@@ -236,7 +245,8 @@ export function o2Doses(d: Dive): Dose[] {
       const dils = s.dil.slice(Math.max(0, i - 2), i + best + 3).filter((x): x is number => x != null && x >= 20);
       const dilDrop = dils.length > 1 ? dils[0] - Math.min(...dils) : 0;
       const above = s.ppo2[i] > s.sp[i] + 0.05;
-      const kind: DoseKind = dilDrop >= 2 ? "dil" : !above ? "sol" : f[i + best] > s.o2[i] / 100 + 0.01 ? "man" : "amb";
+      let kind: DoseKind = dilDrop >= 2 ? "dil" : !above ? "sol" : f[i + best] > s.o2[i] / 100 + 0.01 ? "man" : "amb";
+      if (kind === "amb" && dips.some((t) => s.t[i] - t >= -30 && s.t[i] - t <= 60)) kind = "man";
       out.push({ t: s.t[i], rise: round(rise, 2), depth: s.depth[i], kind, preSw: kind !== "sol" && ups.some((u) => u - s.t[i] >= 0 && u - s.t[i] <= 300) });
       i += best + 1;
     } else i++;
@@ -503,7 +513,14 @@ export function alarmWarn(d: Dive, kind: "po2high" | "po2low" | "co2", from: num
 /** Skutečný konec alarmu: až zmizí varování z displeje (ztlumení alarmu problém nekončí). */
 export const alarmEnd = (d: Dive, a: { kind: string; start: number; end: number }) => {
   const w = a.kind === "po2high" || a.kind === "po2low" || a.kind === "co2" ? alarmWarn(d, a.kind, a.start) : undefined;
-  return Math.max(a.end, w?.end ?? (w ? d.h.diveTimeS : a.end));
+  // další alarm stejného druhu začíná novou situaci → nejpozději tam
+  const next = d.alarms.find((x) => x.kind === a.kind && x.start > a.start)?.start ?? Infinity;
+  // varování může na displeji zůstat dlouho (nepotvrzené) – situace končí, když se hodnota aspoň na 1 min vrátí za práh
+  const s = d.s, i0 = s.t.findIndex((t) => t >= a.end);
+  const bad = (i: number) => a.kind === "co2" ? (s.co2[i] ?? 0) >= 5 : a.kind === "po2high" ? s.ppo2[i] > 1.6 : a.kind === "po2low" ? s.ppo2[i] < 0.4 : false;
+  let back = Infinity;
+  if (i0 >= 0) for (let i = i0, ok0 = -1; i < s.t.length; i++) { if (!bad(i)) { if (ok0 < 0) ok0 = i; if (s.t[i] - s.t[ok0] >= 60) { back = s.t[ok0]; break; } } else ok0 = -1; }
+  return Math.max(a.end, Math.min(w?.end ?? (w ? d.h.diveTimeS : a.end), next, back, d.h.diveTimeS));
 };
 /** Okamžik v ponoru: 11′36″. */
 export const tpt = (t: number) => { const r = Math.round(t); return `${Math.floor(r / 60)}′${String(r % 60).padStart(2, "0")}″`; };
@@ -532,7 +549,11 @@ export function resolutionSteps(d: Dive, from: number, to: number | null, kind: 
       out.push({ t: w.end, x: w.how === "ack" ? `potvrzeno tlačítkem${below ? `, ${lim}` : `, ${valAt(w.end)}`}` : `varování zmizelo${below ? ` – ${lim}` : `, ${valAt(w.end)}`}` });
       acked = w.end;
     }
-  } else for (const w of computerWarnings(d)) if (w.how === "ack" && w.end != null && ackKinds[kind].includes(w.kind) && w.start >= from - 10 && w.start <= (to ?? from) + 5 && inW(w.end)) { out.push({ t: w.end, x: "potvrzeno tlačítkem" }); acked = w.end; }
+  } else {
+    // potvrzení jen jednoho varování (toho, které začalo nejblíž začátku situace) – ne např. současně potvrzený diluent
+    const cand = computerWarnings(d).filter((w) => w.how === "ack" && w.end != null && ackKinds[kind].includes(w.kind) && w.start >= from - 10 && w.start <= (to ?? from) + 5 && inW(w.end)).sort((a, b) => Math.abs(a.start - from) - Math.abs(b.start - from))[0];
+    if (cand) { out.push({ t: cand.end!, x: "potvrzeno tlačítkem" }); acked = cand.end!; }
+  }
   if (acts) for (const c of setpointChanges(d)) if (inW(c.t)) out.push({ t: c.t, x: `setpoint ${nf(c.from)} → ${nf(c.to)}${c.manual ? "" : " (P)"}` });
   if (acts && kind !== "cell") for (const x of o2Doses(d)) if (inW(x.t)) {
     if (x.kind === "man") out.push({ t: x.t, x: `ruční dávka O₂ (+${nf(x.rise)} bar)` });
@@ -548,6 +569,7 @@ export function resolutionSteps(d: Dive, from: number, to: number | null, kind: 
     const val = kind === "co2" ? `CO₂ ${nf(s.co2[i] ?? 0, 1)} mbar` : kind === "po2high" || kind === "po2low" ? `pO₂ ${nf(s.ppo2[i])} bar` : "";
     out.push({ t: to, x: `${kind === "press" || kind === "cell" || kind === "other" ? "varování skončilo" : "alarm skončil"}${val ? ` (${val})` : ""}` });
   }
+  if (kind === "co2" && co2BadRanges(d).some((r) => from >= r.from - 30 && from <= r.to)) out.push({ t: from + 0.5, x: "čidlo CO₂ nejspíš chybné (P)" });
   if (kind === "po2high") {
     // pravděpodobná příčina: klesání s vysokým SP nebo ruční dávka O₂ v posledních minutách před nárůstem
     const j0 = at(Math.max(0, from - 300)), jf = at(from);
@@ -688,7 +710,10 @@ export function lowPo2Phases(d: Dive) {
 
 export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   const out: Alert[] = [];
-  if (sum.co2Max != null && sum.co2Max >= th.co2Mbar) out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${sum.co2Max.toFixed(1)} mbar.` });
+  const co2Bad = co2BadRanges(d);
+  const co2V = co2Valid(d).filter((x): x is number => x != null), co2VMax = co2V.length ? Math.max(...co2V) : null;
+  if (co2VMax != null && co2VMax >= th.co2Mbar) out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${co2VMax.toFixed(1)} mbar.` });
+  if (co2Bad.length) out.push({ level: "warn", title: "Čidlo CO₂ nejspíš chybné", text: `Hodnoty až ${Math.round(Math.max(...co2Bad.map((r) => r.max)))} mbar, celkem ${dur(co2Bad.reduce((x, r) => x + r.to - r.from, 0))} – fyziologicky nemožné. Tyto úseky se do hlášení, souvislostí a srovnání nepočítají; v grafu zůstávají.`, blocks: co2Bad.map((r, k) => ({ head: co2Bad.length > 1 ? `${k + 1}. ${tpt(r.from)}–${tpt(r.to)}` : "", steps: [], from: r.from, to: r.to, chart: "co2" as ChartKey })) });
   // nízké pO₂ na začátku ponoru – podle průběhu (zavřený ventil O₂ = hypoxie)
   const sp0 = startPo2(d, th);
   if (sp0.level) {
@@ -751,7 +776,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
   for (const kind of ["co2", "po2high", "po2low"] as const) {
     if (kind === "po2low" && !ph.mid) continue;
     const se = startEnd(d);
-    const as = d.alarms.filter((a) => { if (a.kind !== kind) return false; if (kind !== "po2low") return true; const i = d.s.t.findIndex((t) => t >= a.start); return a.start < d.h.diveTimeS && i > se + 2 && d.s.depth[i] >= 3 && d.s.sp[i] >= 0.3; });
+    const as = d.alarms.filter((a) => { if (a.kind !== kind || a.start > d.h.diveTimeS) return false; if (kind !== "po2low") return true; const i = d.s.t.findIndex((t) => t >= a.start); return a.start < d.h.diveTimeS && i > se + 2 && d.s.depth[i] >= 3 && d.s.sp[i] >= 0.3; });
     if (!as.length) continue;
     const tot = as.reduce((x, a) => x + alarmEnd(d, a) - a.start, 0);
     const lowSp = kind === "po2low" && as.some((a) => d.s.sp[d.s.t.findIndex((t) => t >= a.start)] < 0.3);
@@ -759,6 +784,12 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     const steps = blocks.flatMap((b) => [...(as.length > 1 ? [`${b.head}:`] : []), ...b.steps]);
     out.push({ level: kind === "po2low" && lowSp ? "warn" : "bad", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
       text: withSteps(`${as.length}× (${as.map((a) => `${mmss(a.start)}–${mmss(alarmEnd(d, a))}`).join(", ")}), celkem ${dur(tot)}.`, steps), blocks });
+  }
+  // opakované zavírání / otevírání lahve O₂ = ruční dávkování ventilem (např. po selhání solenoidu)
+  {
+    const v = pressureAnalysis(d.s.t, d.s.o2p, d.h.diveTimeS).valve;
+    const opens = v.filter((x) => x.kind === "open");
+    if (opens.length > 3) out.push({ level: "info", title: `Ruční dávkování O₂ otevíráním lahve – ${opens.length}× (P)`, text: `${tpt(v[0].t)}–${tpt(v[v.length - 1].t)}: lahev O₂ opakovaně zavírána a otevírána (${v.map((x) => `${tpt(x.t)} ${x.kind === "open" ? "otevřena" : "zavřena"}`).join(", ")}).`, blocks: opens.map((o, k) => ({ head: `${k + 1}. otevřena ${tpt(o.t)}`, steps: [], from: Math.max(0, o.t - 60), to: o.t + 60, chart: "press" as ChartKey })) });
   }
   // vlastní detekce vysokého pO₂ – jen úseky, kdy neběžel alarm z počítače
   {

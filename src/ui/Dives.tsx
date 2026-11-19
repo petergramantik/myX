@@ -10,7 +10,7 @@ import { partIds, shareDives } from "./share";
 import { ask } from "../app/dialog";
 import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, useBackLayer, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
-import { dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
+import { co2BadRanges, co2Valid, dilVents, effortOf, gasDensity, workloadIndex } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
 import { ChartDefs, LineChart, TissueMap, ZoomCtx } from "./Chart";
 
@@ -353,15 +353,19 @@ function GuestNote({ note }: { note: DiveNote }) {
 function EffortCard({ d, focusT }: { d: Dive; focusT?: number }) {
   const s = d.s;
   const w = useMemo(() => workloadIndex(d), [d]);
+  // zobrazení: posuvný průměr 2 min (bez skoků na 0 mezi dávkami); úseky bez údaje (klesání, hladina) jako pásmo
+  const wSm = useMemo(() => w.map((_, i) => { if (w[i] == null) return null; let a = 0, n = 0; for (let k = i; k >= 0 && s.t[i] - s.t[k] <= 60; k--) if (w[k] != null) { a += w[k]!; n++; } for (let k = i + 1; k < w.length && s.t[k] - s.t[i] <= 60; k++) if (w[k] != null) { a += w[k]!; n++; } return n ? Math.round((a / n) * 100) / 100 : null; }), [w]);
+  const noW = useMemo(() => { const out: { from: number; to: number; color: string; label: string }[] = []; let a = -1; for (let i = 0; i <= s.t.length; i++) { const nul = i < s.t.length && s.t[i] <= d.h.diveTimeS && w[i] == null; if (nul && a < 0) a = i; if (!nul && a >= 0) { if (s.t[i - 1] - s.t[a] >= 60) out.push({ from: s.t[a], to: s.t[i - 1], color: "#90a4ae", label: "Zátěž bez údaje (klesání / hladina)" }); a = -1; } } return out; }, [w]);
+  const co2V = useMemo(() => co2Valid(d), [d]);
   const dens = useMemo(() => gasDensity(d), [d]);
   const ef = useMemo(() => effortOf(d), [d]);
   const vents = useMemo(() => dilVents(d), [d]);
   const hasCo2 = s.co2.some((v) => v != null && v > 0);
   return (
     <Card title="Zátěž a dechová práce">
-      <LineChart t={s.t} marks={vents.map((t) => ({ t, color: "#cfd8dc" }))} series={[
-        { label: "Zátěž (1 = obvyklá)", color: "#ffb74d", values: w, unit: "×", width: 2 },
-        ...(hasCo2 ? [{ label: "CO₂", color: "#ef5350", values: s.co2, unit: "mbar", right: true }] : []),
+      <LineChart t={s.t} bands={noW} bandLegend={noW.length ? [{ color: "#90a4ae", label: "bez údaje (klesání / hladina)" }] : undefined} marks={vents.map((t) => ({ t, color: "#cfd8dc" }))} series={[
+        { label: "Zátěž (1 = obvyklá)", color: "#ffb74d", values: wSm, unit: "×", width: 2 },
+        ...(hasCo2 ? [{ label: "CO₂", color: "#ef5350", values: co2V, unit: "mbar", right: true }] : []),
       ]} extra={[{ label: "Hloubka", values: s.depth, unit: "m" }]} />
       <p className="note">Zátěž = rychlost poklesu pO₂ mezi dávkami O₂ při stálé hloubce (okno 3 min), úměrná spotřebě O₂, tedy námaze. Je relativní: 1 = obvyklá úroveň v tomto ponoru, normalizovaná zvlášť pro nízký a vysoký setpoint (regulace se liší). {ef.wHighMin >= 1 ? `Nad 1,3× obvyklé úrovně ${Math.round(ef.wHighMin)} min.` : ""} Šedé čárky dole = upouštění smyčky / vyfukování masky ({vents.length}×).</p>
       <LineChart t={s.t} height={150} focusT={focusT} series={[
@@ -582,7 +586,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Teplota", <Pair l={`${meta.sum.tempMin} °C`} ll="min" r={`${meta.sum.tempMax} °C`} rl="max" />],
           ["Max. pO₂", `${num(meta.sum.ppo2Max, 2)} bar`],
           ["Max. pN₂", `${num(meta.sum.pn2Max, 2)} bar`],
-          ["Max. CO₂", meta.sum.co2Max != null ? `${num(meta.sum.co2Max, 2)} mbar` : "–"],
+          ["Max. CO₂", meta.sum.co2Max != null ? <span className="use">{num(meta.sum.co2Max, 2)} mbar{d && co2BadRanges(d).length ? <small>čidlo?</small> : null}</span> : "–"],
           ["GF / CNS", <Pair l={`${meta.h.gfLo}/${meta.h.gfHi}`} ll="GF" r={`${meta.h.cnsEnd} %`} rl="CNS" />],
           ["Diluent", <UseTile gas="dil" meta={meta} note={note} />], ["O₂", <UseTile gas="o2" meta={meta} note={note} />],
           ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
@@ -694,14 +698,23 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
       <div data-chart="effort"><EffortCard d={d} focusT={fT("effort")} /></div>
       <div data-chart="co2"><Card title="CO₂ v dýchací smyčce">
         {s.co2.some((v) => v != null && v > 0)
-          ? <LineChart t={s.t} focusT={fT("co2")} bandLegend={d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : undefined} bands={d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" }))} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
+          ? <LineChart t={s.t} focusT={fT("co2")} bandLegend={[...(d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : []), ...(co2BadRanges(d).length ? [{ color: "#90a4ae", label: "čidlo nejspíš chybné" }] : [])]} bands={[...d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" })), ...co2BadRanges(d).map((r) => ({ ...r, color: "#90a4ae", label: "Čidlo CO₂ nejspíš chybné" }))]} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
           : <p className="muted">V tomto ponoru CO₂ čidlo nic nezaznamenalo.</p>}
       </Card></div>
       <Card title="Dekomprese">
         <LineChart t={s.t} series={[
-          { label: "NDL / zastávka", color: C[0], values: s.stopt, unit: "min" }, { label: "TTS", color: C[1], values: s.tts, unit: "min" }, { label: "@+5", color: C[2], values: s.at5, unit: "min" },
-          { label: "GF99", color: C[3], values: s.gf99, unit: "%" }, { label: "CNS", color: C[4], values: s.cns, unit: "%" },
-        ]} extra={depthExtra} />
+          { label: "NDL", color: C[0], values: s.stopt.map((v, i) => (s.stop[i] > 0 || s.t[i] > d.h.diveTimeS ? null : v)), unit: "min" },
+          { label: "Čas na zastávce", color: C[2], values: s.stopt.map((v, i) => (s.stop[i] > 0 && s.t[i] <= d.h.diveTimeS ? v : null)), unit: "min" },
+          { label: "TTS", color: C[1], values: s.tts, unit: "min", width: 2 }, { label: "@+5", color: C[3], values: s.at5, unit: "min", dash: "4 3" },
+        ]} extra={[{ label: "Zastávka", values: s.stop.map((v) => (v > 0 ? `${v} m` : "–")) }]} />
+        <p className="note"><b>NDL</b> – kolik minut můžeš zůstat v aktuální hloubce bez povinné zastávky (99 = víc než 99). <b>Čas na zastávce</b> – zbývající čas na aktuální deko zastávce (hloubka zastávky v popisku posuvníku). <b>TTS</b> – celkový čas výstupu na hladinu včetně zastávek, kdybys začal stoupat hned. <b>@+5</b> – jaké by bylo TTS, kdybys v aktuální hloubce zůstal ještě 5 min (rozdíl proti TTS = jak rychle deko roste).</p>
+      </Card>
+      <Card title="Tkáně a kyslík">
+        <LineChart t={s.t} series={[
+          { label: "GF99", color: C[5], values: s.gf99, unit: "%", width: 2 }, { label: `GF High ${d.h.gfHi}`, color: C[5], values: s.t.map(() => d.h.gfHi), unit: "%", dash: "4 3", width: 1 },
+          { label: "CNS", color: C[4], values: s.cns, unit: "%" },
+        ]} />
+        <p className="note"><b>GF99</b> – jak blízko jsou tkáně povolenému přesycení (0 % = bez přesycení, 100 % = hranice modelu Bühlmann); při výstupu roste, na zastávkách klesá. Čárkovaně tvůj GF High – výš by se jít nemělo. <b>CNS</b> – kumulativní kyslíková zátěž centrální nervové soustavy, limit 100 %.</p>
       </Card>
       <div data-chart="press"><Card title="Tlak v láhvích">
         <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: s.dil, unit: "bar" }, { label: "O₂", color: C[2], values: s.o2p, unit: "bar" }]} extra={depthExtra} />

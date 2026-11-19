@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.14";
+export const APP_VERSION = "1.35";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.35", date: "2026-11-19", title: "Opravy z auditu všech ponorů, srozumitelnější grafy", items: [
+    "Alarmy: konec nejpozději při dalším alarmu stejného druhu nebo když se hodnota na 1 min vrátí za práh – žádné desítky minut kvůli nepotvrzenému varování.",
+    "CO₂ čidlo: hodnoty vytrvale nad 100 mbar = „Čidlo CO₂ nejspíš chybné“ (žlutě) – v grafu zůstávají (šedé pásmo), z hlášení, souvislostí a srovnání se vynechají.",
+    "Tlak O₂: krátký pokles s návratem do 90 s = ruční dávka (potvrzuje dávku O₂), ne zavření lahve; opakované zavírání/otevírání = souhrn „Ruční dávkování O₂ otevíráním lahve (P)“.",
+    "Varování po konci ponoru se vynechávají; potvrzení tlačítkem se páruje jen s jedním varováním.",
+    "Grafy: krátké výpadky (do 2 vzorků) se přemostí; zátěž vyhlazená, úseky bez údaje šedě.",
+    "Dekomprese rozdělena: graf minut (NDL, čas na zastávce, TTS, @+5) a „Tkáně a kyslík“ (GF99 s tvým GF High, CNS), s vysvětlením.",
+  ] },
   { version: "1.34.14", date: "2026-11-19", title: "Klesání s vysokým SP, příčiny a odkazy do grafu", items: [
     "Klesání s vysokým setpointem: hlásí se od 3 m, pokud pO₂ následně přesáhlo 1,6 bar (od 6 m vždy); každé klesání s odkazem do grafu.",
     "Vysoké pO₂: v ose řešení i pravděpodobná příčina – klesání se SP nebo ruční dávka O₂ před nárůstem (P).",

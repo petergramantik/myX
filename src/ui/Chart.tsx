@@ -118,9 +118,20 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   const m = { l: pl, r: pr, t: 8 + tagH, b: 20 };
   const X = (v: number) => m.l + ((v - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
   const Y = (v: number, a = lo, b = hi, inv = invert) => { const f = (v - a) / (b - a || 1); return inv ? m.t + f * (height - m.t - m.b) : height - m.b - f * (height - m.t - m.b); };
+  /** Krátké výpadky (nejvýš 2 vzorky) se přemostí lineárně – čára se nepřeruší. */
+  const bridged = (vals: (number | null)[]) => {
+    const out = vals.slice();
+    for (let i = 1; i < out.length; i++) {
+      if (out[i] != null || out[i - 1] == null) continue;
+      let j = i; while (j < out.length && out[j] == null) j++;
+      if (j < out.length && j - i <= 2) for (let k = i; k < j; k++) out[k] = out[i - 1]! + ((out[j]! - out[i - 1]!) * (k - i + 1)) / (j - i + 1);
+      i = j;
+    }
+    return out;
+  };
   const path = (s: Series) => {
     let d = "", pen = false;
-    s.values.forEach((v, i) => {
+    bridged(s.values).forEach((v, i) => {
       if (v == null) { pen = false; return; }
       if (!vis(i) && !(i > 0 && vis(i - 1)) && !(i + 1 < t.length && vis(i + 1))) { pen = false; return; }
       const y = isProf(s) ? Y(v, 0, pMax, true) : s.right ? Y(v, rlo, rhi, !!rightInvert) : Y(v);

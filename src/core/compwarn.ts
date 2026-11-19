@@ -60,7 +60,8 @@ export function computerWarnings(d: Dive): CompWarn[] {
       }
     }
   }
-  return out;
+  // varování až po konci ponoru (na hladině, při balení) nejsou zajímavá
+  return out.filter((w) => w.start <= d.h.diveTimeS);
 }
 
 /** Číslo čidla, které se v čase t nejvíc odchyluje od mediánu (pro „vyřazené čidlo“ bez čísla v logu). */
