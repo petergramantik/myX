@@ -17,15 +17,18 @@ export function gasDensity(d: Dive): (number | null)[] {
 }
 
 /**
- * Metabolická zátěž: rychlost poklesu pO₂ (bar/min) mezi dávkami O₂ při stálé hloubce, posuvné okno 3 min.
+ * Metabolická zátěž: rychlost poklesu pO₂ (bar/min) mezi dávkami O₂ při stálé hloubce nebo výstupu (opraveno o změnu tlaku), posuvné okno 3 min.
  * Pokles pO₂ ve smyčce = spotřeba O₂ / objem smyčky a na hloubce nezávisí. Šum snímače (malé nárůsty) se odečítá.
  */
 export function workload(d: Dive, winS = 180): (number | null)[] {
   const s = d.s, n = s.t.length;
   const dec: number[] = Array(n).fill(0), noise: number[] = Array(n).fill(0), ok: number[] = Array(n).fill(0);
   for (let i = 1; i < n; i++) {
-    if (!inDive(d, i) || !inDive(d, i - 1) || Math.abs(s.depth[i] - s.depth[i - 1]) > 0.3) continue;
-    const dp = s.ppo2[i] - s.ppo2[i - 1], dt = s.t[i] - s.t[i - 1];
+    // klesání přidává diluent (mění podíl O₂) → jen stálá hloubka nebo výstup; úsek od 3 m k hladině vynechat
+    if (!inDive(d, i) || !inDive(d, i - 1) || s.depth[i] - s.depth[i - 1] > 0.3 || s.depth[i] < 3 || s.depth[i - 1] < 3) continue;
+    // pokles pO₂ opravený o změnu okolního tlaku: (podíl O₂ teď − předtím) × tlak teď = spotřeba / objem smyčky
+    const P0 = amb(d, i - 1), P1 = amb(d, i);
+    const dp = (s.ppo2[i] / P1 - s.ppo2[i - 1] / P0) * P1, dt = s.t[i] - s.t[i - 1];
     ok[i] = dt;
     if (dp < 0) dec[i] = -dp; else if (dp < 0.02) noise[i] = dp;
   }

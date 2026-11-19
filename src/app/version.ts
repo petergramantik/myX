@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.34.12";
+export const APP_VERSION = "1.34.13";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.34.13", date: "2026-11-19", title: "Zátěž bez vlivu výstupu", items: [
+    "Zátěž a dechová práce: pokles pO₂ se opravuje o změnu okolního tlaku (při výstupu pO₂ klesá samo) – zmizí falešné špičky při výstupu; úsek od 3 m k hladině se nepočítá.",
+  ] },
   { version: "1.34.12", date: "2026-11-19", title: "1:1 bez skoku, popisek Scrubber", items: [
     "Zrušení zoomu (1:1, dvojklep, Zpět) ani zavření nabídky či dialogu už neposune stránku na začátek; Zpět z Grafů vede na začátek Logbooku.",
     "Dlaždice Scrubber: dole „stáří N d“.",
