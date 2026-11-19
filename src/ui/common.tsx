@@ -113,8 +113,23 @@ export function RatingPicker({ value, onChange }: { value?: string; onChange: (v
 
 export { hm } from "../core/analysis";
 
-export function AlertBox({ a, fold }: { a: { level: string; title: string; text: string; parts?: string[] }; fold?: boolean }) {
+type ABlock = { head: string; steps: string[]; from: number; to: number; chart: string };
+export function AlertBox({ a, fold, onShow }: { a: { level: string; title: string; text: string; parts?: string[]; blocks?: ABlock[] }; fold?: boolean; onShow?: (b: ABlock) => void }) {
   const [open, setOpen] = useState(false);
+  const [openB, setOpenB] = useState<number | null>(null);
   if (!fold || !a.text) return <div className={"alert " + a.level}><b>{a.title}</b>{a.text && <div>{a.text}</div>}</div>;
-  return <div className={"alert fold " + a.level + (open ? " open" : "")} onClick={() => setOpen(!open)}><b>{a.title}<span className="fold-arr">{open ? "▴" : "▾"}</span></b>{open && (a.parts ? <div className="alert-parts">{a.parts.map((p, i) => <div key={i}>{p}</div>)}</div> : <div>{a.text}</div>)}</div>;
+  const bl = a.blocks?.length ? a.blocks : null, many = (bl?.length || 0) > 5;
+  return <div className={"alert fold " + a.level + (open ? " open" : "")} onClick={() => setOpen(!open)}><b>{a.title}<span className="fold-arr">{open ? "▴" : "▾"}</span></b>
+    {open && (bl ? <div className="ablocks">
+      <div>{a.text.split("\n")[0]}</div>
+      {bl.map((b, i) => (
+        <div key={i} className="ablock" onClick={(e) => e.stopPropagation()}>
+          {b.head && <div className="ablock-h" onClick={() => many && setOpenB(openB === i ? null : i)}>{b.head}{many && <span className="fold-arr">{openB === i ? "▴" : "▾"}</span>}</div>}
+          {(!many || openB === i) && <>
+            {b.steps.map((x, k) => <div key={k} className="ablock-s">• {x}</div>)}
+            {onShow && <a className="ablock-l" onClick={() => onShow(b)}>Ukázat v grafu ›</a>}
+          </>}
+        </div>
+      ))}
+    </div> : a.parts ? <div className="alert-parts">{a.parts.map((p, i) => <div key={i}>{p}</div>)}</div> : <div>{a.text}</div>)}</div>;
 }

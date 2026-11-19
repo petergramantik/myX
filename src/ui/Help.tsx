@@ -55,7 +55,7 @@ export function HelpScreen() {
         <p><b>Plyny a lahve:</b> spotřeba onboard lahví, externí lahev, přechod z onboard na externí, nízký tlak, dávky O₂ (solenoid / ručně).</p>
         <p><b>Počítač:</b> varování na displeji a jejich potvrzení, baterie, nízké NDL.</p>
         <p><b>Vysoké pO₂:</b> kromě alarmu z počítače hlídá myX samo: žlutě nad 1,4 bar déle než 1 min mimo deko zastávky, červeně nad 1,6 bar (Nastavení → Upozornění). V seznamu tag pO₂, v grafu pásma.</p>
-        <p><b>Řešení varování:</b> v rozbaleném varování nebo alarmu z počítače je časová osa – potvrzení tlačítkem, přepnutí setpointu, ruční dávky O₂, diluent, otevření lahve, přechod na OC a konec alarmu. (P) = odhad z dat.</p>
+        <p><b>Řešení varování:</b> v rozbaleném varování nebo alarmu z počítače je časová osa – potvrzení tlačítkem, přepnutí setpointu, ruční dávky O₂, diluent, otevření lahve, přechod na OC a konec alarmu. (P) = odhad z dat. Každá situace má odkaz „Ukázat v grafu ›“ – otevře Grafy přiblížené na dané místo.</p>
         <p><b>Grafy:</b> posuvník jedním prstem, přiblížení roztažením dvou prstů (všechny grafy ponoru najednou), zpět tlačítkem 1:1 nebo dvojklepnutím. Šedá linka = profil hloubky. Položky legendy jde zapínat a vypínat.</p>
         <p><b>Baterie Petrelu:</b> výměnu pozná sama (skok procent, u NiMH skok napětí, jiný typ) a trend počítá jen od ní; lithiovou hlídá podle procent (pod 50 % slábne, pod 25 % slabá). Po výměně po posledním ponoru skryje upozornění tlačítko „Baterii jsem vyměnil“ v panelu baterií.</p>
         <p><b>Značky jistoty:</b> ✓ potvrzeno daty, (P) pravděpodobně, (?) hypotéza – část záznamů Shearwater nedokumentuje a význam je odvozený z dat.</p>

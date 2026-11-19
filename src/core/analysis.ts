@@ -408,7 +408,10 @@ export function injections(d: Dive): Injection[] {
   return out;
 }
 
-export interface Alert { level: "warn" | "bad" | "info"; title: string; text: string; kind?: "scrubber" | "battery" }
+export type ChartKey = "po2" | "co2" | "press" | "temp";
+/** Jedna situace varování / alarmu s řešením a odkazem do grafu. */
+export interface AlertBlock { head: string; steps: string[]; from: number; to: number; chart: ChartKey }
+export interface Alert { level: "warn" | "bad" | "info"; title: string; text: string; kind?: "scrubber" | "battery"; blocks?: AlertBlock[] }
 
 /** Minuty jako „4 h 41 min“. */
 export const hm = (min: number) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} min`;
@@ -539,6 +542,7 @@ export function resolutionSteps(d: Dive, from: number, to: number | null, kind: 
   }
   return out.sort((a, b) => a.t - b.t).map((o) => (Number.isFinite(o.t) ? `${mmssA(o.t)} ${o.x}` : o.x));
 }
+const oneBlock = (d: Dive, from: number, to: number | null, chart: ChartKey, steps: string[]): AlertBlock => ({ head: "", steps, from, to: to ?? d.h.diveTimeS, chart });
 const withSteps = (text: string, steps: string[]) => (steps.length ? `${text}\nŘešení:\n${steps.map((x) => "• " + x).join("\n")}` : text);
 
 /** Byla mezi dvěma ponory vyměněna baterie Petrelu? Jiný typ; u NiMH (procenta vždy 100) skok napětí na začátku o ≥ 0,08 V;
@@ -694,25 +698,25 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     } else if (settled != null && settled >= 3 && settled < 20) {
       if (before >= 50) out.push({ level: "info", title: `Přechod na externí lahev (${gas})`, text: `V ${Math.floor(w.start / 60)}. min (${Math.round(before)} → ${Math.round(settled)} bar), varování ${ackTxt(w)}.` });
       else out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(settled)} bar je mezitlak externí lahve – očekávané.` });
-    } else if (settled != null && settled < 3) out.push({ level: "warn", title: `Nízký tlak ${gas} (0 bar)`, text: withSteps(`Varování v ${mmss(w.start)} – tlak spadl k nule a neustálil se na mezitlaku externí lahve. Zdroj odpojený nebo prázdný? ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)) });
-    else out.push({ level: "warn", title: `Nízký tlak ${gas}${settled != null ? ` (${Math.round(settled)} bar)` : ""}`, text: withSteps(`Onboard lahev – varování v ${Math.floor(w.start / 60)}. min (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)) });
+    } else if (settled != null && settled < 3) out.push({ level: "warn", title: `Nízký tlak ${gas} (0 bar)`, text: withSteps(`Varování v ${mmss(w.start)} – tlak spadl k nule a neustálil se na mezitlaku externí lahve. Zdroj odpojený nebo prázdný? ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
+    else out.push({ level: "warn", title: `Nízký tlak ${gas}${settled != null ? ` (${Math.round(settled)} bar)` : ""}`, text: withSteps(`Onboard lahev – varování v ${Math.floor(w.start / 60)}. min (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
   }
   const outW = cws.find((w) => w.kind === "cellout"), outA = d.alarms.find((a) => a.label.startsWith("Vyřazené čidlo"));
   if (outW || outA) {
     const t0 = Math.min(outW?.start ?? Infinity, outA?.start ?? Infinity), dc = deviatingCell(d, t0);
     const nA = d.alarms.filter((a) => a.label.startsWith("Vyřazené čidlo")).length;
-    out.push({ level: "warn", title: `Vyřazené čidlo${dc ? " " + dc.cell : ""} (P)`, text: withSteps(`Od ${Math.floor(t0 / 60)}. min${outW?.how === "open" || !outW ? " do konce ponoru" : ` do ${mmss(outW.end!)}`}${dc ? ` – čidlo ${dc.cell} se odchylovalo o ${dc.pct} %` : ""}${nA > 1 ? `, alarm opakován ${nA}×` : ""}. Počítač ho pravděpodobně vyřadil z hlasování.`, resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th)) });
+    out.push({ level: "warn", title: `Vyřazené čidlo${dc ? " " + dc.cell : ""} (P)`, text: withSteps(`Od ${Math.floor(t0 / 60)}. min${outW?.how === "open" || !outW ? " do konce ponoru" : ` do ${mmss(outW.end!)}`}${dc ? ` – čidlo ${dc.cell} se odchylovalo o ${dc.pct} %` : ""}${nA > 1 ? `, alarm opakován ${nA}×` : ""}. Počítač ho pravděpodobně vyřadil z hlasování.`, resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th)), blocks: [oneBlock(d, t0, outW?.end ?? outA?.end ?? null, "po2", resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th))] });
   }
   const co2s = cws.filter((w) => w.kind === "co2sensor"), co2sA = d.alarms.filter((a) => a.label.startsWith("Chyba CO₂"));
-  if (co2s.length || co2sA.length) out.push({ level: "warn", title: `Chyba CO₂ čidla (P)${co2s.length > 1 ? ` – ${co2s.length}×` : ""}`, text: `${co2s.length ? `Hlášení v ${co2s.map((w) => `${mmss(w.start)} (${ackTxt(w)})`).join(", ")}` : `Alarm v ${co2sA.map((a) => mmss(a.start)).join(", ")}`}. Hodnoty CO₂ v tomto ponoru ber s rezervou.` });
+  if (co2s.length || co2sA.length) out.push({ level: "warn", title: `Chyba CO₂ čidla (P)${co2s.length > 1 ? ` – ${co2s.length}×` : ""}`, text: `${co2s.length ? `Hlášení v ${co2s.map((w) => `${mmss(w.start)} (${ackTxt(w)})`).join(", ")}` : `Alarm v ${co2sA.map((a) => mmss(a.start)).join(", ")}`}. Hodnoty CO₂ v tomto ponoru ber s rezervou.`, blocks: [...co2s.map((w) => oneBlock(d, w.start, w.end, "co2", [])), ...(co2s.length ? [] : co2sA.map((x) => oneBlock(d, x.start, x.end, "co2", [])))].map((b, k, all) => ({ ...b, head: all.length > 1 ? `${k + 1}. ${tpt(b.from)}` : "" })) });
   const batW = cws.find((w) => w.kind === "battery");
-  if (batW) out.push({ level: "warn", title: "Slabá baterie (P)", text: withSteps(`Počítač hlásil slabou baterii v ${mmss(batW.start)}, ${ackTxt(batW)}.`, resolutionSteps(d, batW.start, batW.end, "other", th)) });
+  if (batW) out.push({ level: "warn", title: "Slabá baterie (P)", text: withSteps(`Počítač hlásil slabou baterii v ${mmss(batW.start)}, ${ackTxt(batW)}.`, resolutionSteps(d, batW.start, batW.end, "other", th)), blocks: [oneBlock(d, batW.start, batW.end, "temp", resolutionSteps(d, batW.start, batW.end, "other", th))] });
   const solA = d.alarms.filter((a) => a.label.startsWith("Porucha solenoidu"));
   if (solA.length) {
     // od kdy už jen ruční doplňování O₂ (poslední dávka solenoidem)
     const ds = o2Doses(d), lastSol = [...ds].reverse().find((x) => x.kind === "sol");
     const manFrom = lastSol ? ds.find((x) => x.t > lastSol.t && x.kind === "man") : null;
-    out.push({ level: "bad", title: "Porucha solenoidu / baterie v hlavě (P)", text: withSteps(`Alarm poprvé v ${mmss(solA[0].start)}${solA.length > 1 ? `, opakován ${solA.length}×` : ""}.${manFrom ? ` Od ${Math.floor(manFrom.t / 60)}. min jen ruční doplňování O₂.` : ""} Zkontroluj baterii v hlavě a solenoid.`, resolutionSteps(d, solA[0].start, solA[solA.length - 1].end, "other", th)) });
+    out.push({ level: "bad", title: "Porucha solenoidu / baterie v hlavě (P)", text: withSteps(`Alarm poprvé v ${mmss(solA[0].start)}${solA.length > 1 ? `, opakován ${solA.length}×` : ""}.${manFrom ? ` Od ${Math.floor(manFrom.t / 60)}. min jen ruční doplňování O₂.` : ""} Zkontroluj baterii v hlavě a solenoid.`, resolutionSteps(d, solA[0].start, solA[solA.length - 1].end, "other", th)), blocks: [oneBlock(d, solA[0].start, solA[solA.length - 1].end, "po2", resolutionSteps(d, solA[0].start, solA[solA.length - 1].end, "other", th))] });
   }
   for (const w of cws.filter((w) => w.kind === "unknown")) out.push({ level: "info", title: w.label, text: `Zobrazeno v ${mmss(w.start)}, ${ackTxt(w)}.` });
   for (const a of d.alarms.filter((a) => a.label.startsWith("Neznámý alarm"))) out.push({ level: "info", title: a.label, text: `Spuštěn v ${mmss(a.start)}.` });
@@ -732,9 +736,10 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds): Alert[] {
     if (!as.length) continue;
     const tot = as.reduce((x, a) => x + alarmEnd(d, a) - a.start, 0);
     const lowSp = kind === "po2low" && as.some((a) => d.s.sp[d.s.t.findIndex((t) => t >= a.start)] < 0.3);
-    const steps = as.slice(0, 3).flatMap((a, k) => [...(as.length > 1 ? [`${k + 1}. alarm ${mmss(a.start)}:`] : []), ...resolutionSteps(d, a.start, a.end, kind, th, as[k + 1]?.start ?? Infinity)]);
+    const blocks: AlertBlock[] = as.map((a, k) => { const e = alarmEnd(d, a); return { head: `${as.length > 1 ? `${k + 1}. alarm ` : ""}${mmss(a.start)}–${mmss(e)} (${dur(e - a.start)})`, steps: resolutionSteps(d, a.start, a.end, kind, th, as[k + 1]?.start ?? Infinity), from: a.start, to: e, chart: kind === "co2" ? "co2" : "po2" }; });
+    const steps = blocks.flatMap((b) => [...(as.length > 1 ? [`${b.head}:`] : []), ...b.steps]);
     out.push({ level: kind === "po2low" && lowSp ? "warn" : "bad", title: `${as[0].label} z počítače${lowSp ? " (během setpointu 0,19 před výstupem)" : ""}`,
-      text: withSteps(`${as.length}× (${as.map((a) => `${mmss(a.start)}–${mmss(alarmEnd(d, a))}`).join(", ")}), celkem ${dur(tot)}.`, steps) });
+      text: withSteps(`${as.length}× (${as.map((a) => `${mmss(a.start)}–${mmss(alarmEnd(d, a))}`).join(", ")}), celkem ${dur(tot)}.`, steps), blocks });
   }
   const cs = cellSpread(d);
   if (cs && cs.kind) {

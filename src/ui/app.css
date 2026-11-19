@@ -438,3 +438,8 @@ details.card.sec > summary h2 { margin: 0; }
 .logsw-m button.on { color: var(--accent); font-weight: 700; }
 .logsw-m small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
 .logsw-e { padding: 10px 14px; }
+.ablocks > div:first-child { margin-bottom: 4px; }
+.ablock { border-top: 1px solid rgba(255,255,255,.12); padding: 6px 0 4px; }
+.ablock-h { font-weight: 700; font-size: 14px; }
+.ablock-s { font-size: 14px; line-height: 1.35; }
+.ablock-l { display: inline-block; margin-top: 4px; font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }

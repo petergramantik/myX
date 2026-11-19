@@ -173,6 +173,8 @@ export function DiveScreen({ id }: { id: string }) {
   const [d, setD] = useState<Dive | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("log");
+  const [focus, setFocus] = useState<ChartFocus | null>(null);
+  useEffect(() => { const on = (e: Event) => { setFocus({ ...(e as CustomEvent<ChartFocus>).detail }); setTab("charts"); }; focusBus.addEventListener("focus", on); return () => focusBus.removeEventListener("focus", on); }, []);
   const [slide, setSlide] = useState("");
   const touch = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => { setD(null); loadDive(id).then(setD).catch((e) => setErr(e.message)); }, [id]);
@@ -212,7 +214,7 @@ export function DiveScreen({ id }: { id: string }) {
       {err && <p className="alert bad">{err}</p>}
       {tab === "log" && <LogTab id={id} d={d} />}
       {tab !== "log" && !d && !err && <p className="muted center">Dekóduji…</p>}
-      {tab === "charts" && d && <ChartsTab d={d} />}
+      {tab === "charts" && d && <ChartsTab d={d} focus={focus} />}
       {tab === "values" && d && <ValuesTab d={d} />}
       {tab === "events" && d && <EventsTab d={d} />}
     </div>
@@ -227,16 +229,21 @@ function spPins(d: Dive) {
 }
 
 /** Sloučí upozornění se stejným nadpisem do jednoho („Nadpis – N×“), popisy pod sebe; úroveň podle nejzávažnějšího. */
-function groupAlerts<T extends { level: string; title: string; text: string; parts?: string[] }>(as: T[]): { level: string; title: string; text: string; parts?: string[] }[] {
+/** Odkaz z varování do grafu: přepnout na Grafy, přiblížit a ukázat místo. */
+const focusBus = new EventTarget();
+type ChartFocus = { chart: string; from: number; to: number };
+const showInChart = (b: ChartFocus) => focusBus.dispatchEvent(new CustomEvent("focus", { detail: b }));
+type GBlock = { head: string; steps: string[]; from: number; to: number; chart: string };
+function groupAlerts<T extends { level: string; title: string; text: string; parts?: string[]; blocks?: GBlock[] }>(as: T[]): { level: string; title: string; text: string; parts?: string[]; blocks?: GBlock[] }[] {
   const rank: Record<string, number> = { bad: 3, warn: 2, info: 1 };
-  const m = new Map<string, { level: string; title: string; text: string; parts: string[]; own?: string[] }>();
+  const m = new Map<string, { level: string; title: string; text: string; parts: string[]; own?: string[]; blocks?: GBlock[] }>();
   for (const a of as) {
     const g = m.get(a.title);
-    if (!g) { m.set(a.title, { level: a.level, title: a.title, text: a.text, parts: [a.text], own: a.parts }); continue; }
+    if (!g) { m.set(a.title, { level: a.level, title: a.title, text: a.text, parts: [a.text], own: a.parts, blocks: a.blocks }); continue; }
     g.parts.push(a.text);
     if ((rank[a.level] || 0) > (rank[g.level] || 0)) g.level = a.level;
   }
-  return [...m.values()].map((g) => g.parts.length > 1 ? { ...g, title: `${g.title} – ${g.parts.length}×` } : { level: g.level, title: g.title, text: g.text, parts: g.own });
+  return [...m.values()].map((g) => g.parts.length > 1 ? { level: g.level, title: `${g.title} – ${g.parts.length}×`, text: g.text, parts: g.parts } : { level: g.level, title: g.title, text: g.text, parts: g.own, blocks: g.blocks });
 }
 
 /** Štítek hlavního diluentu (plyn s nejdelším časem) v pravém horním rohu řádku. */
@@ -544,7 +551,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   return (
     <>
       {meta.comp && <div className="comp-line small muted">Z počítače {compModel(meta.comp)}{meta.alt && <> · <span className="pill">2 počítače</span> <a onClick={() => go({ t: "cmp", id: meta.id, other: meta.alt! })}>Srovnání počítačů ›</a></>}</div>}
-      {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold />)}
+      {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold onShow={d ? showInChart : undefined} />)}
       <PartsCard meta={meta} />
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
         <Tiles cols={2} cls={{ "Max. pO₂": meta.sum.ppo2Max > (lb.settings.th.po2HiBad ?? 1.6) ? "bad" : po2HiLevel(meta.sum, lb.settings.th) === "warn" ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > (lb.settings.th.pn2Hot ?? 3.16) ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[
@@ -601,7 +608,7 @@ function ProfileCard({ d }: { d: Dive }) {
   );
 }
 
-function ChartsTab({ d }: { d: Dive }) {
+function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
   const s = d.s;
   const [cellMode, setCellMode] = useState<"cal" | "mv">("cal");
   const cal = useMemo(() => cellCalibration(d), [d]);
@@ -615,6 +622,13 @@ function ChartsTab({ d }: { d: Dive }) {
   const depthExtra: { label: string; values: (number | null)[]; unit: string }[] = []; // hloubku ukazuje linka profilu
   const st = useStore(), th = st.lb.settings.th;
   const [zoom, setZoom] = useState<[number, number] | null>(null);
+  // odkaz z varování: přiblížit na situaci (±2 min), posunout na graf, posuvník na začátek
+  useEffect(() => {
+    if (!focus) return;
+    setZoom([Math.max(0, focus.from - 120), Math.min(s.t[s.t.length - 1], focus.to + 120)]);
+    requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-chart="${focus.chart}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" })));
+  }, [focus]);
+  const fT = (k: string) => (focus && focus.chart === k ? focus.from : undefined);
   // typ čidla z Výbavy (čidlo na dané pozici v den ponoru)
   const day = new Date(d.h.start * 1000).toISOString().slice(0, 10);
   const cellName = (k: number) => { const c = Object.values(st.lb.cells).find((x) => x.pos === k && x.installed <= day && (!x.removed || x.removed >= day)); const n = c ? (c.type || c.maker || "").trim() : ""; return `Čidlo ${k}${n ? ` (${n})` : ""}`; };
@@ -639,10 +653,10 @@ function ChartsTab({ d }: { d: Dive }) {
     <ChartDefs.Provider value={{ profile: s.depth, zoom: true }}>
       <p className="note chart-hint">Grafy: posuvník jedním prstem, přiblížení roztažením dvou prstů (všechny grafy najednou), zpět dvojklepnutím nebo 1:1. Položky legendy jde zapínat a vypínat.</p>
       <ProfileCard d={d} />
-      <Card title="pO₂ a čidla" right={
+      <div data-chart="po2"><Card title="pO₂ a čidla" right={
         <div className="seg"><button className={cellMode === "cal" ? "on" : ""} onClick={() => setCellMode("cal")}>pO₂</button><button className={cellMode === "mv" ? "on" : ""} onClick={() => setCellMode("mv")}>mV</button></div>}>
         {cellMode === "cal" ? (
-          <LineChart t={s.t} toggle bandLegend={usedBands} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={po2Bands} series={[
+          <LineChart t={s.t} focusT={fT("po2")} toggle bandLegend={usedBands} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={po2Bands} series={[
             { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: cellName(1), color: C[1], values: cells[0], unit: "bar", width: 1 },
             { label: cellName(2), color: C[2], values: cells[1], unit: "bar", width: 1 }, { label: cellName(3), color: C[3], values: cells[2], unit: "bar", width: 1 }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3", width: 1 },
           ]} extra={depthExtra} />
@@ -655,26 +669,26 @@ function ChartsTab({ d }: { d: Dive }) {
           {cellMode === "cal" ? <>Čidla přepočtená společnou kalibrací odvozenou z průměrného pO₂ tohoto ponoru (rozdíl = jiná citlivost čidla): {cal.map((c, k) => `č. ${k + 1} ${c ? (c * 1000).toFixed(1) + " mbar/mV" : "–"}`).join(", ")}. </> : "Surové hodnoty čidel v mV. "}
           Čárky dole = nárůsty O₂ podle druhu: <span style={{ color: DOSE_COLOR.sol }}>■ solenoid (pravděpodobně) {doses.filter((x) => x.kind === "sol").length}×</span>, <span style={{ color: DOSE_COLOR.man }}>■ ručně O₂ {doses.filter((x) => x.kind === "man").length}×</span>, <span style={{ color: DOSE_COLOR.amb }}>■ ručně O₂, nebo diluent {doses.filter((x) => x.kind === "amb").length}×</span>, <span style={{ color: DOSE_COLOR.dil }}>■ diluent {doses.filter((x) => x.kind === "dil").length}×</span>. Solenoid dávkuje jen pod setpointem – nárůst nad ním je ruční. Pásma: červené = alarm vysokého pO₂ z počítače, oranžové = alarm nízkého pO₂, žluté / sytě červené = vlastní detekce vysokého pO₂, tyrkysové = čidla se rozcházejí o víc než 0,3 bar.
         </p>
-      </Card>
+      </Card></div>
       <EffortCard d={d} />
-      <Card title="CO₂ v dýchací smyčce">
+      <div data-chart="co2"><Card title="CO₂ v dýchací smyčce">
         {s.co2.some((v) => v != null && v > 0)
-          ? <LineChart t={s.t} bandLegend={d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : undefined} bands={d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" }))} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
+          ? <LineChart t={s.t} focusT={fT("co2")} bandLegend={d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : undefined} bands={d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" }))} series={[{ label: "ppCO₂", color: C[5], values: s.co2, unit: "mbar", width: 2 }, { label: "Hloubka", color: C[0], values: s.depth, unit: "m", right: true }]} rightInvert extra={[{ label: "Surová hodnota", values: s.co2raw }]} />
           : <p className="muted">V tomto ponoru CO₂ čidlo nic nezaznamenalo.</p>}
-      </Card>
+      </Card></div>
       <Card title="Dekomprese">
         <LineChart t={s.t} series={[
           { label: "NDL / zastávka", color: C[0], values: s.stopt, unit: "min" }, { label: "TTS", color: C[1], values: s.tts, unit: "min" }, { label: "@+5", color: C[2], values: s.at5, unit: "min" },
           { label: "GF99", color: C[3], values: s.gf99, unit: "%" }, { label: "CNS", color: C[4], values: s.cns, unit: "%" },
         ]} extra={depthExtra} />
       </Card>
-      <Card title="Tlak v láhvích">
-        <LineChart t={s.t} series={[{ label: "Diluent", color: C[0], values: s.dil, unit: "bar" }, { label: "O₂", color: C[2], values: s.o2p, unit: "bar" }]} extra={depthExtra} />
+      <div data-chart="press"><Card title="Tlak v láhvích">
+        <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: s.dil, unit: "bar" }, { label: "O₂", color: C[2], values: s.o2p, unit: "bar" }]} extra={depthExtra} />
         <p className="note">Hodnota kolem 8–11 bar u O₂ odpovídá mezitlaku prvního stupně, ne tlaku v láhvi.</p>
-      </Card>
-      <Card title="Teplota a baterie">
-        <LineChart t={s.t} series={[{ label: "Teplota", color: C[1], values: s.temp, unit: "°C" }, { label: "Baterie", color: C[4], values: s.bv, unit: "V", right: true }]} extra={depthExtra} />
-      </Card>
+      </Card></div>
+      <div data-chart="temp"><Card title="Teplota a baterie">
+        <LineChart t={s.t} focusT={fT("temp")} series={[{ label: "Teplota", color: C[1], values: s.temp, unit: "°C" }, { label: "Baterie", color: C[4], values: s.bv, unit: "V", right: true }]} extra={depthExtra} />
+      </Card></div>
       <Card title="Rychlost (+ = výstup)">
         <LineChart t={s.t} zero series={[{ label: "Rychlost", color: C[0], values: vrate, unit: "m/min" }]} extra={depthExtra} />
       </Card>

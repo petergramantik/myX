@@ -35,7 +35,9 @@ function ticks(lo: number, hi: number, n = 5): number[] {
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}′${String(r % 60).padStart(2, "0")}″`; };
 
-export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable }: {
+export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable, focusT }: {
+  /** Postavit posuvník na tento čas (odkaz z varování). */
+  focusT?: number;
   t: number[]; series: Series[]; height?: number; invert?: boolean; zero?: boolean; markers?: number[]; rightInvert?: boolean;
   /** Barevná pásma; label se ukáže v popisku posuvníku, když na pásmu stojí. */
   bands?: { from: number; to: number; color: string; label?: string }[];
@@ -70,6 +72,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   const pinch = useRef<{ d0: number; c0: number; win: [number, number] } | null>(null);
   const lastTap = useRef(0);
   useEffect(() => setHover(null), [t]);
+  useEffect(() => { if (focusT == null || !t.length) return; const i = t.findIndex((x) => x >= focusT); setHover(i < 0 ? t.length - 1 : i); }, [focusT]);
   if (!t.length) return <div className="chart-empty">Bez dat</div>;
   const z = zoomable ? (zc ? zc.z : zLocal) : null;
   const setZ = zc ? zc.setZ : setZLocal;
