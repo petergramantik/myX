@@ -1,4 +1,5 @@
 import { HelpScreen } from "./ui/Help";
+import { LOGO_SVG } from "./ui/logo";
 import { DialogHost } from "./ui/Dialog";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -149,7 +150,7 @@ function App() {
     <div className="app">
       <DialogHost />
       <header className="top">
-        {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <img className="logo" src="icons/myx-logbook.svg" alt="myX" />}
+        {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo" role="img" aria-label="myX" dangerouslySetInnerHTML={{ __html: LOGO_SVG }} />}
         {s.t === "home" || s.t === "dives" && !s.site && !s.buddy || s.t === "sites" || s.t === "buddies" ? <LogSwitch label={screenName(s, st)} /> : <h1>{title(s, st)}</h1>}
         <button className="warnbtn none helpbtn" onClick={() => (s.t === "help" ? back() : go({ t: "help" }))} aria-label="Nápověda">?</button>
         <button className={"warnbtn " + (w.worst || "none")} onClick={() => (s.t === "warn" ? back() : (setAnim("from-left"), go({ t: "warn" })))} aria-label="Varování">

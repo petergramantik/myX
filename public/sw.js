@@ -26,5 +26,5 @@ self.addEventListener("fetch", (e) => {
   // nejdřív síť (bez HTTP mezipaměti), bez sítě uložená kopie
   e.respondWith(fetch(e.request.url, { cache: "no-cache", credentials: "same-origin" })
     .then((r) => { if (r.ok) { const c = r.clone(); caches.open(CACHE).then((ca) => ca.put(e.request, c)); } return r; })
-    .catch(() => caches.match(e.request).then((r) => r || caches.match("index.html"))));
+    .catch(() => caches.match(e.request).then((r) => r || (e.request.mode === "navigate" ? caches.match("index.html") : Response.error())))); // náhradní stránka jen při otevírání aplikace, ne místo obrázků
 });

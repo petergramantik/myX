@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.40.2";
+export const APP_VERSION = "1.40.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.40.3", date: "2026-11-20", title: "Logo a kompaktní log", items: [
+    "Logo v záhlaví je součástí aplikace – bez zpoždění, ostré, i offline.",
+    "Opravena rozbitá ikona po nepovedené aktualizaci (bez sítě se místo obrázků už nevrací stránka aplikace).",
+    "Kompaktní log: ponory bez problému mají zelený rámeček.",
+  ] },
   { version: "1.40.2", date: "2026-11-20", title: "Události pod grafy", items: [
     "Text událostí zarovnaný pod sebe, vlevo vyčnívají jen tečky.",
   ] },

@@ -296,7 +296,7 @@ function diveTagsOfMeta(metas: Meta[], m: Meta, th: Parameters<typeof cellDiveWa
 
 /** Nejzávažnější úroveň tagů pro rámeček kompaktního řádku. */
 function rowLevel(tags: DiveTag[]): string {
-  return tags.some((t) => t.level === "bad") ? "lvl-bad" : tags.length ? "lvl-warn" : "";
+  return tags.some((t) => t.level === "bad") ? "lvl-bad" : tags.length ? "lvl-warn" : "lvl-ok";
 }
 
 /** Návrhy lokality a parťáků z logů ostatních ke stejnému ponoru – každé jméno s nabídkou Akce. */
