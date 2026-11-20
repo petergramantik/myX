@@ -648,6 +648,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
   return (
     <>
       <RigLine meta={meta} />
+      {!st.guest && <PscrPrompt id={id} meta={meta} note={note} />}
       {meta.comp && <div className="comp-line small muted">Z počítače {compModel(meta.comp)}{meta.alt && <> · <span className="pill">2 počítače</span> <a onClick={() => go({ t: "cmp", id: meta.id, other: meta.alt! })}>Srovnání počítačů ›</a></>}</div>}
       {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold onShow={d ? showInChart : undefined} />)}
       <PartsCard meta={meta} />
@@ -674,13 +675,80 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
       {!st.guest && <SuggestCard meta={meta} />}
       {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} />}
-      {isCC(meta.h) && <GasUseCard id={id} meta={meta} note={note} />}
+      {isCC(meta.h) ? <GasUseCard id={id} meta={meta} note={note} /> : <SupplyGasCard id={id} meta={meta} note={note} />}
       <BuddyDivesCard meta={meta} />
       {st.guest && <button className="btn danger guest-del" onClick={async () => {
         if (!await ask("Smazat tento ponor z cizího logu? Při dalším importu stejného souboru se znovu přidá.", { danger: true, ok: "Smazat" })) return;
         const n = await deleteGuestDives(partIds(meta)); toast(`Smazáno ponorů: ${n}`); back();
       }}>Smazat ponor z cizího logu</button>}
     </>
+  );
+}
+
+const SUP_KINDS: Record<string, number> = { "7 l": 7, "10 l": 10, "12 l": 12, "15 l": 15, S80: 11.1, S40: 5.7, jiná: 0 };
+const parseN = (v: string) => { const x = parseFloat(v.replace(",", ".")); return Number.isNaN(x) ? undefined : x; };
+
+/** pSCR: výrazná výzva k zadání zásobního plynu a tlaku lahve před a po ponoru (bez nich není spotřeba ani odhad smyčky). */
+function PscrPrompt({ id, meta, note }: { id: string; meta: Meta; note?: DiveNote }) {
+  useStore();
+  const ri = rigInfo(meta.h.serial, meta.id, meta.h);
+  if (isCC(meta.h) || ri.rig !== "pSCR") return null;
+  const sup = (note?.ext || []).find((e) => e.gas === "sup");
+  const missing = [!ri.supplyO2 && "zásobní plyn (O₂ %)", !(sup?.start && sup?.end) && "tlak lahve před a po ponoru"].filter(Boolean) as string[];
+  if (!missing.length) return null;
+  return (
+    <div className="alert warn pscr-prompt">
+      <b>Zadej {missing.join(" a ")}</b>
+      <small>U pSCR bez čidel z toho myX počítá spotřebu a odhad pO₂ ve smyčce. Plyn platí pro tento ponor (výchozí nastavíš u počítače).</small>
+      <div className="ext-row">
+        <input inputMode="decimal" defaultValue={ri.supplyO2 ?? ""} placeholder="O₂ %" onBlur={(ev) => { const v = parseN(ev.target.value); if (v !== ri.supplyO2) setDiveRig(meta.h.serial, meta.id, { supplyO2: v ? Math.min(100, Math.max(5, Math.round(v))) : null }); }} /><span>% O₂</span>
+      </div>
+      <SupplyRows id={id} note={note} />
+    </div>
+  );
+}
+
+/** Lahve se zásobním plynem u ponoru (ruční zadání: typ, objem, tlak před a po). */
+function SupplyRows({ id, note, add }: { id: string; note?: DiveNote; add?: boolean }) {
+  const st = useStore();
+  const ext = note?.ext || [], mine = ext.filter((e) => e.gas === "sup");
+  const save = (x: ExtGas[]) => setNote(id, { ext: x });
+  const rows = mine.length ? mine : [{ id: "new-sup", gas: "sup" as const, kind: "7 l", vol: 7 }];
+  const setRow = (e: ExtGas, p: Partial<ExtGas>) => save(mine.some((x) => x.id === e.id) ? ext.map((x) => (x.id === e.id ? { ...x, ...p } : x)) : [...ext, { ...e, ...p, id: uid() }]);
+  if (st.guest) return null;
+  return (
+    <>
+      {rows.map((e) => (
+        <div key={e.id} className="ext-row">
+          <select value={e.kind} onChange={(ev) => setRow(e, { kind: ev.target.value, vol: SUP_KINDS[ev.target.value] || e.vol })}>
+            {Object.keys(SUP_KINDS).map((k) => <option key={k}>{k}</option>)}
+          </select>
+          <input inputMode="decimal" defaultValue={e.vol} title="Objem (l)" onBlur={(ev) => parseN(ev.target.value) !== e.vol && setRow(e, { vol: parseN(ev.target.value) ?? e.vol })} /><span>l</span>
+          <input inputMode="decimal" defaultValue={e.start ?? ""} placeholder="před bar" onBlur={(ev) => parseN(ev.target.value) !== e.start && setRow(e, { start: parseN(ev.target.value) })} />
+          <input inputMode="decimal" defaultValue={e.end ?? ""} placeholder="po bar" onBlur={(ev) => parseN(ev.target.value) !== e.end && setRow(e, { end: parseN(ev.target.value) })} />
+          {mine.length > 0 && <button className="btn small" onClick={() => save(ext.filter((x) => x.id !== e.id))}>✕</button>}
+        </div>
+      ))}
+      {add && mine.length > 0 && <button className="btn small" onClick={() => save([...ext, { id: uid(), gas: "sup", kind: "7 l", vol: 7 }])}>+ Další lahev</button>}
+    </>
+  );
+}
+
+/** Spotřeba plynu u ponoru bez vysílačů tlaku: ruční zadání lahví. */
+function SupplyGasCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNote }) {
+  const st = useStore();
+  const ri = rigInfo(meta.h.serial, meta.id, meta.h);
+  const mine = (note?.ext || []).filter((e) => e.gas === "sup");
+  const litres = mine.reduce((a, e) => a + (e.start != null && e.end != null ? (e.start - e.end) * e.vol : 0), 0);
+  const min = meta.h.diveTimeS / 60;
+  return (
+    <Card title="Spotřeba plynu">
+      {mine.some((e) => e.start != null && e.end != null)
+        ? <p>Spotřeba <b>{Math.round(litres)} l</b>{ri.supplyO2 ? ` (${ri.supplyO2} % O₂)` : ""} · {num(litres / Math.max(1, min), 1)} l/min za ponor</p>
+        : <p className="muted">{st.guest ? "Tlaky lahví v cizím logu nejsou." : "Počítač tlak lahve neměří – zadej lahev a tlak před a po ponoru."}</p>}
+      <SupplyRows id={id} note={note} add />
+      <p className="note">Spotřeba = (tlak před − tlak po) × objem lahve. U pSCR vypouští přístroj část vydechovaného plynu, spotřeba proto roste s hloubkou.</p>
+    </Card>
   );
 }
 

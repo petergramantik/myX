@@ -166,8 +166,10 @@ export function rigInfo(serial: number, diveId: string, h: Header): { rig?: Rig;
   const c = ownLb().computers?.[serial.toString(16).toUpperCase()], o = c?.dives?.[diveId];
   return { rig: o?.rig ?? c?.rig ?? defaultRig(h), supplyO2: o?.supplyO2 ?? c?.supplyO2, ratio: c?.pscrRatio ?? 8, byDive: !!(o?.rig || o?.supplyO2) };
 }
+/** Nastavení počítače z mého logbooku (typ přístroje, scrubber…). */
+export const computerCfg = (serial: number): Computer | undefined => ownLb().computers?.[serial.toString(16).toUpperCase()];
 /** Uloží nastavení přístroje u počítače (do mého logbooku – zálohuje se). */
-export async function setComputerRig(serial: number, patch: Partial<Pick<Computer, "rig" | "supplyO2" | "pscrRatio">>) {
+export async function setComputerRig(serial: number, patch: Partial<Pick<Computer, "rig" | "supplyO2" | "pscrRatio" | "scrubFill" | "scrubMin">>) {
   const hex = serial.toString(16).toUpperCase(), lb = structuredClone(ownLb());
   lb.computers = lb.computers || {};
   lb.computers[hex] = { ...lb.computers[hex], id: hex, model: lb.computers[hex]?.model || modelFor(serial), ...patch, updated: Date.now() };

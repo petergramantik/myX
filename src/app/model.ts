@@ -14,7 +14,7 @@ export interface Buddy { id: string; name: string; note?: string; updated: numbe
 export type Rating = "up" | "down" | "problem";
 export interface WeatherSnap { at: number; temp: number; wind: number; gust: number; cloud: number; pressure: number; precip: number; code: number }
 /** Externí lahev připojená během ponoru (Petrel její tlak neměří). */
-export interface ExtGas { id: string; gas: "dil" | "o2"; kind: string; vol: number; start?: number; end?: number }
+export interface ExtGas { id: string; /** sup = zásobní plyn přístroje bez vysílačů (pSCR, OC…) */ gas: "dil" | "o2" | "sup"; kind: string; vol: number; start?: number; end?: number }
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
   ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; updated: number;
@@ -49,7 +49,8 @@ export const aliasKey = (kind: "buddy" | "site", name: string) => `${kind}:${nor
 /** Cizí počítač rozpoznaný podle sériového čísla v logu a jeho majitel. */
 export interface Computer { id: string; model: string; buddyId?: string; primary?: boolean; /** můj počítač (cíleně přidaný, např. po výměně počítače) */ mine?: boolean;
   /** typ dýchacího přístroje (výchozí pro ponory z tohoto počítače) */ rig?: Rig; /** zásobní plyn O₂ % (polouzavřený okruh v Gauge módu – počítač plyn nezná) */ supplyO2?: number;
-  /** poměr dávkování pSCR (1 : N) */ pscrRatio?: number; /** změny u jednotlivých ponorů */ dives?: Record<string, { rig?: Rig; supplyO2?: number }>; updated: number }
+  /** poměr dávkování pSCR (1 : N) */ pscrRatio?: number;
+  /** scrubber bez časovače v logu: ruční datum naplnění (s, místní čas) a výdrž náplně (min) */ scrubFill?: number; scrubMin?: number; /** změny u jednotlivých ponorů */ dives?: Record<string, { rig?: Rig; supplyO2?: number }>; updated: number }
 
 export const META_V = 26;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; cnum?: number; comp?: string; /** spojený ponor: všechny záznamy (jen v zobrazení) */ parts?: Meta[]; alt?: string; warns?: { level: "warn" | "bad"; title: string; text: string }[] }

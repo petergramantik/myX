@@ -1,7 +1,8 @@
+import { askText } from "../app/dialog";
 import { isCC } from "../core/rig";
 import { useEffect, useRef, useState } from "react";
 import { alerts, scrubberInfo } from "../core/analysis";
-import { compName, createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
+import { compName, computerCfg, rigInfo, setComputerRig, createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { CellTiles, useCells } from "./Cells";
 import { hasExt } from "./Dives";
@@ -54,6 +55,45 @@ function Motto() {
   return worst === "ok"
     ? <div className="motto ok" onClick={hide}>Všecko v cajku, jdeme na to!</div>
     : <div className={"motto " + worst} onClick={hide}>Mám warningy, nevysereme se dnes na to?!</div>;
+}
+
+/** Scrubber u rebreatheru bez časovače v logu (např. pSCR s Peregrine v Gauge módu): ruční datum naplnění a výdrž u počítače. */
+function ManualScrubTile() {
+  const st = useStore(), th = st.lb.settings.th;
+  const last = st.metas[st.metas.length - 1];
+  if (!last) return null;
+  const ri = rigInfo(last.h.serial, last.id, last.h);
+  if (!ri.rig || ri.rig === "OC") return null;
+  const cfg = computerCfg(last.h.serial), fill = cfg?.scrubFill, lim = cfg?.scrubMin;
+  const used = fill ? st.metas.filter((m) => m.h.serial === last.h.serial && m.start >= fill - 43200).reduce((a, m) => a + m.h.diveTimeS, 0) / 60 : null;
+  const left = lim && used != null ? Math.max(0, lim - used) : null;
+  const days = fill ? Math.floor((localNow() - fill) / 86400) : null;
+  const old = days != null && days >= th.scrubDays;
+  const timeLvl = left == null ? "none" : left < 30 ? "bad" : left < (th.scrubLeftMin ?? 90) ? "warn" : "ok";
+  const lvl = timeLvl === "bad" ? "bad" : timeLvl === "warn" || old ? "warn" : !fill ? "warn" : "ok";
+  const setFill = async () => {
+    const v = await askText("Datum naplnění sorbentu (d. m. rrrr, prázdné = dnes)", fill ? fmtDate(fill) : "");
+    if (v == null) return;
+    const m = /^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/.exec(v.trim());
+    const t = m ? Date.UTC(+m[3], +m[2] - 1, +m[1]) / 1000 : v.trim() ? NaN : localNow() - (localNow() % 86400);
+    if (Number.isNaN(t)) { toast("Neplatné datum"); return; }
+    await setComputerRig(last.h.serial, { scrubFill: t });
+  };
+  const setLim = async () => {
+    const v = await askText("Výdrž náplně scrubberu (min) – podle výrobce přístroje", lim ? String(lim) : "");
+    if (v != null) await setComputerRig(last.h.serial, { scrubMin: Math.round(+v.replace(",", ".")) || undefined });
+  };
+  return (
+    <section className={"card scrub " + lvl}>
+      <h2>Scrubber <small className="muted">{compName(last.h.serial)} · {ri.rig} · ručně</small></h2>
+      <div className="sc-two">
+        <div onClick={setLim}><b className={"c-" + timeLvl}>{left != null ? hm(left) : used != null ? hm(used) : "–"}</b><small>{left != null ? "zbývá" : used != null ? "použito (zadej výdrž ›)" : "zbývá"}</small></div>
+        <div className="r" onClick={setFill}><b className={"c-" + (old ? "warn" : "ok")}>{days != null ? `${days} dní` : "–"}</b><small>stáří</small></div>
+      </div>
+      {left != null && lim ? <div className={"sc-bar " + timeLvl}><i style={{ width: `${Math.round((left / lim) * 100)}%` }} /></div> : null}
+      <div className="sc-s"><a onClick={setFill}>{fill ? `naplněno ${fmtDate(fill)}` : "Zadej datum naplnění ›"}</a> · <a onClick={setLim}>{lim ? `výdrž ${hm(lim)}` : "výdrž nezadaná ›"}</a></div>
+    </section>
+  );
 }
 
 function ScrubberTile() {
@@ -139,6 +179,7 @@ export function OverviewScreen() {
     <div className="screen">
       <Motto />
       {cc && <ScrubberTile />}
+      {!cc && <ManualScrubTile />}
       {cc && <CellTiles />}
       <BatteryTiles />
 

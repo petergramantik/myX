@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.1";
+export const APP_VERSION = "1.42-dev.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.2", date: "2026-11-20", title: "Scrubber a spotřeba bez čidel (dev)", items: [
+    "Scrubber na Přehledu u každého rebreatheru; bez časovače v logu ruční datum naplnění a výdrž náplně u počítače, zbývající čas ze součtu ponorů.",
+    "Spotřeba plynu u ponorů bez vysílačů: ruční lahev, objem a tlak před a po.",
+    "pSCR: výrazná výzva k zadání zásobního plynu a tlaku lahve před a po ponoru.",
+  ] },
   { version: "1.42-dev.1", date: "2026-11-20", title: "Další počítače a typy přístrojů (dev)", items: [
     "Mód počítače z logu (CC, OC, Gauge, SCR…) a model (Petrel 2, Petrel 3, Peregrine…).",
     "Typ přístroje u počítače i u ponoru: eCCR, pSCR (OC, aSCR, mCCR zatím zašedlé); u Gauge logu se myX při importu zeptá.",
