@@ -475,3 +475,4 @@ details.card.sec > summary h2 { margin: 0; }
 .card-hr { display: flex; align-items: center; gap: 8px; } .zslot:empty { display: none; } .chart-under { display: flex; justify-content: flex-end; margin: 2px 0 6px; }
 .lg-ico { vertical-align: middle; margin-right: 4px; } .ax-unit { font-size: 9px; opacity: 0.8; }
 .legend > span { display: inline-flex; align-items: center; white-space: nowrap; }
+label.inline input[type=checkbox] { width: auto; padding: 0; }

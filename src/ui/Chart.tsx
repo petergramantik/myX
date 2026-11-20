@@ -38,7 +38,11 @@ const fmtCs = (v: number | null | undefined, d = 2) => (v == null || Number.isNa
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}′${String(r % 60).padStart(2, "0")}″`; };
 
-export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable, focusT, under, hlines, yInclude }: {
+export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable, focusT, under, hlines, yInclude, invertLeft, axisUnits }: {
+  /** Obrácená levá osa (0 nahoře) bez vlivu na profil hloubky. */
+  invertLeft?: boolean;
+  /** Vlastní popisky jednotek os. */
+  axisUnits?: { l?: string; r?: string };
   /** Vodorovné přerušované čáry (levá osa) s hodnotou na ose. */
   hlines?: { v: number; color: string }[];
   /** Hodnoty, které má levá osa vždy obsáhnout (při celém grafu). */
@@ -129,8 +133,8 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   if (!z && yInclude?.length && left.length) { lo = Math.min(lo, ...yInclude); const mx = Math.max(...yInclude); if (mx > hi) hi = mx + (mx - lo) * 0.05; }
   // jednotky os: z jednotek čar na dané ose
   const uniq = (a: (string | undefined)[]) => [...new Set(a.filter((x): x is string => !!x))].join(" · ");
-  const lUnit = uniq(left.filter((x) => x.label).map((x) => x.unit)), rUnit = uniq(right.filter((x) => x.label).map((x) => x.unit));
-  const pMax = profile ? Math.max(1, ...profile.filter((v, i) => v != null && vis(i)) as number[]) * 1.05 : 1;
+  const lUnit = axisUnits?.l ?? uniq(left.filter((x) => x.label).map((x) => x.unit)), rUnit = axisUnits?.r ?? uniq(right.filter((x) => x.label).map((x) => x.unit));
+  const pMax = profile ? Math.max(1, ...profile.filter((v, i) => v != null && vis(i)) as number[]) : 1; // nejhlubší místo přesně na spodním okraji
   const x0 = win[0], x1 = win[1] > win[0] ? win[1] : win[0] + 1;
   // popisky značek (setpoint, přepnutí plynu) v pruhu nad grafem, rozložené do řádků bez překryvu
   const tags = [
@@ -152,7 +156,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   height += tagH; // pruh s popisky graf nezmenšuje, přidá se nad něj
   const m = { l: pl, r: pr, t: 8 + tagH + (lUnit || rUnit ? 9 : 0), b: 20 };
   const X = (v: number) => m.l + ((v - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
-  const Y = (v: number, a = lo, b = hi, inv = invert) => { const f = (v - a) / (b - a || 1); return inv ? m.t + f * (height - m.t - m.b) : height - m.b - f * (height - m.t - m.b); };
+  const Y = (v: number, a = lo, b = hi, inv = invert || invertLeft) => { const f = (v - a) / (b - a || 1); return inv ? m.t + f * (height - m.t - m.b) : height - m.b - f * (height - m.t - m.b); };
   /** Krátké výpadky (nejvýš 2 vzorky) se přemostí lineárně – čára se nepřeruší. */
   const bridged = (vals: (number | null)[]) => {
     const out = vals.slice();

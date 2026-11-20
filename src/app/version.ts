@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.40";
+export const APP_VERSION = "1.40.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.40.1", date: "2026-11-20", title: "Profil a dekomprese", items: [
+    "Profil a strop: přepínač stisků tlačítek je vidět pořád, popis grafu sbalený.",
+    "Dekomprese: TTS, @+5 a čas na zastávce rostou shora dolů, NDL zdola nahoru.",
+    "Tenký profil hloubky ve všech grafech sahá až ke spodnímu okraji.",
+  ] },
   { version: "1.40", date: "2026-11-20", title: "Grafy: osy, legenda, zátěž", items: [
     "Jednotky u levé i pravé osy všech grafů.",
     "Legenda odpovídá grafu: čárkované a tečkované čáry, svislé značky (dávky O₂, tlačítka, doplnění diluentu) jako svislá čárka.",

@@ -697,8 +697,8 @@ function ProfileCard({ d }: { d: Dive }) {
         { label: "", color: C[1], values: link, width: 1 },
         { label: "Zastávka", color: C[1], values: stops, unit: "m", width: 3 },
       ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} strip={segs} pins={spPins(d)} marks={btns ? d.buttons.filter((b) => b.t >= 0 && b.t <= d.h.diveTimeS).map((b) => ({ t: b.t, color: b.btn === 2 ? "#ffb74d" : "#b0bec5", label: BTN_NAMES[b.btn] ?? "tlačítko" })) : undefined} extra={[{ label: "Plyn", values: gasAt }, { label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
-      <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna. Barevný pruh dole = použitý plyn. Svislé čárkované značky SP = přepnutí setpointu (? = bez potvrzené obsluhy Petrelu).
-        {d.buttons.length > 0 && <> <label className="inline"><input type="checkbox" checked={btns} onChange={(e) => setBtns(e.target.checked)} /> stisky tlačítek</label></>}</p>
+      {d.buttons.length > 0 && <div className="chart-under"><label className="inline" style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "auto" }}><input type="checkbox" checked={btns} onChange={(e) => setBtns(e.target.checked)} /> stisky tlačítek</label></div>}
+      <Desc k="profile"><p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna. Barevný pruh dole = použitý plyn. Svislé čárkované značky SP = přepnutí setpointu (? = bez potvrzené obsluhy Petrelu).</p></Desc>
     </Card>
   );
 }
@@ -785,14 +785,14 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
       </Card></div>
       <div data-chart="co2"><Co2Card d={d} focusT={fT("co2") ?? fT("effort")} warns={warns} focus={focus} /></div>
       <Card title="Dekomprese">
-        <LineChart t={s.t} series={[
+        <LineChart t={s.t} invertLeft axisUnits={{ l: "min ↓", r: "min" }} series={[
           // NDL doplňkově na pravé ose omezené na 30 min (vyšší hodnoty u horního okraje), aby deko údaje měly celé měřítko
           { label: "NDL", color: C[0], values: s.stopt.map((v, i) => (s.stop[i] > 0 || s.t[i] > d.h.diveTimeS ? null : Math.min(30, v))), unit: "min", right: true, noTip: true },
           { label: "Čas na zastávce", color: C[2], values: s.stopt.map((v, i) => (s.stop[i] > 0 && s.t[i] <= d.h.diveTimeS ? v : null)), unit: "min" },
           { label: "TTS", color: C[1], values: s.tts, unit: "min", width: 2 }, { label: "@+5", color: C[3], values: s.at5, unit: "min", dash: "4 3" },
           { label: "", color: "transparent", values: s.t.map((_, i) => (i === 0 ? 10 : null)), noTip: true }, // měřítko aspoň 0–10 min (krátké TTS nevypadá dramaticky)
         ]} extra={[{ label: "NDL", values: s.stopt.map((v, i) => (s.stop[i] > 0 || s.t[i] > d.h.diveTimeS ? "–" : v >= 99 ? "> 99 min" : `${v} min`)) }, { label: "Zastávka", values: s.stop.map((v) => (v > 0 ? `${v} m` : "–")) }]} />
-        <Desc k="deco"><p className="note"><b>NDL</b> (tenká čára, pravá osa omezená na 30 min – vyšší hodnoty jsou u horního okraje, přesná hodnota v pruhu pod grafem) – kolik minut můžeš zůstat v aktuální hloubce bez povinné zastávky. <b>Čas na zastávce</b> – zbývající čas na aktuální deko zastávce (hloubka zastávky v popisku posuvníku). <b>TTS</b> – celkový čas výstupu na hladinu včetně zastávek, kdybys začal stoupat hned. <b>@+5</b> – jaké by bylo TTS, kdybys v aktuální hloubce zůstal ještě 5 min (rozdíl proti TTS = jak rychle deko roste).</p></Desc>
+        <Desc k="deco"><p className="note"><b>Deko údaje rostou dolů</b> (levá osa, 0 nahoře), NDL nahoru – dokud máš rezervu, je NDL nahoře a deko čáry leží u horního okraje; když NDL dojde k nule, deko čáry začnou klesat. <b>NDL</b> (tenká čára, pravá osa omezená na 30 min – vyšší hodnoty jsou u horního okraje, přesná hodnota v pruhu pod grafem) – kolik minut můžeš zůstat v aktuální hloubce bez povinné zastávky. <b>Čas na zastávce</b> – zbývající čas na aktuální deko zastávce (hloubka zastávky v popisku posuvníku). <b>TTS</b> – celkový čas výstupu na hladinu včetně zastávek, kdybys začal stoupat hned. <b>@+5</b> – jaké by bylo TTS, kdybys v aktuální hloubce zůstal ještě 5 min (rozdíl proti TTS = jak rychle deko roste).</p></Desc>
       </Card>
       <Card title="Tkáně a kyslík">
         <LineChart t={s.t} bands={gfLoad.map((r) => ({ ...r, color: "#90a4ae" }))} bandLegend={gfLoad.length ? [{ color: "#90a4ae", label: "nasycování (počítač ukazuje --)" }] : []} series={[
