@@ -168,18 +168,20 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
 }
 
 type Tab = "log" | "charts" | "values" | "events";
+// přechod na sousední ponor (swipe, ‹ ›) zachová otevřenou záložku
+let carryTab: Tab | null = null;
 
 export function DiveScreen({ id }: { id: string }) {
   const st = useStore();
   const [d, setD] = useState<Dive | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("log");
+  const [tab, setTab] = useState<Tab>(() => { const t = carryTab ?? "log"; carryTab = null; return t; });
   const [focus, setFocus] = useState<ChartFocus | null>(null);
   useBackLayer(tab !== "log", () => { setTab("log"); window.scrollTo(0, 0); }); // Zpět ze záložky vede na začátek Logbooku
   useEffect(() => { const on = (e: Event) => { setFocus({ ...(e as CustomEvent<ChartFocus>).detail }); setTab("charts"); }; focusBus.addEventListener("focus", on); return () => focusBus.removeEventListener("focus", on); }, []);
   const [slide, setSlide] = useState("");
   const touch = useRef<{ x: number; y: number } | null>(null);
-  useEffect(() => { setD(null); loadDive(id).then(setD).catch((e) => setErr(e.message)); }, [id]);
+  useEffect(() => { carryTab = null; setD(null); loadDive(id).then(setD).catch((e) => setErr(e.message)); }, [id]);
   const headId = segInfo().head.get(id) || id;
   useEffect(() => { if (headId !== id) go({ t: "dive", id: headId }); }, [headId, id]);
   const vm = viewMetas();
@@ -197,16 +199,16 @@ export function DiveScreen({ id }: { id: string }) {
     if (!t0) return;
     const t = e.changedTouches[0], dx = t.clientX - t0.x, dy = t.clientY - t0.y;
     if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
-    if (dx < 0 && next) { setSlide("from-right"); go({ t: "dive", id: next.id }); }
-    else if (dx > 0 && prev) { setSlide("from-left"); go({ t: "dive", id: prev.id }); }
+    if (dx < 0 && next) { carryTab = tab; setSlide("from-right"); go({ t: "dive", id: next.id }); }
+    else if (dx > 0 && prev) { carryTab = tab; setSlide("from-left"); go({ t: "dive", id: prev.id }); }
   };
   return (
     <div className={"screen " + slide} key={id} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onAnimationEnd={() => setSlide("")}>
       <div className="dive-head">
-        <button className="btn small" disabled={!prev} onClick={() => { if (prev) { setSlide("from-left"); go({ t: "dive", id: prev.id }); } }}>‹</button>
+        <button className="btn small" disabled={!prev} onClick={() => { if (prev) { carryTab = tab; setSlide("from-left"); go({ t: "dive", id: prev.id }); } }}>‹</button>
         <div><b>Ponor {myNum(id)}</b><small>{fmtDateTime(meta.start)} · v počítači #{meta.num}</small></div>
         <button className="btn small share-btn" title="Sdílet ponor" onClick={() => shareDives([meta])}>⤴</button>
-        <button className="btn small" disabled={!next} onClick={() => { if (next) { setSlide("from-right"); go({ t: "dive", id: next.id }); } }}>›</button>
+        <button className="btn small" disabled={!next} onClick={() => { if (next) { carryTab = tab; setSlide("from-right"); go({ t: "dive", id: next.id }); } }}>›</button>
       </div>
       <div className="tabs">
         {([["log", "Logbook"], ["charts", "Grafy"], ["values", "Hodnoty"], ["events", "Události"]] as [Tab, string][]).map(([k, l]) =>
@@ -224,6 +226,7 @@ export function DiveScreen({ id }: { id: string }) {
 }
 
 const DOSE_COLOR = { sol: "#4fc3f7", man: "#ffb74d", amb: "#b39ddb", dil: "#cfd8dc" } as const;
+const DOSE_LABEL = { sol: "solenoid (P)", man: "ručně O₂", amb: "ručně O₂ nebo diluent", dil: "diluent" } as const;
 const fmtSp = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
 /** Značky přepnutí setpointu do grafů. */
 function spPins(d: Dive) {
@@ -398,7 +401,18 @@ function Co2Card({ d, focusT, warns, focus }: { d: Dive; focusT?: number; warns:
   const skip = useMemo(() => workloadSkip(d), [d]);
   // zobrazení: posuvný průměr 2 min (bez skoků na 0 mezi dávkami); bez údaje = mezera v čáře, důvod v pruhu pod grafem
   const wSm = useMemo(() => w.map((_, i) => { if (w[i] == null) return null; let a = 0, n = 0; for (let k = i; k >= 0 && s.t[i] - s.t[k] <= 60; k--) if (w[k] != null) { a += w[k]!; n++; } for (let k = i + 1; k < w.length && s.t[k] - s.t[i] <= 60; k++) if (w[k] != null) { a += w[k]!; n++; } return n ? Math.round((a / n) * 100) / 100 : null; }), [w]);
-  const wTxt = useMemo(() => wSm.map((v, i) => (s.t[i] > d.h.diveTimeS ? "–" : v != null ? `${v.toLocaleString("cs-CZ")} ×` : `– (${skip[i] || (s.depth[i] < 3 ? "u hladiny" : "klesání")})`)), [wSm, skip]);
+  // mezery do 3 min přemostit (jen zobrazení, tečkovaně)
+  const wBr = useMemo(() => {
+    const out: (number | null)[] = Array(wSm.length).fill(null);
+    let a = -1;
+    for (let i = 0; i < wSm.length; i++) {
+      if (wSm[i] == null) continue;
+      if (a >= 0 && i - a > 1 && s.t[i] - s.t[a] <= 180) for (let k = a; k <= i; k++) out[k] = Math.round((wSm[a]! + ((wSm[i]! - wSm[a]!) * (s.t[k] - s.t[a])) / (s.t[i] - s.t[a])) * 100) / 100;
+      a = i;
+    }
+    return out;
+  }, [wSm]);
+  const wTxt = useMemo(() => wSm.map((v, i) => (s.t[i] > d.h.diveTimeS ? "–" : v != null ? `${v.toLocaleString("cs-CZ")} ×` : wBr[i] != null ? `≈ ${wBr[i]!.toLocaleString("cs-CZ")} × (dopočteno)` : `– (${skip[i] || (s.depth[i] < 3 ? "u hladiny" : "klesání")})`)), [wSm, wBr, skip]);
   const ef2 = useMemo(() => effortOf(d, 5, base), [d, base]);
   const co2V = useMemo(() => co2Valid(d), [d]);
   const dens = useMemo(() => gasDensity(d), [d]);
@@ -410,16 +424,17 @@ function Co2Card({ d, focusT, warns, focus }: { d: Dive; focusT?: number; warns:
     <Card title={hasCo2 ? "CO₂ a dechová práce" : "Dechová práce"}>
       <LineChart t={s.t} focusT={focusT}
         bands={[...d.alarms.filter((a) => a.kind === "co2").map((a) => ({ from: a.start, to: a.end, color: "#ef5350", label: "Alarm CO₂ z počítače" })), ...bad.map((r) => ({ ...r, color: "#90a4ae", label: "Čidlo CO₂ nejspíš chybné" })), ...ef2.high.map((h) => ({ from: h.from, to: h.to, color: "#ffb74d", label: `Zvýšená zátěž až ${h.max}×${h.co2 ? ", nárůst CO₂" : ""}` }))]}
-        bandLegend={[...(d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : []), ...(bad.length ? [{ color: "#90a4ae", label: "čidlo nejspíš chybné" }] : []), ...(ef2.high.length ? [{ color: "#ffb74d", label: "zvýšená zátěž" }] : []), ...(vents.length ? [{ color: "#ce93d8", label: "doplnění diluentu" }] : [])]}
-        marks={vents.map((t) => ({ t, color: "#ce93d8", h: 18 }))}
+        bandLegend={[...(d.alarms.some((a) => a.kind === "co2") ? [{ color: "#ef5350", label: "alarm CO₂" }] : []), ...(bad.length ? [{ color: "#90a4ae", label: "čidlo nejspíš chybné" }] : []), ...(ef2.high.length ? [{ color: "#ffb74d", label: "zvýšená zátěž" }] : []), ]}
+        marks={vents.map((t) => ({ t, color: "#ce93d8", h: 18, label: "doplnění diluentu" }))}
         series={[
           ...(hasCo2 ? [{ label: "CO₂", color: "#ef5350", values: co2V, unit: "mbar", width: 2.5 }] : []),
           { label: "Zátěž (×)", color: "#ffb74d", values: wSm, unit: "×", width: 1.5, right: true, noTip: true },
+          { label: "zátěž dopočtená", color: "#ffb74d", values: wBr, unit: "×", width: 1.5, dash: "1 3", right: true, noTip: true },
           { label: "Hustota (g/l)", color: "#4fc3f7", values: dens, unit: "g/l", width: 1.2, dash: "4 3", right: true },
         ]}
         extra={[{ label: "Zátěž", values: wTxt }, ...(hasCo2 ? [{ label: "Surová hodnota CO₂", values: s.co2raw }] : [])]} />
       <ChartEvents warns={warns} keys={["co2", "effort"]} focus={focus} />
-      <Desc k="co2"><p className="note">{hasCo2 ? <><b>CO₂</b> ve smyčce (levá osa, mbar) je hlavní údaj. </> : null}<b>Zátěž</b> (pravá osa) = rychlost poklesu pO₂ opravená o změnu tlaku, úměrná spotřebě O₂, tedy námaze; 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Nepočítá se při klesání, u hladiny, po přepnutí SP a po ruční dávce O₂ (než se pO₂ ustálí) a 90 s po doplnění diluentu – v čáře je mezera, důvod v pruhu pod grafem. Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). <b>Hustota plynu</b> (pravá osa, g/l, čárkovaně): nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně; max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min. Fialové čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p></Desc>
+      <Desc k="co2"><p className="note">{hasCo2 ? <><b>CO₂</b> ve smyčce (levá osa, mbar) je hlavní údaj. </> : null}<b>Zátěž</b> (pravá osa) = rychlost poklesu pO₂ opravená o změnu tlaku, úměrná spotřebě O₂, tedy námaze; 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Počítá se z 3min okna bez rušených vzorků (klesání, hladina, přepnutí SP a ruční dávka O₂ do ustálení pO₂, 90 s po doplnění diluentu). Při úvodním sestupu chybí vždy – ADV přidává diluent. Mezery do 3 min jsou přemostěné tečkovaně (dopočteno), delší zůstávají prázdné; důvod v pruhu pod grafem. Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). <b>Hustota plynu</b> (pravá osa, g/l, čárkovaně): nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně; max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min. Fialové čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p></Desc>
     </Card>
   );
 }
@@ -681,7 +696,7 @@ function ProfileCard({ d }: { d: Dive }) {
         { label: "Hloubka", color: C[0], values: s.depth, unit: "m", width: 2 }, { label: "Strop", color: C[5], values: s.ceil, unit: "m", fillUp: true },
         { label: "", color: C[1], values: link, width: 1 },
         { label: "Zastávka", color: C[1], values: stops, unit: "m", width: 3 },
-      ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} strip={segs} pins={spPins(d)} marks={btns ? d.buttons.filter((b) => b.t >= 0 && b.t <= d.h.diveTimeS).map((b) => ({ t: b.t, color: b.btn === 2 ? "#ffb74d" : "#b0bec5" })) : undefined} extra={[{ label: "Plyn", values: gasAt }, { label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
+      ]} vlines={first >= 0 ? [{ t: s.t[first], to: stops[first]!, color: C[1] }] : undefined} strip={segs} pins={spPins(d)} marks={btns ? d.buttons.filter((b) => b.t >= 0 && b.t <= d.h.diveTimeS).map((b) => ({ t: b.t, color: b.btn === 2 ? "#ffb74d" : "#b0bec5", label: BTN_NAMES[b.btn] ?? "tlačítko" })) : undefined} extra={[{ label: "Plyn", values: gasAt }, { label: "Teplota", values: s.temp, unit: "°C" }, { label: "pO₂", values: s.ppo2, unit: "bar" }, { label: "TTS", values: s.tts, unit: "min" }]} />
       <p className="note">Zastávka = úseky, kdy jsi byl na dekompresní zastávce (nejvýš 3 m pod její hloubkou). Vyplněná plocha nad stropem je zakázaná zóna. Barevný pruh dole = použitý plyn. Svislé čárkované značky SP = přepnutí setpointu (? = bez potvrzené obsluhy Petrelu).
         {d.buttons.length > 0 && <> <label className="inline"><input type="checkbox" checked={btns} onChange={(e) => setBtns(e.target.checked)} /> stisky tlačítek</label></>}</p>
     </Card>
@@ -752,7 +767,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
       <ProfileCard d={d} />
       <div data-chart="po2"><Card title="pO₂ a čidla">
         {cellMode === "cal" ? (
-          <LineChart t={s.t} focusT={fT("po2")} under={cellSeg} toggle bandLegend={usedBands} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind] }))} pins={spPins(d)} bands={po2Bands} series={[
+          <LineChart t={s.t} focusT={fT("po2")} under={cellSeg} yInclude={[1.6]} hlines={[{ v: Math.max(...s.ppo2.filter((v, i) => s.t[i] <= d.h.diveTimeS)), color: "#b0bec5" }, { v: 1.6, color: "#ef5350" }]} toggle bandLegend={usedBands} marks={doses.map((x) => ({ t: x.t, color: DOSE_COLOR[x.kind], label: DOSE_LABEL[x.kind] }))} pins={spPins(d)} bands={po2Bands} series={[
             { label: "Průměr pO₂", color: C[0], values: s.ppo2, unit: "bar", width: 2 }, { label: cellName(1), color: C[1], values: cells[0], unit: "bar", width: 1 },
             { label: cellName(2), color: C[2], values: cells[1], unit: "bar", width: 1 }, { label: cellName(3), color: C[3], values: cells[2], unit: "bar", width: 1 }, { label: "Setpoint", color: C[4], values: s.sp, unit: "bar", dash: "4 3", width: 1 },
           ]} extra={depthExtra} />
@@ -795,8 +810,9 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
         <LineChart t={s.t} focusT={fT("temp")} series={[{ label: "Teplota", color: C[1], values: s.temp, unit: "°C" }, { label: "Baterie", color: C[4], values: s.bv, unit: "V", right: true }]} extra={depthExtra} />
         <ChartEvents warns={warns} keys={["temp"]} focus={focus} />
       </Card></div>
-      <Card title="Rychlost (+ = výstup)">
+      <Card title="Rychlost">
         <LineChart t={s.t} zero series={[{ label: "Rychlost", color: C[0], values: vrate, unit: "m/min" }]} extra={depthExtra} />
+        <Desc k="speed"><p className="note">Vertikální rychlost v m/min, průměr za 30 s. <b>Nad nulou výstup, pod nulou klesání</b> – čím dál od nuly, tím rychleji; zuby jsou střídání zrychlení a zpomalení. Max. výstup a klesání ve V kostce jsou z jednotlivých 5s vzorků, proto bývají vyšší než v grafu.</p></Desc>
       </Card>
       <Card title="Nasycení tkání N₂">
         <TissueMap snaps={d.tissues.map((x) => ({ t: x.t, v: x.n2 }))} end={s.t[s.t.length - 1]} />
@@ -875,7 +891,7 @@ function EventsTab({ d }: { d: Dive }) {
       {d.buttons.length ? <>
         <p>{d.buttons.length} stisků · menu otevřeno {d.buttons.filter((b) => b.from === 0xb3 && b.to === 0x06).length}× · mimo hlavní obrazovku {Math.round(summarize(d).offMainS / 60)} min</p>
         <table className="kv"><thead><tr><th>Čas</th><th>Tlačítko</th><th>Obrazovka</th></tr></thead>
-          <tbody>{d.buttons.map((b, i) => <tr key={i}><td>{b.clock}<br /><small className="muted">{b.t < 0 ? "před ponorem" : `${Math.floor(b.t / 60)}′${String(Math.round(b.t % 60)).padStart(2, "0")}″`}</small></td><td>{BTN_NAMES[b.btn] ?? `tlačítko ${b.btn}`}</td><td>{scrName(b.from)} → {scrName(b.to)}</td></tr>)}</tbody>
+          <tbody>{d.buttons.map((b, i) => <tr key={i}><td>{b.clock}<br /><small className="muted">{b.t < 0 ? "před ponorem" : tpt(b.t)}</small></td><td>{BTN_NAMES[b.btn] ?? `tlačítko ${b.btn}`}</td><td>{scrName(b.from)} → {scrName(b.to)}</td></tr>)}</tbody>
         </table>
       </> : <p className="muted">Bez záznamu o ovládání.</p>}
       <p className="note">Ze záznamů 0x51. Čas = minuta:sekunda na hodinách počítače. Petrel je zapisuje v dávkách, pořadí se řadí podle času.</p>

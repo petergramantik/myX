@@ -85,7 +85,8 @@ export function workload(d: Dive, winS = 180): (number | null)[] {
   for (let i = 0; i < n; i++) {
     D += dec[i]; N += noise[i]; T += ok[i];
     while (s.t[i] - s.t[a] > winS) { D -= dec[a]; N -= noise[a]; T -= ok[a]; a++; }
-    out.push(inDive(d, i) && !skip[i] && T >= winS * 0.4 ? Math.round(Math.max(0, D - N) / (T / 60) * 1000) / 1000 : null);
+    // i v rušeném úseku, když má okno dost čistých vzorků (rušené vzorky se do okna nepočítají)
+    out.push(inDive(d, i) && T >= winS * 0.4 ? Math.round(Math.max(0, D - N) / (T / 60) * 1000) / 1000 : null);
   }
   return out;
 }

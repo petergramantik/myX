@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.39.6";
+export const APP_VERSION = "1.40";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.40", date: "2026-11-20", title: "Grafy: osy, legenda, zátěž", items: [
+    "Jednotky u levé i pravé osy všech grafů.",
+    "Legenda odpovídá grafu: čárkované a tečkované čáry, svislé značky (dávky O₂, tlačítka, doplnění diluentu) jako svislá čárka.",
+    "Graf pO₂: osa vždy do 1,6 bar, přerušované čáry na maximu pO₂ a na 1,6 s hodnotou na ose.",
+    "Zátěž spojitější: počítá se i v rušených úsecích, když má okno dost čistých dat; mezery do 3 min přemostěné tečkovaně (dopočteno).",
+    "Při přechodu na sousední ponor zůstane otevřená stejná záložka.",
+    "Graf Rychlost: kratší název, vysvětlení v Popisu grafu.",
+  ] },
   { version: "1.39.6", date: "2026-11-20", title: "Dekomprese a hlášení CO₂", items: [
     "Graf Dekomprese: NDL tence na pravé ose omezené na 30 min, TTS, @+5 a čas na zastávce mají celé měřítko; přesné NDL v pruhu pod grafem.",
     "„Chyba CO₂ čidla (P)“ přejmenováno na „Hlášení CO₂ z počítače (P)“ – u každého výskytu hodnota CO₂ a odkaz do grafu; „ber s rezervou“ jen při nemožných hodnotách čidla.",

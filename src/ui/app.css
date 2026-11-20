@@ -425,7 +425,7 @@ details.card.sec > summary h2 { margin: 0; }
 .chart-reset { position: absolute; top: 2px; right: 2px; z-index: 3; padding: 2px 8px; font-size: 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--panel2); color: var(--accent); }
 .legend .lg-t { cursor: pointer; user-select: none; }
 .legend .lg-t.off { opacity: 0.35; text-decoration: line-through; }
-.legend .lg-band i { opacity: 0.45; border-radius: 2px; }
+.legend .lg-band i { opacity: 0.45; border-radius: 2px; width: 9px; height: 9px; }
 .tip-alarm { font-weight: 700; }
 .chart-hint { margin: 0 2px 8px; }
 .logsw { position: relative; flex: 1; min-width: 0; }
@@ -473,3 +473,5 @@ details.card.sec > summary h2 { margin: 0; }
 .zbtns button { width: 30px; height: 28px; padding: 0; border-radius: 8px; border: 1px solid var(--accent); background: var(--panel2); color: var(--accent); font-size: 17px; line-height: 1; }
 .zbtns button:disabled { border-color: var(--line); color: var(--muted, #6b7a90); opacity: 0.5; }
 .card-hr { display: flex; align-items: center; gap: 8px; } .zslot:empty { display: none; } .chart-under { display: flex; justify-content: flex-end; margin: 2px 0 6px; }
+.lg-ico { vertical-align: middle; margin-right: 4px; } .ax-unit { font-size: 9px; opacity: 0.8; }
+.legend > span { display: inline-flex; align-items: center; white-space: nowrap; }

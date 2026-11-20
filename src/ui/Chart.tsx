@@ -38,7 +38,11 @@ const fmtCs = (v: number | null | undefined, d = 2) => (v == null || Number.isNa
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}′${String(r % 60).padStart(2, "0")}″`; };
 
-export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable, focusT, under }: {
+export function LineChart({ t, series: series0, height = 190, invert, zero, markers, extra, rightInvert, xFmt, xTitle, bands, vlines, strip, pins, marks, profile, toggle, bandLegend, zoomable, focusT, under, hlines, yInclude }: {
+  /** Vodorovné přerušované čáry (levá osa) s hodnotou na ose. */
+  hlines?: { v: number; color: string }[];
+  /** Hodnoty, které má levá osa vždy obsáhnout (při celém grafu). */
+  yInclude?: number[];
   /** Prvek hned pod grafem (nad pruhem s hodnotami), např. přepínač zobrazení. */
   under?: React.ReactNode;
   /** Postavit posuvník na tento čas (odkaz z varování). */
@@ -51,7 +55,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   /** Legenda řad je klikatelná – zapnutí / vypnutí řady. */
   toggle?: boolean;
   /** Vysvětlivky pásem v legendě. */
-  bandLegend?: { color: string; label: string; off?: boolean; onClick?: () => void }[];
+  bandLegend?: { color: string; label: string; off?: boolean; onClick?: () => void; mark?: boolean }[];
   /** Zoom dvěma prsty (výřez sdílený přes ZoomCtx). */
   zoomable?: boolean;
   /** Svislé čáry od horního okraje grafu k hodnotě `to` (levá osa). */
@@ -61,7 +65,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   /** Svislé čárkované značky přes celý graf s popiskem nahoře (např. přepnutí setpointu). */
   pins?: { t: number; label: string; color: string }[];
   /** Krátké barevné značky u spodní osy (např. dávky O₂ podle druhu). */
-  marks?: { t: number; color: string; h?: number }[];
+  marks?: { t: number; color: string; h?: number; label?: string }[];
   /** Tenký barevný pruh dole (např. použitý plyn) se svislými značkami v místě přepnutí. */
   strip?: { from: number; to: number; color: string; label: string }[];
 }) {
@@ -121,7 +125,11 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
     if (hi === lo) hi = lo + 1;
     return [lo, hi + (hi - lo) * 0.05];
   };
-  const [lo, hi] = range(left, !!z), [rlo, rhi] = range(right, !rightInvert || !!z);
+  let [lo, hi] = range(left, !!z); const [rlo, rhi] = range(right, !rightInvert || !!z);
+  if (!z && yInclude?.length && left.length) { lo = Math.min(lo, ...yInclude); const mx = Math.max(...yInclude); if (mx > hi) hi = mx + (mx - lo) * 0.05; }
+  // jednotky os: z jednotek čar na dané ose
+  const uniq = (a: (string | undefined)[]) => [...new Set(a.filter((x): x is string => !!x))].join(" · ");
+  const lUnit = uniq(left.filter((x) => x.label).map((x) => x.unit)), rUnit = uniq(right.filter((x) => x.label).map((x) => x.unit));
   const pMax = profile ? Math.max(1, ...profile.filter((v, i) => v != null && vis(i)) as number[]) * 1.05 : 1;
   const x0 = win[0], x1 = win[1] > win[0] ? win[1] : win[0] + 1;
   // popisky značek (setpoint, přepnutí plynu) v pruhu nad grafem, rozložené do řádků bez překryvu
@@ -142,7 +150,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   });
   const tagH = rowEnd.length ? rowEnd.length * 11 + 3 : 0;
   height += tagH; // pruh s popisky graf nezmenšuje, přidá se nad něj
-  const m = { l: pl, r: pr, t: 8 + tagH, b: 20 };
+  const m = { l: pl, r: pr, t: 8 + tagH + (lUnit || rUnit ? 9 : 0), b: 20 };
   const X = (v: number) => m.l + ((v - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
   const Y = (v: number, a = lo, b = hi, inv = invert) => { const f = (v - a) / (b - a || 1); return inv ? m.t + f * (height - m.t - m.b) : height - m.b - f * (height - m.t - m.b); };
   /** Krátké výpadky (nejvýš 2 vzorky) se přemostí lineárně – čára se nepřeruší. */
@@ -179,6 +187,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
     return d;
   };
   const xs = xFmt ? 1 : 60;
+  const hlVis = (hlines || []).filter((h) => h.v >= lo && h.v <= hi);
   const yt = ticks(lo, hi, 4), xt = ticks(x0 / xs, x1 / xs, Math.max(2, Math.floor(W / 70)));
   const tAt = (px: number, w: [number, number]) => w[0] + ((px - m.l) / (W - m.l - m.r)) * (w[1] - w[0]);
   const pxOf = (e: React.PointerEvent) => { const r = (e.currentTarget as SVGElement).getBoundingClientRect(); return ((e.clientX - r.left) / r.width) * W; };
@@ -241,12 +250,16 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
         {yt.map((v) => (
           <g key={v}>
             <line x1={m.l} x2={W - m.r} y1={Y(v)} y2={Y(v)} className="grid" />
-            <text x={m.l - 4} y={Y(v) + 3} textAnchor="end">{fmt(v, 2)}</text>
+            {!hlVis.some((h) => Math.abs(Y(h.v) - Y(v)) < 10) && <text x={m.l - 4} y={Y(v) + 3} textAnchor="end">{fmt(v, 2)}</text>}
           </g>
         ))}
+        {hlVis.map((h, i) => { const o = hlVis.find((g, k) => k !== i && Math.abs(Y(g.v) - Y(h.v)) < 10); const dy = o ? (h.v < o.v ? 6 : -4) : 0; return <text key={"hl" + i} x={m.l - 4} y={Y(h.v) + 3 + dy} textAnchor="end" fill={h.color}>{fmt(h.v, 2)}</text>; })}
+        {lUnit && <text x={m.l - 4} y={m.t - 6} textAnchor="end" className="ax-unit">{lUnit}</text>}
+        {rUnit && <text x={W - m.r + 4} y={m.t - 6} className="ax-unit">{rUnit}</text>}
         {right.length > 0 && ticks(rlo, rhi, 4).map((v) => <text key={"r" + v} x={W - m.r + 4} y={Y(v, rlo, rhi, !!rightInvert) + 3}>{fmt(v, 2)}</text>)}
         {xt.map((v) => <text key={"x" + v} x={X(v * xs)} y={height - 5} textAnchor="middle">{xFmt ? xFmt(v) : Math.round(v) + "′"}</text>)}
         {zero && <line x1={m.l} x2={W - m.r} y1={Y(0)} y2={Y(0)} className="ref" />}
+        {hlVis.map((h, i) => <line key={"hll" + i} x1={m.l} x2={W - m.r} y1={Y(h.v)} y2={Y(h.v)} stroke={h.color} strokeWidth={1} strokeDasharray="4 4" opacity={0.8} />)}
         <g clipPath={`url(#${clipId})`}>
         {markers?.map((mt, i) => <line key={"m" + i} x1={X(mt)} x2={X(mt)} y1={xFmt ? m.t : height - m.b - 7} y2={height - m.b} className="marker" />)}
         {bands?.map((b, i) => <rect key={"b" + i} x={X(b.from)} width={Math.max(2, X(b.to) - X(b.from))} y={m.t} height={height - m.t - m.b} fill={b.color} opacity={0.2} />)}
@@ -283,13 +296,23 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
       </div>
       <div className="legend">
         {(toggle ? series0 : series).filter((s) => s.label).map((s, i) => toggle
-          ? <span key={i} className={"lg-t" + (hidden.has(s.label) ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has(s.label) ? n.delete(s.label) : n.add(s.label); setHidden(n); }}><i style={{ background: s.color }} />{s.label}</span>
-          : <span key={i}><i style={{ background: s.color }} />{s.label}</span>)}
-        {profile && <span className={"lg-t" + (hidden.has("Hloubka") ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has("Hloubka") ? n.delete("Hloubka") : n.add("Hloubka"); setHidden(n); }}><i style={{ background: "#90a4ae" }} />Hloubka</span>}
-        {bandLegend?.map((b, i) => <span key={"bd" + i} className={"lg-band" + (b.onClick ? " lg-t" : "") + (b.off ? " off" : "")} onClick={b.onClick}><i style={{ background: b.color }} />{b.label}</span>)}
+          ? <span key={i} className={"lg-t" + (hidden.has(s.label) ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has(s.label) ? n.delete(s.label) : n.add(s.label); setHidden(n); }}><LgLine c={s.color} w={s.width} dash={s.dash} op={s.right ? 0.7 : 1} />{s.label}</span>
+          : <span key={i}><LgLine c={s.color} w={s.width} dash={s.dash} op={s.right ? 0.7 : 1} />{s.label}</span>)}
+        {profile && <span className={"lg-t" + (hidden.has("Hloubka") ? " off" : "")} onClick={() => { const n = new Set(hidden); n.has("Hloubka") ? n.delete("Hloubka") : n.add("Hloubka"); setHidden(n); }}><LgLine c="#90a4ae" w={1} op={0.7} />Hloubka</span>}
+        {[...new Map((marks || []).filter((k) => k.label).map((k) => [k.label + k.color, k])).values()].map((k, i) => <span key={"mk" + i}><LgMark c={k.color} />{k.label}</span>)}
+        {bandLegend?.map((b, i) => <span key={"bd" + i} className={"lg-band" + (b.onClick ? " lg-t" : "") + (b.off ? " off" : "")} onClick={b.onClick}>{b.mark ? <LgMark c={b.color} /> : <i style={{ background: b.color }} />}{b.label}</span>)}
       </div>
     </div>
   );
+}
+
+/** Ikona čáry v legendě – stejná barva, tloušťka a přerušení jako v grafu. */
+function LgLine({ c, w = 1.5, dash, op = 1 }: { c: string; w?: number; dash?: string; op?: number }) {
+  return <svg className="lg-ico" width="18" height="10"><line x1="1" x2="17" y1="5" y2="5" stroke={c} strokeWidth={Math.max(1.5, Math.min(3, w))} strokeDasharray={dash} strokeLinecap="round" opacity={op} /></svg>;
+}
+/** Ikona svislé značky v legendě. */
+function LgMark({ c }: { c: string }) {
+  return <svg className="lg-ico" width="8" height="12"><line x1="4" x2="4" y1="1" y2="11" stroke={c} strokeWidth="2.5" /></svg>;
 }
 
 const viridis = ["#440154", "#482878", "#3e4989", "#31688e", "#26828e", "#1f9e89", "#35b779", "#6ece58", "#b5de2b", "#fde725"];
