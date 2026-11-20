@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.41";
+export const APP_VERSION = "1.41.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.41.1", date: "2026-11-20", title: "Oprava Nastavení", items: [
+    "Sekce s Workerem a klíčem se jmenuje „Synchronizace“ – v Nastavení je jen jedna sekce „Dev“ (přepínač dev verze).",
+  ] },
   { version: "1.41", date: "2026-11-20", title: "Dev verze", items: [
     "Nastavení → Dev: přepnutí do testovací verze s novinkami ve vývoji (štítek DEV v záhlaví).",
     "Dev verze pracuje na vlastní kopii dat (vlastní i cizí logy, nastavení), nesynchronizuje a do běžné verze nic nepřenese; kopii jde obnovit z běžné verze.",
