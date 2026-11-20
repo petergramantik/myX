@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.8";
+export const APP_VERSION = "1.42-dev.9";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.9", date: "2026-11-20", title: "Hotfix 1.41.3 v dev", items: [
+    "Převzat hotfix 1.41.3: přepočet údajů všech ponorů (tlaky z vysílačů i u dříve načtených logů).",
+  ] },
   { version: "1.42-dev.8", date: "2026-11-20", title: "Hotfix 1.41.2 v dev", items: [
     "Převzat hotfix 1.41.2: import přeskočí nečitelné ponory, tlaky z pojmenovaných vysílačů AI.",
   ] },
@@ -36,6 +39,9 @@ export const RELEASES: Release[] = [
     "pSCR: odhad pO₂ ve smyčce (?) podle zásobního plynu a poměru (výchozí 1:8) s varováním na možnou hypoxii.",
     "Srovnání porovná jen veličiny, které mají oba ponory.",
     "Dekodéry logů oddělené podle výrobce (příprava na další počítače).",
+  ] },
+  { version: "1.41.3", date: "2026-11-20", title: "Přepočet ponorů", items: [
+    "Po aktualizaci se znovu přepočítají údaje všech ponorů (i cizích logů), takže tlaky z vysílačů se ukážou i u logů načtených před verzí 1.41.2.",
   ] },
   { version: "1.41.2", date: "2026-11-20", title: "Import a tlaky z vysílačů", items: [
     "Import nepřestane na ponoru, který nejde přečíst – přeskočí ho, načte ostatní a nahlásí čísla přeskočených.",
