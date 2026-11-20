@@ -8,7 +8,7 @@ import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerNa
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { IS_DEV, copyProdToDev, devCopiedAt } from "../app/db";
-import { ownLb, rigChoices, setComputerRig } from "../app/store";
+import { openTempOwn, ownLb, rigChoices, setComputerRig } from "../app/store";
 import type { Rig } from "../core/rig";
 import { Card, KV, fmtDate, go, tab, useBackLayer, useStore } from "./common";
 import { ImportButton } from "./Overview";
@@ -271,6 +271,7 @@ export function GuestCard() {
             <div className="row">
               {open ? <button className="btn primary" onClick={() => closeGuest()}>Zavřít</button>
                 : <button className="btn primary" onClick={async () => { await openGuest(g.log); tab({ t: "home" }); }}>Otevřít (jen čtení)</button>}
+              {IS_DEV && <button className="btn" onClick={async () => { await openTempOwn(g.log); tab({ t: "home" }); }}>Jako můj (dočasně)</button>}
               {g.common ? <button className="btn" onClick={() => tab({ t: "hub", sub: "cmp", who: who || logName(g.log) })}>Srovnání</button> : null}
             </div>
           </section>

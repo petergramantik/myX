@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.2";
+export const APP_VERSION = "1.42-dev.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.3", date: "2026-11-20", title: "Cizí log jako můj (dev)", items: [
+    "Dev verze: cizí log jde otevřít jako vlastní (přepínač logů v záhlaví, DB → Logy ostatních); změny jen v paměti do restartu, žlutý pruh s upozorněním a „Zpět na můj log“.",
+  ] },
   { version: "1.42-dev.2", date: "2026-11-20", title: "Scrubber a spotřeba bez čidel (dev)", items: [
     "Scrubber na Přehledu u každého rebreatheru; bez časovače v logu ruční datum naplnění a výdrž náplně u počítače, zbývající čas ze součtu ponorů.",
     "Spotřeba plynu u ponorů bez vysílačů: ruční lahev, objem a tlak před a po.",

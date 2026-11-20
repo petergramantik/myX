@@ -22,6 +22,7 @@ export interface State {
   sync: { state: "off" | "idle" | "busy" | "error"; msg: string; at: number };
   toast: string | null;
   guest: GuestLog | null;  // prohlížený cizí log (jen pro čtení); null = vlastní data
+  /** dev: cizí log otevřený „jako můj“ – změny jen v paměti do restartu */ temp?: GuestLog | null;
   guestRev: number;        // mění se při přidání / odebrání cizího logu (přenačtení návrhů)
 }
 /** Cizí log uložený v samostatné databázi, nikdy se nesynchronizuje. */
@@ -49,7 +50,7 @@ export const myNum = (id: string) => diveHeads().findIndex((m) => m.id === segIn
 // ---------- dekódované ponory (mezipaměť v paměti)
 const diveCache = new Map<string, Promise<Dive>>();
 function loadPart(id: string): Promise<Dive> {
-  return db.get<RawDive>("raw", id, st.guest ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeAny(r); });
+  return db.get<RawDive>("raw", id, st.guest || st.temp ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeAny(r); });
 }
 export function loadDive(id: string): Promise<Dive> {
   const parts = segInfo().parts.get(id);
@@ -840,6 +841,28 @@ export async function openGuest(log: GuestLog) {
   diveCache.clear();
   // nastavení (limity, objemy lahví) zůstávají vlastní, čidla a baterie cizí log nemá; jména přeložit podle mých přiřazení
   set({ guest: g.log, metas: g.metas, lb: withAliases({ ...g.lb, settings: own.lb.settings }, own.lb) });
+}
+let tempSaved: { metas: Meta[]; lb: Logbook } | null = null;
+/** Dev verze: cizí log otevřený jako vlastní. Zápisy do úložiště se vypnou – změny platí jen do restartu aplikace. */
+export async function openTempOwn(log: GuestLog) {
+  if (!db.IS_DEV) return;
+  if (st.guest) closeGuest();
+  const ix = await guestIndexLoad();
+  const g = ix.find((x) => x.log.id === log.id || x.log.logs?.some((l) => l.id === log.id));
+  if (!g) { toast("Cizí log se nepodařilo načíst"); return; }
+  if (!tempSaved) tempSaved = { metas: st.metas, lb: st.lb };
+  db.setMemOnly(true);
+  diveCache.clear();
+  set({ temp: g.log, metas: g.metas, lb: { ...structuredClone(g.lb), settings: tempSaved.lb.settings } });
+}
+/** Zpět na můj log – dočasné změny se zahodí. */
+export function closeTempOwn() {
+  if (!tempSaved) return;
+  if (st.guest) closeGuest();
+  diveCache.clear();
+  set({ temp: null, metas: tempSaved.metas, lb: tempSaved.lb });
+  tempSaved = null;
+  db.setMemOnly(false);
 }
 export function closeGuest() {
   if (!own) return;

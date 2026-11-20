@@ -13,7 +13,7 @@ import { AboutScreen, SettingsScreen } from "./ui/Settings";
 import { DraftScreen } from "./ui/Draft";
 import { CellsScreen } from "./ui/Cells";
 import { BatteriesScreen } from "./ui/Batteries";
-import { closeGuest, createDraft, guestIndexLoad, logName, myDisplayName, openGuest, ownerName, type GuestLog } from "./app/store";
+import { closeGuest, closeTempOwn, openTempOwn, createDraft, guestIndexLoad, logName, myDisplayName, openGuest, ownerName, type GuestLog } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
 import { Co2Screen } from "./ui/Cells";
 import { CompareHub, CompareScreen } from "./ui/Compare";
@@ -49,7 +49,7 @@ function LogSwitch({ label }: { label: string }) {
   const [list, setList] = useState<{ log: GuestLog; n: number }[]>([]);
   useEffect(() => { if (open) guestIndexLoad().then((ix) => setList(ix.map((g) => ({ log: g.log, n: g.metas.length })))); }, [open, st.guestRev]);
   const myName = myDisplayName() || "Můj log";
-  const cur = st.guest ? logName(st.guest) : myName;
+  const cur = st.guest ? logName(st.guest) : st.temp ? `${logName(st.temp)} (jako můj)` : myName;
   const isCur = (l: GuestLog) => !!st.guest && (st.guest.id === l.id || (l.logs || [l]).some((x) => x.id === st.guest!.id));
   return (
     <div className="logsw">
@@ -57,8 +57,10 @@ function LogSwitch({ label }: { label: string }) {
       {open && <>
         <div className="logsw-bg" onClick={() => setOpen(false)} />
         <div className="logsw-m">
-          <button className={!st.guest ? "on" : ""} onClick={() => { setOpen(false); if (st.guest) closeGuest(); }}>{!st.guest ? "✓ " : ""}{myName}{myDisplayName() ? <small>můj log</small> : null}</button>
+          <button className={!st.guest && !st.temp ? "on" : ""} onClick={() => { setOpen(false); if (st.guest) closeGuest(); if (st.temp) closeTempOwn(); }}>{!st.guest && !st.temp ? "✓ " : ""}{myName}{myDisplayName() ? <small>můj log</small> : null}</button>
           {list.map((g) => <button key={g.log.id} className={isCur(g.log) ? "on" : ""} onClick={async () => { setOpen(false); if (!isCur(g.log)) await openGuest(g.log); }}>{isCur(g.log) ? "✓ " : ""}{logName(g.log)} <small>{g.n} ponorů · jen čtení</small></button>)}
+          {IS_DEV && list.length > 0 && <small className="muted logsw-e">Dev – otevřít jako můj (změny jen do restartu):</small>}
+          {IS_DEV && list.map((g) => <button key={"t" + g.log.id} className={st.temp?.id === g.log.id ? "on" : ""} onClick={async () => { setOpen(false); await openTempOwn(g.log); }}>{st.temp?.id === g.log.id ? "✓ " : ""}{logName(g.log)}<small>jako můj · dočasně</small></button>)}
           {!list.length && <small className="muted logsw-e">Žádné uložené cizí logy (DB → Logy ostatních).</small>}
         </div>
       </>}
@@ -160,6 +162,12 @@ function App() {
         </button>
         {!st.guest && <button className={"plus" + (busy ? " busy" : "")} onClick={newDive} aria-label="Nový ponor">＋</button>}
       </header>
+      {st.temp && !st.guest && (
+        <div className="guestbar tempbar">
+          <span>Log <b>{logName(st.temp)}</b> označený jako tvůj – jakékoli změny jsou jen dočasné, po restartu aplikace zmizí.</span>
+          <button className="btn small" onClick={() => { closeTempOwn(); tab({ t: "home" }); }}>Zpět na můj log</button>
+        </div>
+      )}
       {st.guest && (
         <div className="guestbar">
           <span>Prohlížíš log: <b>{logName(st.guest)}</b> · {st.guest.count} ponorů</span>

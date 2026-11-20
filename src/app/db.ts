@@ -79,15 +79,22 @@ export async function get<T>(store: string, key: string, name?: string): Promise
   const db = await open(name);
   return req(db.transaction(store).objectStore(store).get(key) as IDBRequest<T | undefined>);
 }
+/** Dočasný režim (dev: cizí log „jako můj“): zápisy se neprovádějí, změny žijí jen v paměti aplikace. */
+let memOnly = false;
+export const setMemOnly = (v: boolean) => { memOnly = v; };
+export const isMemOnly = () => memOnly;
 export async function put(store: string, value: unknown, key?: string, name?: string): Promise<void> {
+  if (memOnly) return;
   const db = await open(name);
   await req(db.transaction(store, "readwrite").objectStore(store).put(value, key));
 }
 export async function del(store: string, key: string, name?: string): Promise<void> {
+  if (memOnly) return;
   const db = await open(name);
   await req(db.transaction(store, "readwrite").objectStore(store).delete(key));
 }
 export async function clearAll(): Promise<void> {
+  if (memOnly) return;
   const db = await open();
   for (const s of ["raw", "meta", "kv"]) await req(db.transaction(s, "readwrite").objectStore(s).clear());
 }
