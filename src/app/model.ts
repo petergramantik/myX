@@ -52,7 +52,7 @@ export interface Computer { id: string; model: string; buddyId?: string; primary
   /** poměr dávkování pSCR (1 : N) */ pscrRatio?: number;
   /** scrubber bez časovače v logu: ruční datum naplnění (s, místní čas) a výdrž náplně (min) */ scrubFill?: number; scrubMin?: number; /** změny u jednotlivých ponorů */ dives?: Record<string, { rig?: Rig; supplyO2?: number }>; updated: number }
 
-export const META_V = 26;
+export const META_V = 27;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; cnum?: number; comp?: string; /** spojený ponor: všechny záznamy (jen v zobrazení) */ parts?: Meta[]; alt?: string; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };

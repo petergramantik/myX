@@ -1,4 +1,5 @@
 // O₂ čidla: citlivost (mV/bar) z každého ponoru, linearita, rychlost reakce, odhad výměn a kalibrací.
+import { isCC } from "./rig";
 import type { Dive } from "./shearwater";
 import { cellCalibration, injections } from "./analysis";
 
@@ -12,6 +13,8 @@ export interface CellDive {
 const med = (a: number[]) => { if (!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
 
 export function cellsOfDive(d: Dive): CellDive {
+  // bez čidel O₂ (Gauge, OC…): pole mV v logu nejsou čidla – nic nevyhodnocovat
+  if (!isCC(d.h)) return { mvBar: [null, null, null], lin: [null, null, null], early: [null, null, null] };
   const cal = cellCalibration(d);
   const mvs = [d.s.mv1, d.s.mv2, d.s.mv3];
   const lin = mvs.map((mv, k) => {

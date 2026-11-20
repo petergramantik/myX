@@ -291,7 +291,7 @@ function DiveTags({ m }: { m: Meta }) {
 /** Tagy ponoru = kategorie oranžových a červených varování ze záhlaví detailu (včetně čidel z historie). */
 function diveTagsOfMeta(metas: Meta[], m: Meta, th: Parameters<typeof cellDiveWarnings>[2]): DiveTag[] {
   const idx = metas.findIndex((x) => x.id === m.id);
-  const cw = idx >= 0 ? cellDiveWarnings(metas, idx, th) : [];
+  const cw = idx >= 0 && isCC(m.h) ? cellDiveWarnings(metas, idx, th) : []; // čidla jen u CC ponorů
   const hi = po2HiLevel(m.sum, th);
   const late = th.spLateWarn && m.sum.spLate != null && m.sum.spLate > (th.spLateMin ?? 2);
   return diveTagsOf([...(m.warns || []), ...cw, ...(hi ? [{ level: hi, title: "Vysoké pO₂ (vlastní detekce)" }] : []), ...(late ? [{ level: "warn", title: "Pozdní přepnutí na vysoký setpoint" }] : [])]);
@@ -627,7 +627,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
     const prev = same[k - 1], next = same[k + 1];
     const extra = [prev && meta.h.start - prev.h.end < 36 * 3600 && !bad(prev) ? "Předchozí ponor byl v pořádku – typicky orosení po předchozím ponoru, obvykle do druhého dne vyschne." : "", bad(next) ? "Opakuje se i v dalším ponoru – zvaž výměnu čidla." : ""].filter(Boolean).join(" ");
     return extra ? { ...w, text: w.text.replace(" Tyto úseky", ` ${extra} Tyto úseky`) } : w;
-  }), ...cellDiveWarnings(st.metas, idx, lb.settings.th), ...(d ? rigAlerts(d, lb.settings.th) : [])]);
+  }), ...(isCC(meta.h) ? cellDiveWarnings(st.metas, idx, lb.settings.th) : []), ...(d ? rigAlerts(d, lb.settings.th) : [])]);
   // dlaždice Scrubber: před → po ponoru · stáří náplně; barva podle zbývajícího času, stáří a hlášení CO₂
   const scr = (() => {
     const th = lb.settings.th, lim = th.scrubLeftMin ?? 90;
