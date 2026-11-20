@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.39.5";
+export const APP_VERSION = "1.39.6";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.39.6", date: "2026-11-20", title: "Dekomprese a hlášení CO₂", items: [
+    "Graf Dekomprese: NDL tence na pravé ose omezené na 30 min, TTS, @+5 a čas na zastávce mají celé měřítko; přesné NDL v pruhu pod grafem.",
+    "„Chyba CO₂ čidla (P)“ přejmenováno na „Hlášení CO₂ z počítače (P)“ – u každého výskytu hodnota CO₂ a odkaz do grafu; „ber s rezervou“ jen při nemožných hodnotách čidla.",
+  ] },
   { version: "1.39.5", date: "2026-11-20", title: "Ovládání grafů", items: [
     "Tlačítka − 0 + jsou v řádku s nadpisem grafu, graf má zase celou šířku.",
     "Přepínač pO₂ / mV je pod grafem vpravo; první graf se jmenuje „Profil a strop“.",

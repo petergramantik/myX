@@ -786,8 +786,14 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
     const nA = d.alarms.filter((a) => a.label.startsWith("Vyřazené čidlo")).length;
     out.push({ level: "warn", title: `Vyřazené čidlo${dc ? " " + dc.cell : ""} (P)`, text: withSteps(`Od ${tpt(t0)}${outW?.how === "open" || !outW ? " do konce ponoru" : ` do ${mmss(outW.end!)}`}${dc ? ` – čidlo ${dc.cell} se odchylovalo o ${dc.pct} %` : ""}${nA > 1 ? `, alarm opakován ${nA}×` : ""}. Počítač ho pravděpodobně vyřadil z hlasování.`, resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th)), blocks: [oneBlock(d, t0, outW?.end ?? outA?.end ?? null, "po2", resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th))] });
   }
-  const co2s = cws.filter((w) => w.kind === "co2sensor"), co2sA = d.alarms.filter((a) => a.label.startsWith("Chyba CO₂"));
-  if (co2s.length || co2sA.length) out.push({ level: "warn", title: `Chyba CO₂ čidla (P)${co2s.length > 1 ? ` – ${co2s.length}×` : ""}`, text: `${co2s.length ? `Hlášení v ${co2s.map((w) => `${mmss(w.start)} (${ackTxt(w)})`).join(", ")}` : `Alarm v ${co2sA.map((a) => mmss(a.start)).join(", ")}`}. Hodnoty CO₂ v tomto ponoru ber s rezervou.`, blocks: [...co2s.map((w) => oneBlock(d, w.start, w.end, "co2", [])), ...(co2s.length ? [] : co2sA.map((x) => oneBlock(d, x.start, x.end, "co2", [])))].map((b, k, all) => ({ ...b, head: all.length > 1 ? `${k + 1}. ${tpt(b.from)}` : "" })) });
+  // „Hlášení CO₂ z počítače“ – přesný význam neznámý (P); Radek: „něco s CO₂“. U výskytu hodnota CO₂ v tu chvíli.
+  const co2s = cws.filter((w) => w.kind === "co2sensor"), co2sA = d.alarms.filter((a) => a.label.startsWith("Hlášení CO₂"));
+  if (co2s.length || co2sA.length) {
+    const cAt = (t: number) => { const i = d.s.t.findIndex((x) => x >= t), v = i < 0 ? null : d.s.co2[i]; return v == null ? "" : `, CO₂ ${v.toLocaleString("cs-CZ", { maximumFractionDigits: v < 10 ? 1 : 0 })} mbar`; };
+    const occ = co2s.length ? co2s.map((w) => `${tpt(w.start)}${cAt(w.start)} (${ackTxt(w)})`) : co2sA.map((a) => `${tpt(a.start)}${cAt(a.start)}`);
+    const blocks = (co2s.length ? co2s.map((w) => oneBlock(d, w.start, w.end, "co2", [])) : co2sA.map((x) => oneBlock(d, x.start, x.end, "co2", []))).map((b, k) => ({ ...b, head: `${occ[k]}` }));
+    out.push({ level: "warn", title: `Hlášení CO₂ z počítače (P)${occ.length > 1 ? ` – ${occ.length}×` : ""}`, text: `${occ.length > 1 ? "Výskyty" : "Výskyt"}: ${occ.join("; ")}. Přesný text hlášení z logu neznáme – souvisí s CO₂ (čidlo nebo vysoká hodnota).${co2Bad.length ? " Čidlo zároveň ukazovalo nemožné hodnoty – hodnoty CO₂ v tomto ponoru ber s rezervou." : ""}`, blocks });
+  }
   const batW = cws.find((w) => w.kind === "battery");
   if (batW) out.push({ level: "warn", title: "Slabá baterie (P)", text: withSteps(`Počítač hlásil slabou baterii v ${mmss(batW.start)}, ${ackTxt(batW)}.`, resolutionSteps(d, batW.start, batW.end, "other", th)), blocks: [oneBlock(d, batW.start, batW.end, "temp", resolutionSteps(d, batW.start, batW.end, "other", th))] });
   const solA = d.alarms.filter((a) => a.label.startsWith("Porucha solenoidu"));

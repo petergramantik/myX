@@ -68,7 +68,7 @@ const ALARM_BITS: { kind: Alarm["kind"]; label: string; byte: number; bit: numbe
   { kind: "po2low", label: "Nízké pO₂", byte: 3, bit: 0x40 },
   { kind: "po2high", label: "Vysoké pO₂", byte: 3, bit: 0x80 },
   { kind: "other", label: "Vyřazené čidlo (P)", byte: 3, bit: 0x20 }, // P: 9. 12. 2024 – pomalé čidlo 3 po přepnutí SP, opakuje se do konce ponoru
-  { kind: "other", label: "Chyba CO₂ čidla (P)", byte: 2, bit: 0x02 },
+  { kind: "other", label: "Hlášení CO₂ z počítače (P)", byte: 2, bit: 0x02 },
   { kind: "other", label: "Porucha solenoidu / baterie v hlavě (P)", byte: 3, bit: 0x10 }, // P: Laďa 9. 5. 2026 – selhal solenoid (baterie v hlavě), dál jen ruční O₂ // P: souběh s nesmyslnými hodnotami CO₂ (Radek 26. 10. 2026)
 ];
 

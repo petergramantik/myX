@@ -14,8 +14,8 @@ export const WARN_BITS: { byte: number; bit: number; kind: CompWarnKind; label: 
   { byte: 7, bit: 0x40, kind: "co2", label: "CO₂", c: "✓" },
   { byte: 6, bit: 0x10, kind: "cellout", label: "Vyřazené čidlo", c: "P" },
   { byte: 6, bit: 0x40, kind: "battery", label: "Slabá baterie", c: "P" },
-  { byte: 6, bit: 0x01, kind: "co2sensor", label: "Chyba CO₂ čidla", c: "P" },
-  { byte: 6, bit: 0x02, kind: "co2sensor", label: "Chyba CO₂ čidla", c: "P" },
+  { byte: 6, bit: 0x01, kind: "co2sensor", label: "Hlášení CO₂ z počítače", c: "P" },
+  { byte: 6, bit: 0x02, kind: "co2sensor", label: "Hlášení CO₂ z počítače", c: "P" },
 ];
 /** Obecný příznak „varování na displeji“ – sám nic neznamená. */
 const GENERIC = { byte: 3, bit: 0x02 };

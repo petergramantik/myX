@@ -771,11 +771,13 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
       <div data-chart="co2"><Co2Card d={d} focusT={fT("co2") ?? fT("effort")} warns={warns} focus={focus} /></div>
       <Card title="Dekomprese">
         <LineChart t={s.t} series={[
-          { label: "NDL", color: C[0], values: s.stopt.map((v, i) => (s.stop[i] > 0 || s.t[i] > d.h.diveTimeS ? null : v)), unit: "min" },
+          // NDL doplňkově na pravé ose omezené na 30 min (vyšší hodnoty u horního okraje), aby deko údaje měly celé měřítko
+          { label: "NDL", color: C[0], values: s.stopt.map((v, i) => (s.stop[i] > 0 || s.t[i] > d.h.diveTimeS ? null : Math.min(30, v))), unit: "min", right: true, noTip: true },
           { label: "Čas na zastávce", color: C[2], values: s.stopt.map((v, i) => (s.stop[i] > 0 && s.t[i] <= d.h.diveTimeS ? v : null)), unit: "min" },
           { label: "TTS", color: C[1], values: s.tts, unit: "min", width: 2 }, { label: "@+5", color: C[3], values: s.at5, unit: "min", dash: "4 3" },
-        ]} extra={[{ label: "Zastávka", values: s.stop.map((v) => (v > 0 ? `${v} m` : "–")) }]} />
-        <Desc k="deco"><p className="note"><b>NDL</b> – kolik minut můžeš zůstat v aktuální hloubce bez povinné zastávky (99 = víc než 99). <b>Čas na zastávce</b> – zbývající čas na aktuální deko zastávce (hloubka zastávky v popisku posuvníku). <b>TTS</b> – celkový čas výstupu na hladinu včetně zastávek, kdybys začal stoupat hned. <b>@+5</b> – jaké by bylo TTS, kdybys v aktuální hloubce zůstal ještě 5 min (rozdíl proti TTS = jak rychle deko roste).</p></Desc>
+          { label: "", color: "transparent", values: s.t.map((_, i) => (i === 0 ? 10 : null)), noTip: true }, // měřítko aspoň 0–10 min (krátké TTS nevypadá dramaticky)
+        ]} extra={[{ label: "NDL", values: s.stopt.map((v, i) => (s.stop[i] > 0 || s.t[i] > d.h.diveTimeS ? "–" : v >= 99 ? "> 99 min" : `${v} min`)) }, { label: "Zastávka", values: s.stop.map((v) => (v > 0 ? `${v} m` : "–")) }]} />
+        <Desc k="deco"><p className="note"><b>NDL</b> (tenká čára, pravá osa omezená na 30 min – vyšší hodnoty jsou u horního okraje, přesná hodnota v pruhu pod grafem) – kolik minut můžeš zůstat v aktuální hloubce bez povinné zastávky. <b>Čas na zastávce</b> – zbývající čas na aktuální deko zastávce (hloubka zastávky v popisku posuvníku). <b>TTS</b> – celkový čas výstupu na hladinu včetně zastávek, kdybys začal stoupat hned. <b>@+5</b> – jaké by bylo TTS, kdybys v aktuální hloubce zůstal ještě 5 min (rozdíl proti TTS = jak rychle deko roste).</p></Desc>
       </Card>
       <Card title="Tkáně a kyslík">
         <LineChart t={s.t} bands={gfLoad.map((r) => ({ ...r, color: "#90a4ae" }))} bandLegend={gfLoad.length ? [{ color: "#90a4ae", label: "nasycování (počítač ukazuje --)" }] : []} series={[
