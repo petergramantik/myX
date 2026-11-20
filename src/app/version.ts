@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.6";
+export const APP_VERSION = "1.42-dev.7";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.7", date: "2026-11-20", title: "Převzaté názvy (dev)", items: [
+    "U logu otevřeného „jako můj“ se u převzatých lokalit a buddy ukazuje jméno majitele zdrojového logu (např. Radek), ne model počítače.",
+  ] },
   { version: "1.42-dev.6", date: "2026-11-20", title: "Název počítače (dev)", items: [
     "U logu otevřeného „jako můj“ se u scrubberu a baterie ukazuje správný model počítače (ne Petrel); obrazovka baterií má název podle počítače; baterie hlavy jen u CC ponorů.",
   ] },

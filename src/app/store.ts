@@ -720,8 +720,13 @@ export async function buddyDivesFor(m: Meta): Promise<{ log: GuestLog; meta: Met
 export const myDisplayName = (): string | undefined => ownLb().settings.myName;
 export const logName = (log: GuestLog): string => ownerName(log) || log.model || "Cizí log";
 export const ownerName = (log: GuestLog): string | null => {
-  const lb = ownLb(); const c = log.serial ? lb.computers?.[log.serial] : undefined;
-  return c?.buddyId ? lb.buddies[c.buddyId]?.name ?? null : null;
+  // majitel je v mém logbooku – i když je cizí log otevřený „jako můj“ (dev)
+  for (const lb of [ownLb(), tempSaved?.lb]) {
+    const c = lb && log.serial ? lb.computers?.[log.serial] : undefined;
+    const n = c?.buddyId ? lb!.buddies[c.buddyId]?.name : undefined;
+    if (n) return n;
+  }
+  return null;
 };
 /** Přiřadí cizí počítač (sériové číslo) buddymu; nové jméno založí jako buddyho. Doplní buddyho ke společným ponorům. */
 export async function setComputerOwner(log: GuestLog, buddy: { id?: string; name?: string } | null) {
