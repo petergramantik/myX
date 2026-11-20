@@ -387,7 +387,7 @@ function ChartEvents({ warns, keys, focus }: { warns: Alert[]; keys: string[]; f
     <div className="chart-ev">
       <button className="ev-head" onClick={() => set(!open)}>{open ? "▾" : "▸"} Události ({rows.length})</button>
       {open && rows.map(({ a, b, txt }, i) => (
-        <p key={i} className={"small c-" + a.level + (mine && focus!.from === b.from ? " ev-on" : "")} onClick={() => showInChart(b)}>• {/^\d+′\d+″/.test(txt) ? "" : tpt(b.from) + " "}{a.title.replace(/ – \d+×$/, "")}: {txt}</p>
+        <p key={i} className={"small c-" + a.level + (mine && focus!.from === b.from ? " ev-on" : "")} onClick={() => showInChart(b)}><span className="ev-dot">•</span>{/^\d+′\d+″/.test(txt) ? "" : tpt(b.from) + " "}{a.title.replace(/ – \d+×$/, "")}: {txt}</p>
       ))}
     </div>
   );
