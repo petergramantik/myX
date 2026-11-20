@@ -97,8 +97,8 @@ export function BLSwitch({ on }: { on: "buddies" | "sites" }) {
   );
 }
 
-export function Tiles({ items, cols, cls }: { items: [string, React.ReactNode, (() => void)?][]; cols?: number; cls?: Record<string, string> }) {
-  return <div className={"tiles" + (cols === 2 ? " two" : "")}>{items.map(([k, v, on]) => <div className={"tile" + (on ? " link" : "") + (cls?.[k] ? " " + cls[k] : "")} key={k} onClick={on}><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>;
+export function Tiles({ items, cols, cls, hide }: { items: [string, React.ReactNode, (() => void)?][]; cols?: number; cls?: Record<string, string>; hide?: string[] }) {
+  return <div className={"tiles" + (cols === 2 ? " two" : "")}>{items.filter(([k]) => !hide?.includes(k)).map(([k, v, on]) => <div className={"tile" + (on ? " link" : "") + (cls?.[k] ? " " + cls[k] : "")} key={k} onClick={on}><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>;
 }
 
 export function KV({ rows }: { rows: [string, React.ReactNode, string?][] }) {

@@ -1,3 +1,4 @@
+import { isCC } from "../core/rig";
 import { useEffect, useRef, useState } from "react";
 import { alerts, scrubberInfo } from "../core/analysis";
 import { compName, createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
@@ -42,10 +43,11 @@ function Motto() {
   const b = useBatteries();
   if (mottoHidden || st.lb.settings.motto === false || !st.metas.length) return null;
   const hide = () => { mottoHidden = true; force((x) => x + 1); };
-  const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), st.lb.settings.th, st.guest ? null : st.lb.settings.manualFill);
+  const ccH = st.metas.filter((m) => isCC(m.h)).map((m) => m.h); // scrubber a čidla jen u CC ponorů
+  const sc = ccH.length ? scrubberInfo(ccH, localNow(), st.lb.settings.th, st.guest ? null : st.lb.settings.manualFill) : null;
   const lv: string[] = [];
   if (sc) lv.push(scrubLevel(sc, st.lb.settings.th.scrubDays).lvl);
-  if (c.ccr.length) c.status.forEach((s) => lv.push(s.level));
+  if (c.ccr.length && ccH.length) c.status.forEach((s) => lv.push(s.level));
   b.petrelAlerts.forEach((a) => lv.push(a.level));
   b.head.forEach((x) => x.reasons.length && lv.push("warn"));
   const worst = lv.includes("bad") ? "bad" : lv.includes("warn") ? "warn" : "ok";
@@ -130,12 +132,14 @@ export function OverviewScreen() {
   const near = nearestSite();
   const here = near && near.km <= 2 ? near.site : null;
   const totalMin = st.metas.reduce((a, m) => a + m.h.diveTimeS, 0) / 60;
+  // scrubber, čidla, lahve, CO₂ jen u logu s ponory v CC módu (Gauge / OC je nemá)
+  const cc = st.metas.some((m) => isCC(m.h));
   const longest = st.metas.reduce((b, m) => (m.h.diveTimeS > b.h.diveTimeS ? m : b), st.metas[0]);
   return (
     <div className="screen">
       <Motto />
-      <ScrubberTile />
-      <CellTiles />
+      {cc && <ScrubberTile />}
+      {cc && <CellTiles />}
       <BatteryTiles />
 
 
@@ -156,7 +160,7 @@ export function OverviewScreen() {
           {lastNote?.siteId && lb.sites[lastNote.siteId]
             ? <p className="last-site link" onClick={() => go({ t: "site", id: lastNote.siteId! })}>📍 {lb.sites[lastNote.siteId].name}</p>
             : <p className="last-site muted link" onClick={() => go({ t: "dive", id: last.id })}>lokalita nezadaná ›</p>}
-          <Tiles items={[
+          <Tiles hide={isCC(last.h) ? [] : ["Diluent", "O₂", "Max. CO₂"]} items={[
             ["Hloubka", <>{num(last.h.maxDepth)} m<small className="sub">prům. {num(last.sum.avgDepth)} m</small></>],
             ["Doba", <><span className="toggle" onClick={() => setHmDur(!hmDur)}>{hmDur ? hm(last.h.diveTimeS / 60) : `${Math.round(last.h.diveTimeS / 60)} min`}</span><small className="sub">{last.sum.decoMin ? `deko ${last.sum.decoMin} min` : "bez deko"}</small></>],
             ["Diluent", <>{hasExt(last, lastNote, "dil") && <span className="extflag">EXT</span>}<span className="nw">{num(last.sum.dilStart, 0)} → {num(last.sum.dilEnd, 0)}</span><small className="sub">bar</small></>],
@@ -206,8 +210,8 @@ function BatteryMini() {
   const h = b.last?.h;
   return (
     <div className="batmini">
-      <div><span>Petrel</span><br />{h ? `${h.batVStart.toFixed(2).replace(".", ",")} → ${h.batVEnd.toFixed(2).replace(".", ",")} V` : "–"}</div>
-      {!b.guest && b.head.map((x) => <div key={x.pos}><span>Hlava {x.pos}</span>{x.cur ? `${num(x.minutes / 60, 1)} h` : "–"}</div>)}
+      <div><span>{h ? compName(h.serial) : "Počítač"}</span><br />{h ? `${h.batVStart.toFixed(2).replace(".", ",")} → ${h.batVEnd.toFixed(2).replace(".", ",")} V` : "–"}</div>
+      {!b.guest && h && isCC(h) && b.head.map((x) => <div key={x.pos}><span>Hlava {x.pos}</span>{x.cur ? `${num(x.minutes / 60, 1)} h` : "–"}</div>)}
     </div>
   );
 }

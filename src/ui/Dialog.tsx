@@ -15,7 +15,7 @@ export function DialogHost() {
       <div className="dlg card" onClick={(e) => e.stopPropagation()}>
         <p className="dlg-msg">{d.msg}</p>
         {d.choices && <div className="dlg-choices">{d.choices.map((c) => (
-          <div key={c.key}><button className={"btn " + (c.primary ? "primary" : "")} onClick={() => d.done(c.key)}>{c.label}</button>{c.note && <small className="muted">{c.note}</small>}</div>
+          <div key={c.key}><button className={"btn " + (c.primary ? "primary" : "")} disabled={c.disabled} onClick={() => d.done(c.key)}>{c.label}</button>{c.note && <small className="muted">{c.note}</small>}</div>
         ))}</div>}
         {d.input != null && <input autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") ok(); }} />}
         <div className="row dlg-btns">

@@ -1,4 +1,5 @@
 // Odvozené hodnoty: souhrn ponoru, kalibrace čidel, odhad vstřiků solenoidu, upozornění.
+import { isCC } from "./rig";
 import { computerWarnings, deviatingCell, type CompWarn } from "./compwarn";
 import { co2BadRanges, co2Plausibility, co2Valid, dilVents, effortOf, gasDensity, o2RateWindows, workloadBase, type EffortBase } from "./effort";
 import type { Dive, Header } from "./shearwater";
@@ -750,8 +751,10 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
     out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${co2VMax.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} mbar v ${tpt(ct)} (${d.s.depth[Math.max(0, ci)].toLocaleString("cs-CZ", { maximumFractionDigits: 0 })} m).`, blocks: [{ head: "", steps: [], from: ct, to: ct + 60, chart: "co2" }] }); }
   if (co2Bad.length) out.push({ level: "warn", title: "Čidlo CO₂ nejspíš chybné", text: `Hodnoty až ${Math.round(Math.max(...co2Bad.map((r) => r.max)))} mbar, celkem ${dur(co2Bad.reduce((x, r) => x + r.to - r.from, 0))} – fyziologicky nemožné. Pravděpodobná příčina: vlhkost / kondenzace na čidle (P) – zkontroluj a vysuš čidlo, případně ho vyměň.${co2Bad[0].from <= 180 ? " Nesmyslné hodnoty už od hladiny na začátku ponoru." : ""} Tyto úseky se do hlášení, souvislostí a srovnání nepočítají; v grafu zůstávají.`, blocks: co2Bad.map((r, k) => ({ head: co2Bad.length > 1 ? `${k + 1}. ${tpt(r.from)}–${tpt(r.to)}` : "", steps: [], from: r.from, to: r.to, chart: "co2" as ChartKey })) });
   // nízké pO₂ na začátku ponoru – podle průběhu (zavřený ventil O₂ = hypoxie)
+  // jen počítač s čidly O₂ (CC mód): bez nich je pO₂ v logu jen vypočtené ze zásobního plynu
+  const cc = isCC(d.h);
   const sp0 = startPo2(d, th);
-  if (sp0.level) {
+  if (cc && sp0.level) {
     const lo = th.po2Lo ?? 0.4;
     const det = `Minimum ${fmtBar(sp0.min)} bar, pod ${fmtBar(lo)} bar ${dur(sp0.belowS)}${sp0.reachS >= 0 ? `, setpoint dosažen v ${Math.round(sp0.reachS)}. s` : ", setpoint nedosažen"}`
       + (sp0.o2From != null ? `, tlak O₂ ${sp0.o2From === sp0.o2To ? `${Math.round(sp0.o2From)} bar` : `${Math.round(sp0.o2From)} → ${Math.round(sp0.o2To!)} bar${sp0.o2From > 20 && sp0.o2To! < 20 ? " – přechod na externí lahev?" : ""}`}` : "") + ".";
@@ -781,7 +784,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
     else out.push({ level: "warn", title: `Nízký tlak ${gas}${settled != null ? ` (${Math.round(settled)} bar)` : ""}`, text: withSteps(`Onboard lahev – varování v ${tpt(w.start)} (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
   }
   const outW = cws.find((w) => w.kind === "cellout"), outA = d.alarms.find((a) => a.label.startsWith("Vyřazené čidlo"));
-  if (outW || outA) {
+  if (cc && (outW || outA)) {
     const t0 = Math.min(outW?.start ?? Infinity, outA?.start ?? Infinity), dc = deviatingCell(d, t0);
     const nA = d.alarms.filter((a) => a.label.startsWith("Vyřazené čidlo")).length;
     out.push({ level: "warn", title: `Vyřazené čidlo${dc ? " " + dc.cell : ""} (P)`, text: withSteps(`Od ${tpt(t0)}${outW?.how === "open" || !outW ? " do konce ponoru" : ` do ${mmss(outW.end!)}`}${dc ? ` – čidlo ${dc.cell} se odchylovalo o ${dc.pct} %` : ""}${nA > 1 ? `, alarm opakován ${nA}×` : ""}. Počítač ho pravděpodobně vyřadil z hlasování.`, resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th)), blocks: [oneBlock(d, t0, outW?.end ?? outA?.end ?? null, "po2", resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th))] });
@@ -797,7 +800,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
   const batW = cws.find((w) => w.kind === "battery");
   if (batW) out.push({ level: "warn", title: "Slabá baterie (P)", text: withSteps(`Počítač hlásil slabou baterii v ${mmss(batW.start)}, ${ackTxt(batW)}.`, resolutionSteps(d, batW.start, batW.end, "other", th)), blocks: [oneBlock(d, batW.start, batW.end, "temp", resolutionSteps(d, batW.start, batW.end, "other", th))] });
   const solA = d.alarms.filter((a) => a.label.startsWith("Porucha solenoidu"));
-  if (solA.length) {
+  if (cc && solA.length) {
     // od kdy už jen ruční doplňování O₂ (poslední dávka solenoidem)
     const ds = o2Doses(d), lastSol = [...ds].reverse().find((x) => x.kind === "sol");
     const manFrom = lastSol ? ds.find((x) => x.t > lastSol.t && x.kind === "man") : null;
@@ -834,7 +837,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
     out.push({ level: "bad", title: "Scrubber vyčerpán během ponoru", text: `${at0 <= 0 ? "Časovač scrubberu byl na nule už na začátku ponoru" : `Časovač scrubberu došel na nulu v ${tpt(at0)} (na začátku zbývalo ${hm(d.h.scrubLeftStartMin)})`}. Nezapomněl jsi obnovit stack time?`, blocks: [{ head: "", steps: [], from: Math.max(0, at0 - 60), to: Math.min(d.h.diveTimeS, at0 + 300), chart: "co2" }] });
   }
   // od určité chvíle jen ruční doplňování O₂ bez alarmu solenoidu
-  if (!d.alarms.some((a) => a.label.startsWith("Porucha solenoidu"))) {
+  if (cc && !d.alarms.some((a) => a.label.startsWith("Porucha solenoidu"))) {
     const ds = o2Doses(d), lastSol = [...ds].reverse().find((x) => x.kind === "sol");
     const after = ds.filter((x) => x.kind === "man" && (!lastSol || x.t > lastSol.t));
     // solenoid měl dávkovat: pO₂ aspoň minutu pod setpointem (o víc než 0,1) a přesto žádná jeho dávka
@@ -848,8 +851,8 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
     const opens = v.filter((x) => x.kind === "open");
     if (opens.length > 3) out.push({ level: "info", title: `Ruční dávkování O₂ otevíráním lahve – ${opens.length}× (P)`, text: `${tpt(v[0].t)}–${tpt(v[v.length - 1].t)}: lahev O₂ opakovaně zavírána a otevírána (${v.map((x) => `${tpt(x.t)} ${x.kind === "open" ? "otevřena" : "zavřena"}`).join(", ")}).`, blocks: opens.map((o, k) => ({ head: `${k + 1}. otevřena ${tpt(o.t)}`, steps: [], from: Math.max(0, o.t - 60), to: o.t + 60, chart: "press" as ChartKey })) });
   }
-  // vlastní detekce vysokého pO₂ – jen úseky, kdy neběžel alarm z počítače
-  {
+  // vlastní detekce vysokého pO₂ – jen úseky, kdy neběžel alarm z počítače (bez čidel se vyhodnocuje v detailu ze zásobního plynu)
+  if (cc) {
     const hiA = d.alarms.filter((x) => x.kind === "po2high");
     const zs = po2HighZones(d, th).filter((z) => !hiA.some((x) => x.start <= z.to + 30 && alarmEnd(d, x) >= z.from - 30));
     for (const lvl of ["bad", "warn"] as const) {
@@ -861,7 +864,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
       out.push({ level: lvl, title: "Vysoké pO₂ (bez alarmu počítače)", text: withSteps(`Nad ${lim.toLocaleString("cs-CZ")} bar${lvl === "warn" ? ` déle než ${dur(th.po2HiWarnS ?? 60)} mimo deko zastávky` : ""}: ${zl.map((z) => `${mmss(z.from)}–${mmss(z.to)}`).join(", ")}, celkem ${dur(zl.reduce((x, z) => x + z.to - z.from, 0))}.`, blocks.flatMap((b) => [`${b.head}:`, ...b.steps])), blocks });
     }
   }
-  const cs = cellSpread(d);
+  const cs = cc ? cellSpread(d) : null;
   if (cs && cs.kind) {
     const nf = (x: number, k = 2) => x.toLocaleString("cs-CZ", { maximumFractionDigits: k });
     const det = `rozdíl až ${nf(cs.max)} bar (${tpt(cs.at)}), nad 0,3 bar celkem ${dur(cs.min * 60)}`;
@@ -884,9 +887,9 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
   { const lim = base?.vents != null ? Math.max(4, Math.ceil(base.vents * 2) + 1) : 5;
     if (ef.vents >= lim) { const vs = dilVents(d); out.push({ level: "info", title: "Časté doplňování diluentu", text: `${ef.vents}× doplnění diluentu bez klesání (ADV, proplach smyčky nebo masky, ruční přidání)${base?.vents != null ? ` – obvykle ${base.vents.toLocaleString("cs-CZ")}× za ponor` : ""}: ${vs.map((t) => `${tpt(t)} (${d.s.depth[at(t)].toLocaleString("cs-CZ", { maximumFractionDigits: 0 })} m)`).join(", ")}.`, blocks: vs.map((t, k) => ({ head: `${k + 1}. ${tpt(t)}`, steps: [], from: Math.max(0, t - 60), to: t + 60, chart: "effort" as ChartKey })) }); } }
   // zvýšená zátěž (skutečná námaha)
-  if (ef.high.length) out.push({ level: "info", title: `Zvýšená zátěž${ef.high.length > 1 ? ` – ${ef.high.length}×` : ""}`, text: ef.high.map((h) => `${tpt(h.from)}–${tpt(h.to)} až ${h.max.toLocaleString("cs-CZ")}× obvyklé${h.o2 != null ? `, spotřeba O₂ ${h.o2.toLocaleString("cs-CZ")}×` : ""}${h.co2 ? ", následně nárůst CO₂" : ""}`).join("; ") + ".", blocks: ef.high.map((h) => ({ head: `${tpt(h.from)}–${tpt(h.to)} (${dur(h.to - h.from)}), až ${h.max.toLocaleString("cs-CZ")}×${h.co2 ? ", nárůst CO₂" : ""}`, steps: [], from: h.from, to: h.to, chart: "effort" as ChartKey })) });
-  out.push(...spWarnings(d, sum, { ...SP_RULES, lateMin: th.spLateMin ?? 2, lateWarn: !!th.spLateWarn, osc: th.spOsc ?? 3, descM: th.spDescM ?? 6, po2Bad: th.po2HiBad ?? 1.6 }));
-  const mv = [d.s.mv1, d.s.mv2, d.s.mv3];
+  if (cc && ef.high.length) out.push({ level: "info", title: `Zvýšená zátěž${ef.high.length > 1 ? ` – ${ef.high.length}×` : ""}`, text: ef.high.map((h) => `${tpt(h.from)}–${tpt(h.to)} až ${h.max.toLocaleString("cs-CZ")}× obvyklé${h.o2 != null ? `, spotřeba O₂ ${h.o2.toLocaleString("cs-CZ")}×` : ""}${h.co2 ? ", následně nárůst CO₂" : ""}`).join("; ") + ".", blocks: ef.high.map((h) => ({ head: `${tpt(h.from)}–${tpt(h.to)} (${dur(h.to - h.from)}), až ${h.max.toLocaleString("cs-CZ")}×${h.co2 ? ", nárůst CO₂" : ""}`, steps: [], from: h.from, to: h.to, chart: "effort" as ChartKey })) });
+  if (cc) out.push(...spWarnings(d, sum, { ...SP_RULES, lateMin: th.spLateMin ?? 2, lateWarn: !!th.spLateWarn, osc: th.spOsc ?? 3, descM: th.spDescM ?? 6, po2Bad: th.po2HiBad ?? 1.6 }));
+  const mv = cc ? [d.s.mv1, d.s.mv2, d.s.mv3] : [];
   mv.forEach((a, k) => {
     const mid = d.s.depth.map((x, i) => (x > 1.5 ? a[i] : null)).filter((x): x is number => x != null);
     if (mid.length && Math.max(...mid) === 0) out.push({ level: "warn", title: `Čidlo ${k + 1} na nule`, text: "Čidlo během ponoru ukazovalo 0 mV – vadné nebo odpojené." });

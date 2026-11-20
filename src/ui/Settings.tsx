@@ -1,4 +1,4 @@
-import { ask, askText } from "../app/dialog";
+import { ask, askText, choose } from "../app/dialog";
 import { AliasCard } from "./Sites";
 import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
@@ -8,6 +8,8 @@ import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerNa
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { IS_DEV, copyProdToDev, devCopiedAt } from "../app/db";
+import { ownLb, rigChoices, setComputerRig } from "../app/store";
+import type { Rig } from "../core/rig";
 import { Card, KV, fmtDate, go, tab, useBackLayer, useStore } from "./common";
 import { ImportButton } from "./Overview";
 
@@ -142,7 +144,8 @@ function OwnComputers() {
       <h3 className="subh">Moje počítače</h3>
       {cs.map((c) => (
         <div key={c.serial} className="row between">
-          <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)}</span>
+          <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)} · přístroj {rigLabel(parseInt(c.serial, 16))}</span>
+          <button className="btn small" onClick={() => editRig(parseInt(c.serial, 16))}>Přístroj</button>
           {cs.length > 1 && <button className="btn small" onClick={async () => { if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako cizí log a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
         </div>
       ))}
@@ -258,6 +261,7 @@ export function GuestCard() {
                     finally { setMoving(null); }
                     reload();
                   }}>To je můj počítač</button>
+                  {l.serial && <button onClick={() => { setActFor(null); editRig(parseInt(l.serial!, 16)); }}>Přístroj: {rigLabel(parseInt(l.serial, 16))}</button>}
                   <button className="danger" onClick={async () => { setActFor(null); if (await ask(`Smazat log počítače ${compLabel(l)}?`, { danger: true })) { await deleteGuest(l); reload(); } }}>Smazat</button>
                 </div>}
                 {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
@@ -296,4 +300,25 @@ function DevSec() {
       </>}
     </Sec>
   );
+}
+
+/** Typ přístroje u počítače (zápis do mého logbooku). */
+function rigLabel(serial: number): string {
+  const c = ownLb().computers?.[serial.toString(16).toUpperCase()];
+  return c?.rig ? `${c.rig}${c.supplyO2 ? `, ${c.supplyO2} % O₂` : ""}${c.rig === "pSCR" ? `, 1:${c.pscrRatio ?? 8}` : ""}` : "výchozí";
+}
+async function editRig(serial: number) {
+  const c = ownLb().computers?.[serial.toString(16).toUpperCase()];
+  const k = await choose("Typ dýchacího přístroje pro ponory z tohoto počítače (u jednotlivého ponoru jde změnit v detailu). Zašedlé typy zatím neumíme vyhodnotit.", rigChoices(c?.rig));
+  if (!k) return;
+  const patch: { rig: Rig; supplyO2?: number; pscrRatio?: number } = { rig: k as Rig };
+  if (k !== "eCCR") {
+    const v = await askText("Zásobní plyn – O₂ % (v Gauge módu ho počítač nezná; prázdné = podle logu)", c?.supplyO2 ? String(c.supplyO2) : "");
+    if (v != null && v.trim()) patch.supplyO2 = Math.min(100, Math.max(5, Math.round(+v.replace(",", ".")) || 21));
+  }
+  if (k === "pSCR") {
+    const v = await askText("Poměr dávkování pSCR 1 : N – zadej N (Tres Presidentes: 8 – předpoklad)", String(c?.pscrRatio ?? 8));
+    if (v != null && +v.replace(",", ".") > 1) patch.pscrRatio = +v.replace(",", ".");
+  }
+  await setComputerRig(serial, patch);
 }

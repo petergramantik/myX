@@ -393,5 +393,27 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(dilVents(mk(t.map((x) => (x < 80 ? 20 : x < 110 ? 20 + (x - 80) / 10 : 23 - (x - 110) / 10)))).length === 0, "ADV při klesání (i s návratem) se nepočítá");
 }
 
+{ // Gauge mód (Peregrine, pSCR): bez čidel – žádná varování o pO₂, setpointu, čidlech; odhad smyčky pSCR
+  const { diveWarnings, summarize, DEFAULT_THRESHOLDS } = await import("../src/core/analysis");
+  const { isCC, hasDeco, defaultRig, pscrLoopPo2, supplyPo2 } = await import("../src/core/rig");
+  const { decoderFor } = await import("../src/core/decoders");
+  const t = [...Array(241).keys()].map((i) => i * 5);
+  const depth = t.map((x) => (x < 60 ? x / 6 : x < 1000 ? 20 : Math.max(0, 20 - (x - 1000) / 10)));
+  const P = depth.map((z) => 1.013 + z * 0.0981);
+  const z0 = t.map(() => 0), n0 = t.map(() => null);
+  const d = { id: "g", h: { mode: "Gauge", diveTimeS: 1200, surfP: 1013, salinity: 1000, gfLo: 30, gfHi: 70, spLo: 0.7, spHi: 1.3, batWarn: 0, batCrit: 0, scrubTotalMin: 0, maxDepth: 20, rateS: 5 },
+    s: { t, depth, ppo2: P.map((p) => Math.round(0.21 * p * 100) / 100), sp: t.map(() => 0.7), mv1: t.map(() => 55), mv2: t.map(() => 44), mv3: t.map(() => 33), o2: t.map(() => 21), he: z0,
+      temp: t.map(() => 10), cns: z0, gf99: z0, ceil: z0, stop: z0, stopt: t.map(() => 99), tts: z0, at5: z0, st: t.map(() => 18), bv: z0, bp: z0, dil: n0, o2p: n0, co2: n0, co2raw: n0 },
+    tissues: [], events: [], alarms: [], buttons: [] } as any;
+  const w = diveWarnings(d, summarize(d), DEFAULT_THRESHOLDS);
+  ok(!isCC(d.h) && !hasDeco(d.h) && defaultRig(d.h) === undefined, "Gauge: bez čidel, bez deko, přístroj nezadán");
+  ok(!w.some((x) => /hypoxi|pO₂ při zanoření|etpoint|Čidlo|čidl/.test(x.title)), `Gauge: žádná varování z čidel ani setpointu (${w.map((x) => x.title).join(", ")})`);
+  const sup = supplyPo2(d, 40), lo = pscrLoopPo2(d, 40, 8, 20), hi = pscrLoopPo2(d, 40, 8, 30);
+  const k = 200; // 20 m
+  ok(lo[k]! < hi[k]! && hi[k]! < sup[k], `pSCR: smyčka pod zásobním plynem, úsporné dýchání nejníž (${lo[k]}, ${hi[k]}, ${sup[k]})`);
+  ok(pscrLoopPo2(d, 40, 8, 20)[0]! < pscrLoopPo2(d, 40, 8, 20)[k]! / 2, "pSCR: u hladiny výrazně nižší pO₂ (riziko hypoxie)");
+  ok(decoderFor(new TextEncoder().encode("SQLite format 3\0xxxxxxxxxx"))?.id === "shearwater" && decoderFor(new Uint8Array(32)) === null, "dekodér podle souboru");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

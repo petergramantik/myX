@@ -1,4 +1,5 @@
 // Porovnání dvou současných ponorů (můj vs. buddyho): metriky, rozdíly a stručný závěr z dat.
+import { hasDeco, isCC } from "./rig";
 import { co2Valid } from "./effort";
 import type { Dive } from "./shearwater";
 import { atStop, tpt, dur, setpointChanges, o2Doses, summarize, cellSpread, type SpChange, type CellIssue } from "./analysis";
@@ -8,6 +9,7 @@ const amb = (d: Dive, i: number) => (d.h.surfP || 1013) / 1000 + d.s.depth[i] * 
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
 
 export interface DiveStats {
+  /** počítač měří pO₂ čidly / počítá dekompresi – co lze porovnat */ cc: boolean; deco: boolean;
   maxDepth: number; avgDepth: number; durMin: number; t20: number; t30: number; descRate: number; ascRate: number; vMove: number;
   spUp: SpChange | null; spUpVal: number | null; sp019: SpChange | null; spN: number;
   po2All: number; po2Bottom: number; po2Deco: number | null; spErr: number; offMin: number;
@@ -95,6 +97,7 @@ export function diveStats(d: Dive, dev: SpDev = SP_DEV): DiveStats {
     scrubLeftStart: d.h.scrubLeftStartMin, dil: sum.dilUsed.split(",")[0] || "", dosesMan: doses.filter((x) => x.kind === "man").length, dosesSol: doses.filter((x) => x.kind === "sol").length,
     tempMin: sum.tempMin, btnN: sum.btnN,
     inert: ambI - po2I, ambInt: ambI, po2Int: po2I,
+    cc: isCC(d.h), deco: hasDeco(d.h),
     densMax: ef.densMax, dens52: ef.densOver52, vents: ef.vents, co2Bad: co2Plausibility(d)?.ok === false, cellIssue: cellSpread(d)?.kind ?? "",
   };
 }
@@ -104,37 +107,37 @@ const f1 = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLoc
 const spTxt = (c: SpChange | null) => (c ? `${tpt(c.t)}, ${f1(c.depth)} m` : "nepřepnuto");
 
 /** Porovnávané veličiny: hodnota (číslo pro výpočet rozdílu), text, měřítko „podstatného“ rozdílu a váha. */
-interface Metric { key: string; label: string; v: (s: DiveStats) => number | null; txt: (s: DiveStats) => string; scale: number | ((xs: number[]) => number); w: number; cat?: boolean }
+interface Metric { key: string; label: string; /** potřebuje čidla O₂ / výpočet dekomprese */ need?: "cc" | "deco"; v: (s: DiveStats) => number | null; txt: (s: DiveStats) => string; scale: number | ((xs: number[]) => number); w: number; cat?: boolean }
 const METRICS: Metric[] = [
-  { key: "tts", label: "Max. zbývající deko (TTS)", v: (s) => s.ttsMax, txt: (s) => `${s.ttsMax} min`, scale: 3, w: 1.5 },
-  { key: "deco", label: "Na zastávkách", v: (s) => s.decoMin, txt: (s) => `${f1(s.decoMin, 0)} min`, scale: 2, w: 1 },
-  { key: "spUp", label: "Přepnutí na vysoký SP", v: (s) => (s.spUp ? s.spUp.t / 60 : null), txt: (s) => spTxt(s.spUp), scale: 3, w: 1.3 },
-  { key: "spVal", label: "Vysoký setpoint", v: (s) => s.spUpVal, txt: (s) => f1(s.spUpVal, 2), scale: 0.05, w: 1 },
-  { key: "inert", label: "Inertní zátěž ∫(P − pO₂)", v: (s) => s.inert, txt: (s) => `${f1(s.inert, 0)} bar·min`, scale: (xs) => Math.max(5, (xs.reduce((a, b) => a + b, 0) / xs.length) * 0.06), w: 1 },
+  { key: "tts", need: "deco", label: "Max. zbývající deko (TTS)", v: (s) => s.ttsMax, txt: (s) => `${s.ttsMax} min`, scale: 3, w: 1.5 },
+  { key: "deco", need: "deco", label: "Na zastávkách", v: (s) => s.decoMin, txt: (s) => `${f1(s.decoMin, 0)} min`, scale: 2, w: 1 },
+  { key: "spUp", need: "cc", label: "Přepnutí na vysoký SP", v: (s) => (s.spUp ? s.spUp.t / 60 : null), txt: (s) => spTxt(s.spUp), scale: 3, w: 1.3 },
+  { key: "spVal", need: "cc", label: "Vysoký setpoint", v: (s) => s.spUpVal, txt: (s) => f1(s.spUpVal, 2), scale: 0.05, w: 1 },
+  { key: "inert", need: "cc", label: "Inertní zátěž ∫(P − pO₂)", v: (s) => s.inert, txt: (s) => `${f1(s.inert, 0)} bar·min`, scale: (xs) => Math.max(5, (xs.reduce((a, b) => a + b, 0) / xs.length) * 0.06), w: 1 },
   { key: "avg", label: "Průměrná hloubka", v: (s) => s.avgDepth, txt: (s) => `${f1(s.avgDepth)} m`, scale: 1, w: 1 },
   { key: "max", label: "Max. hloubka", v: (s) => s.maxDepth, txt: (s) => `${f1(s.maxDepth)} m`, scale: 2, w: 1 },
   { key: "t20", label: "Čas pod 20 m", v: (s) => s.t20, txt: (s) => `${f1(s.t20, 0)} min`, scale: 3, w: 1 },
   { key: "dur", label: "Délka ponoru", v: (s) => s.durMin, txt: (s) => `${f1(s.durMin, 0)} min`, scale: 3, w: 1 },
-  { key: "po2", label: "Průměrné pO₂", v: (s) => s.po2All, txt: (s) => `${f1(s.po2All, 2)} bar`, scale: 0.05, w: 1 },
-  { key: "po2b", label: "pO₂ na dně", v: (s) => s.po2Bottom, txt: (s) => `${f1(s.po2Bottom, 2)} bar`, scale: 0.05, w: 1 },
-  { key: "po2d", label: "pO₂ během deko", v: (s) => s.po2Deco, txt: (s) => (s.po2Deco != null ? `${f1(s.po2Deco, 2)} bar` : "bez deko"), scale: 0.05, w: 1 },
-  { key: "po2a", label: "pO₂ při výstupu", v: (s) => s.po2Asc, txt: (s) => (s.po2Asc != null ? `${f1(s.po2Asc, 2)} bar` : "–"), scale: 0.05, w: 0.9 },
-  { key: "below", label: "Pod setpointem", v: (s) => s.offBelow, txt: (s) => `${dur((s.offBelow) * 60)}`, scale: 2, w: 1 },
-  { key: "above", label: "Nad setpointem (mimo deko)", v: (s) => s.offAbove, txt: (s) => `${dur((s.offAbove) * 60)}`, scale: 2, w: 0.8 },
-  { key: "boost", label: "pO₂ zvýšené během deko", v: (s) => s.boostMin, txt: (s) => (s.boostMin >= 0.5 ? `${f1(s.boostMin, 0)} min, ${f1(s.boostPo2, 2)} bar` : "–"), scale: 2, w: 0.8 },
-  { key: "gf", label: "GF", v: () => null, txt: (s) => s.gf, scale: 1, w: 2.5, cat: true },
+  { key: "po2", need: "cc", label: "Průměrné pO₂", v: (s) => s.po2All, txt: (s) => `${f1(s.po2All, 2)} bar`, scale: 0.05, w: 1 },
+  { key: "po2b", need: "cc", label: "pO₂ na dně", v: (s) => s.po2Bottom, txt: (s) => `${f1(s.po2Bottom, 2)} bar`, scale: 0.05, w: 1 },
+  { key: "po2d", need: "cc", label: "pO₂ během deko", v: (s) => s.po2Deco, txt: (s) => (s.po2Deco != null ? `${f1(s.po2Deco, 2)} bar` : "bez deko"), scale: 0.05, w: 1 },
+  { key: "po2a", need: "cc", label: "pO₂ při výstupu", v: (s) => s.po2Asc, txt: (s) => (s.po2Asc != null ? `${f1(s.po2Asc, 2)} bar` : "–"), scale: 0.05, w: 0.9 },
+  { key: "below", need: "cc", label: "Pod setpointem", v: (s) => s.offBelow, txt: (s) => `${dur((s.offBelow) * 60)}`, scale: 2, w: 1 },
+  { key: "above", need: "cc", label: "Nad setpointem (mimo deko)", v: (s) => s.offAbove, txt: (s) => `${dur((s.offAbove) * 60)}`, scale: 2, w: 0.8 },
+  { key: "boost", need: "cc", label: "pO₂ zvýšené během deko", v: (s) => s.boostMin, txt: (s) => (s.boostMin >= 0.5 ? `${f1(s.boostMin, 0)} min, ${f1(s.boostPo2, 2)} bar` : "–"), scale: 2, w: 0.8 },
+  { key: "gf", need: "deco", label: "GF", v: () => null, txt: (s) => s.gf, scale: 1, w: 2.5, cat: true },
   { key: "co2", label: "Max. CO₂", v: (s) => s.co2Max ?? 0, txt: (s) => (s.co2Max != null ? `${f1(s.co2Max)} mbar` : "–") + (s.co2Bad ? " (čidlo nevěrohodné)" : ""), scale: 1, w: 1 },
-  { key: "co2al", label: "Alarmy CO₂", v: (s) => s.co2Alarms, txt: (s) => `${s.co2Alarms}×` + (s.co2Bad ? " (čidlo nevěrohodné)" : ""), scale: 1, w: 1 },
-  { key: "scrub", label: "Scrubber na začátku", v: (s) => s.scrubLeftStart, txt: (s) => `${s.scrubLeftStart} min`, scale: 60, w: 0.5 },
-  { key: "man", label: "Ruční dávky O₂", v: (s) => s.dosesMan, txt: (s) => `${s.dosesMan}×`, scale: 3, w: 0.6 },
-  { key: "sol", label: "Solenoid (odhad)", v: (s) => s.dosesSol, txt: (s) => `${s.dosesSol}×`, scale: 5, w: 0.4 },
+  { key: "co2al", need: "cc", label: "Alarmy CO₂", v: (s) => s.co2Alarms, txt: (s) => `${s.co2Alarms}×` + (s.co2Bad ? " (čidlo nevěrohodné)" : ""), scale: 1, w: 1 },
+  { key: "scrub", need: "cc", label: "Scrubber na začátku", v: (s) => s.scrubLeftStart, txt: (s) => `${s.scrubLeftStart} min`, scale: 60, w: 0.5 },
+  { key: "man", need: "cc", label: "Ruční dávky O₂", v: (s) => s.dosesMan, txt: (s) => `${s.dosesMan}×`, scale: 3, w: 0.6 },
+  { key: "sol", need: "cc", label: "Solenoid (odhad)", v: (s) => s.dosesSol, txt: (s) => `${s.dosesSol}×`, scale: 5, w: 0.4 },
   { key: "asc", label: "Rychlost výstupu", v: (s) => s.ascRate, txt: (s) => `${f1(s.ascRate)} m/min`, scale: 1, w: 0.6 },
   { key: "move", label: "Pohyb ve vertikále", v: (s) => s.vMove, txt: (s) => `${f1(s.vMove)} m/min`, scale: 0.5, w: 0.5 },
-  { key: "cns", label: "CNS na konci", v: (s) => s.cnsEnd, txt: (s) => `${s.cnsEnd} %`, scale: 5, w: 0.5 },
+  { key: "cns", need: "deco", label: "CNS na konci", v: (s) => s.cnsEnd, txt: (s) => `${s.cnsEnd} %`, scale: 5, w: 0.5 },
   { key: "dens", label: "Hustota plynu max", v: (s) => s.densMax, txt: (s) => `${f1(s.densMax)} g/l`, scale: 0.5, w: 0.8 },
   { key: "dens52", label: "Nad 5,2 g/l", v: (s) => s.dens52, txt: (s) => `${f1(s.dens52, 0)} min`, scale: 5, w: 0.6 },
-  { key: "vents", label: "Doplnění diluentu", v: (s) => s.vents, txt: (s) => `${s.vents}×`, scale: 3, w: 0.5 },
-  { key: "dil", label: "Diluent", v: () => null, txt: (s) => s.dil, scale: 1, w: 2, cat: true },
+  { key: "vents", need: "cc", label: "Doplnění diluentu", v: (s) => s.vents, txt: (s) => `${s.vents}×`, scale: 3, w: 0.5 },
+  { key: "dil", need: "cc", label: "Diluent", v: () => null, txt: (s) => s.dil, scale: 1, w: 2, cat: true },
   { key: "temp", label: "Min. teplota", v: (s) => s.tempMin, txt: (s) => `${s.tempMin} °C`, scale: 2, w: 0.3 },
   { key: "btn", label: "Stisky tlačítek", v: (s) => s.btnN, txt: (s) => `${s.btnN}`, scale: 10, w: 0.2 },
 ];
@@ -142,7 +145,9 @@ const METRICS: Metric[] = [
 export interface MultiRow { key: string; label: string; vals: string[]; weight: number; hi: number; lo: number; muted?: boolean }
 /** Tabulka rozdílů pro 2 a více potápěčů, seřazená podle rozptylu; hi/lo = index nejvyšší a nejnižší hodnoty. */
 export function multiRows(st: DiveStats[]): MultiRow[] {
-  return METRICS.map((m) => {
+  return METRICS.filter((m) => !m.need || st.some((x) => x[m.need!])).map((m) => {
+    // veličina, kterou některý ponor nemá (bez čidel, bez dekomprese): „–“ a nevstupuje do rozdílů
+    if (m.need && st.some((x) => !x[m.need!])) return { key: m.key, label: m.label, vals: st.map((x) => (x[m.need!] ? m.txt(x) : "–")), weight: 0, hi: -1, lo: -1, muted: true };
     const vals = st.map(m.txt);
     // CO₂ z nevěrohodného čidla nevstupuje do řazení rozdílů
     if ((m.key === "co2" || m.key === "co2al") && st.some((x) => x.co2Bad)) return { key: m.key, label: m.label, vals, weight: 0, hi: -1, lo: -1, muted: true };
@@ -193,7 +198,7 @@ function depthWhy(x: DiveStats, y: DiveStats, deeper: string | null): string | n
  * Závěr dvou potápěčů po sekcích (dekomprese, pO₂ a setpoint, CO₂, dýchání, profil, plyny).
  * Rozdíl v deko se rozkládá na hloubku a pO₂ jen při podstatném rozdílu inertní zátěže (≥ 5 % a ≥ 10 bar·min).
  */
-export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveStats, deeper?: { from: number; to: number; diff: number } | null): Section[] {
+function conclusionSections0(A: string, B: string, a: DiveStats, b: DiveStats, deeper?: { from: number; to: number; diff: number } | null): Section[] {
   const out: Section[] = [];
   // ---- dekomprese
   {
@@ -301,7 +306,7 @@ export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveSt
 }
 
 /** Závěr pro 3 a více potápěčů po sekcích: v každé sekci jen ti, kdo se od průměru skupiny liší. */
-export function groupSections(names: string[], st: DiveStats[]): Section[] {
+function groupSections0(names: string[], st: DiveStats[]): Section[] {
   const n = st.length, avg = (f: (s: DiveStats) => number) => st.reduce((a, s) => a + f(s), 0) / n;
   const tts = avg((s) => s.ttsMax), decoAvg = avg((s) => s.decoMin), amb = avg((s) => s.ambInt), po2 = avg((s) => s.po2Int), inert = avg((s) => s.inert);
   const ups = st.map((s) => s.spUp?.t ?? null).filter((x): x is number => x != null);
@@ -423,4 +428,13 @@ export function computerDiff(a: Dive, b: Dive, off: number, clockS: number): { l
   else if (Math.abs(da - db) > 3) out.push({ level: "warn", text: `Deko: při stejném GF ${ga} se nejdelší zastávka liší o ${Math.abs(da - db)} min – jiný výpočet nebo vstupní data (plyny, setpoint).` });
   out.push(Math.abs(clockS) > 120 ? { level: "warn", text: `Hodiny se rozcházejí o ${Math.round(Math.abs(clockS) / 60)} min.` } : { level: "ok", text: `Hodiny sedí (rozdíl ${Math.round(Math.abs(clockS))} s).` });
   return out;
+}
+
+/** Sekce závěru jen pro to, co mají všechny porovnávané ponory (bez čidel O₂ / bez dekomprese se vynechají). */
+const capFilter = (st: DiveStats[], xs: Section[]) => xs.filter((x) => !((x.key === "po2" || x.key === "breath") && st.some((y) => !y.cc)) && !(x.key === "deco" && st.some((y) => !y.deco)));
+export function conclusionSections(A: string, B: string, a: DiveStats, b: DiveStats, deeper?: { from: number; to: number; diff: number } | null): Section[] {
+  return capFilter([a, b], conclusionSections0(A, B, a, b, deeper));
+}
+export function groupSections(names: string[], st: DiveStats[]): Section[] {
+  return capFilter(st, groupSections0(names, st));
 }

@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.41";
+export const APP_VERSION = "1.42-dev.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.1", date: "2026-11-20", title: "Další počítače a typy přístrojů (dev)", items: [
+    "Mód počítače z logu (CC, OC, Gauge, SCR…) a model (Petrel 2, Petrel 3, Peregrine…).",
+    "Typ přístroje u počítače i u ponoru: eCCR, pSCR (OC, aSCR, mCCR zatím zašedlé); u Gauge logu se myX při importu zeptá.",
+    "Ponory bez čidel O₂: žádná varování z čidel, setpointu a dávek; skryté scrubber, čidla, lahve, zátěž a dekomprese; pO₂ jen ze zásobního plynu.",
+    "pSCR: odhad pO₂ ve smyčce (?) podle zásobního plynu a poměru (výchozí 1:8) s varováním na možnou hypoxii.",
+    "Srovnání porovná jen veličiny, které mají oba ponory.",
+    "Dekodéry logů oddělené podle výrobce (příprava na další počítače).",
+  ] },
   { version: "1.41", date: "2026-11-20", title: "Dev verze", items: [
     "Nastavení → Dev: přepnutí do testovací verze s novinkami ve vývoji (štítek DEV v záhlaví).",
     "Dev verze pracuje na vlastní kopii dat (vlastní i cizí logy, nastavení), nesynchronizuje a do běžné verze nic nepřenese; kopii jde obnovit z běžné verze.",

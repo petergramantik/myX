@@ -1,13 +1,15 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
-import { ask, askText } from "./dialog";
+import { ask, askText, choose } from "./dialog";
 import { mergeDives, segGroups } from "../core/segments";
 import { writeSqlite } from "../core/sqlitew";
 import { SqliteFile } from "../core/sqlite";
-import { decodeDive, peekHeader, readCloudDetails, readCloudNumbers, readShearwaterDb, type CloudDetail, type Dive, type RawDive } from "../core/shearwater";
+import { peekHeader, readCloudDetails, readCloudNumbers, type CloudDetail, type Dive, type Header, type RawDive } from "../core/shearwater";
 import { DEFAULT_THRESHOLDS, diveWarnings, injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
 import * as db from "./db";
+import { decodeAny, readAny } from "../core/decoders";
+import { RIGS, defaultRig, type Rig } from "../core/rig";
 import { aliasKey, cleanForeign, emptyLogbook, resetLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
@@ -47,7 +49,7 @@ export const myNum = (id: string) => diveHeads().findIndex((m) => m.id === segIn
 // ---------- dekódované ponory (mezipaměť v paměti)
 const diveCache = new Map<string, Promise<Dive>>();
 function loadPart(id: string): Promise<Dive> {
-  return db.get<RawDive>("raw", id, st.guest ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeDive(r); });
+  return db.get<RawDive>("raw", id, st.guest ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeAny(r); });
 }
 export function loadDive(id: string): Promise<Dive> {
   const parts = segInfo().parts.get(id);
@@ -110,11 +112,11 @@ export async function setBatSwap(serial: number, on: boolean) {
 
 /** Ponor z cizího logu (pro porovnání), bez ohledu na to, zda je cizí log právě otevřený. */
 export function loadGuestDive(id: string): Promise<Dive> {
-  return db.get<RawDive>("raw", id, db.GUEST).then((r) => { if (!r) throw new Error("Ponor cizího logu není v telefonu"); return decodeDive(r); });
+  return db.get<RawDive>("raw", id, db.GUEST).then((r) => { if (!r) throw new Error("Ponor cizího logu není v telefonu"); return decodeAny(r); });
 }
 
 async function metaOf(raw: RawDive): Promise<Meta> {
-  const d = await decodeDive(raw);
+  const d = await decodeAny(raw);
   // hloubka po 30 s za prvních 30 min – pro párování společných ponorů podle profilu
   const prof: number[] = []; let j = 0;
   for (let t = 0; t <= 1800 && t <= d.h.diveTimeS; t += 30) { while (j + 1 < d.s.t.length && d.s.t[j] < t) j++; prof.push(Math.round(d.s.depth[j] * 10) / 10); }
@@ -159,6 +161,43 @@ function modelFor(ser: number): string {
   const gl = g ? (g.logs || [g]).find((l) => l.serial === hex) : undefined;
   return gl?.model || st.lb.computers?.[hex]?.model || ownLb().computers?.[hex]?.model || "Petrel";
 }
+/** Typ přístroje, zásobní plyn a poměr pSCR pro ponor: změna u ponoru → nastavení počítače → výchozí podle módu. */
+export function rigInfo(serial: number, diveId: string, h: Header): { rig?: Rig; supplyO2?: number; ratio: number; byDive: boolean } {
+  const c = ownLb().computers?.[serial.toString(16).toUpperCase()], o = c?.dives?.[diveId];
+  return { rig: o?.rig ?? c?.rig ?? defaultRig(h), supplyO2: o?.supplyO2 ?? c?.supplyO2, ratio: c?.pscrRatio ?? 8, byDive: !!(o?.rig || o?.supplyO2) };
+}
+/** Uloží nastavení přístroje u počítače (do mého logbooku – zálohuje se). */
+export async function setComputerRig(serial: number, patch: Partial<Pick<Computer, "rig" | "supplyO2" | "pscrRatio">>) {
+  const hex = serial.toString(16).toUpperCase(), lb = structuredClone(ownLb());
+  lb.computers = lb.computers || {};
+  lb.computers[hex] = { ...lb.computers[hex], id: hex, model: lb.computers[hex]?.model || modelFor(serial), ...patch, updated: Date.now() };
+  await saveOwnLb(lb);
+}
+/** Změna typu přístroje nebo zásobního plynu u jednoho ponoru (null = podle počítače). */
+export async function setDiveRig(serial: number, diveId: string, patch: { rig?: Rig | null; supplyO2?: number | null }) {
+  const hex = serial.toString(16).toUpperCase(), lb = structuredClone(ownLb());
+  lb.computers = lb.computers || {};
+  const c = { ...lb.computers[hex], id: hex, model: lb.computers[hex]?.model || modelFor(serial), updated: Date.now() } as Computer;
+  const o = { ...(c.dives?.[diveId] || {}) } as { rig?: Rig; supplyO2?: number };
+  if (patch.rig !== undefined) { if (patch.rig) o.rig = patch.rig; else delete o.rig; }
+  if (patch.supplyO2 !== undefined) { if (patch.supplyO2) o.supplyO2 = patch.supplyO2; else delete o.supplyO2; }
+  c.dives = { ...(c.dives || {}) };
+  if (o.rig || o.supplyO2) c.dives[diveId] = o; else delete c.dives[diveId];
+  lb.computers[hex] = c;
+  await saveOwnLb(lb);
+}
+/** Volby typu přístroje: nepodporované jsou vidět, ale zašedlé. */
+export const rigChoices = (cur?: Rig) => RIGS.map((r) => ({ key: r.id, label: r.label + (r.active ? "" : " – zatím nepodporováno"), note: r.note, disabled: !r.active, primary: r.id === cur }));
+/** Po importu: u počítače v Gauge módu bez zadaného přístroje se zeptá na typ přístroje. */
+async function askRigFor(metas: Meta[], model?: string) {
+  for (const ser of new Set(metas.filter((m) => !defaultRig(m.h)).map((m) => m.h.serial))) {
+    if (ownLb().computers?.[ser.toString(16).toUpperCase()]?.rig) continue;
+    const k = await choose(`Počítač ${model || modelFor(ser)} ukládá ponory v módu ${metas.find((m) => m.h.serial === ser)!.h.mode} – bez čidel O₂ a bez typu přístroje. S jakým přístrojem se potápí? (Změníš v Nastavení u počítače nebo u ponoru.)`,
+      rigChoices());
+    if (k) await setComputerRig(ser, { rig: k as Rig });
+  }
+}
+
 /** Název počítače pro zobrazení: model, u dvou stejných modelů pořadí („Petrel 2 (druhý)“). */
 export function compName(ser: number): string {
   const model = modelFor(ser);
@@ -182,7 +221,7 @@ export async function importAny(file: File): Promise<{ own: number; guests: Gues
   const buf = new Uint8Array(await file.arrayBuffer());
   // SQLite databáze začíná „SQLite format 3“ – jiný soubor (fotka, záloha .json…) odmítnout srozumitelně
   if (new TextDecoder().decode(buf.subarray(0, 15)) !== "SQLite format 3") throw new Error("Soubor není databáze Shearwater (.db). V Shearwater Cloudu: Profil → Možnosti → Export (*.db).");
-  const raws = readShearwaterDb(buf);
+  const raws = readAny(buf);
   if (!raws.length) { toast("V souboru nejsou žádné ponory"); return { own: 0, guests: [] }; }
   const groups = new Map<string, RawDive[]>();
   for (const r of raws) { const k = serialOf(r.fn); groups.set(k, [...(groups.get(k) || []), r]); }
@@ -283,6 +322,7 @@ async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promis
   set({ metas: sortMetas([...st.metas, ...added]) });
   await autoLinkDrafts();
   scheduleSync();
+  await askRigFor(added); // Gauge mód: s jakým přístrojem se potápí
   return added.length;
 }
 
@@ -747,6 +787,7 @@ async function importGuestRaws(buf: Uint8Array, raws: RawDive[], open = true): P
   set({ guestRev: st.guestRev + 1 });
   const known = log.serial ? ownLb().computers?.[log.serial] : undefined;
   if (known?.buddyId) await setComputerOwner(log, { id: known.buddyId }); // stejný počítač už má majitele
+  await askRigFor(metas, model); // Gauge mód: s jakým přístrojem se potápí
   if (open) await openGuest(log);
   return log;
 }

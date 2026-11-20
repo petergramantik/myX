@@ -1,9 +1,10 @@
 // Baterie: Petrel (z logu) a dvě baterie v hlavě X-CCR (ruční evidence).
+import { isCC } from "../core/rig";
 import { ask, askText } from "../app/dialog";
 import { useState } from "react";
 import type { Header } from "../core/shearwater";
 import { alerts, batSinceSwap } from "../core/analysis";
-import { deleteBattery, localNow, saveBattery, setBatSwap } from "../app/store";
+import { compName, deleteBattery, localNow, saveBattery, setBatSwap } from "../app/store";
 import type { Battery } from "../app/model";
 import { AlertBox, Card, fmtDate, go, hm, num, useStore } from "./common";
 import { LineChart } from "./Chart";
@@ -54,7 +55,7 @@ export function BatteryTiles() {
     <>
       <div className="cells">
         <div className={"celltile " + pLvl} onClick={() => go({ t: "bats" })}>
-          <div className="ct-h"><b>Petrel</b><span className={"dot " + pLvl} /></div>
+          <div className="ct-h"><b>{compName(h.serial)}</b><span className={"dot " + pLvl} /></div>
           <div className="ct-v">{h.batVStart.toFixed(2).replace(".", ",")} <small>V</small></div>
           <div className="ct-u">na začátku ponoru</div>
           <div className={"ct-l " + pLvl}>{pLvl === "ok" ? "V pořádku" : pLvl === "warn" ? "Varování" : "Vyměnit"}</div>
@@ -95,20 +96,20 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
   return (
     <section className={"panel " + lvl}>
       <button className="panel-h" onClick={toggle}>
-        <span className="ph-main">{lvl === "ok" ? "✓" : "⚠"} Petrel {pp.est ? "~" : ""}{pp.pct} % · Hlava 1 {headTxt(b.head[0])} · Hlava 2 {headTxt(b.head[1])}</span>
+        <span className="ph-main">{lvl === "ok" ? "✓" : "⚠"} {compName(h.serial)} {pp.est ? "~" : ""}{pp.pct} %{isCC(h) ? <> · Hlava 1 {headTxt(b.head[0])} · Hlava 2 {headTxt(b.head[1])}</> : null}</span>
         <span className="ph-sub">{lvl === "ok" ? "Baterie v pořádku" : "Baterie – upozornění"}</span>
         <span className="ph-arrow">{open ? "▴" : "▾"}</span>
       </button>
       {open && (
         <div className="panel-b">
           <div className={"pcell ptile " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>
-            <div className="pcell-h"><b className={"c-" + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>Petrel</b><span className={"pill " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{bad ? "Vyměnit" : b.petrelAlerts.length ? "Varování" : "V pořádku"}</span></div>
+            <div className="pcell-h"><b className={"c-" + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{compName(h.serial)}</b><span className={"pill " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{bad ? "Vyměnit" : b.petrelAlerts.length ? "Varování" : "V pořádku"}</span></div>
             <div className="kvline"><span>Typ</span><b>{h.batType}</b><span>Trend</span><b>{trend > 0.005 ? "↗" : trend < -0.005 ? "↘" : "→"} {trend >= 0 ? "+" : ""}{Math.round(trend * 1000)} mV</b></div>
             <small>{h.batVStart.toFixed(2).replace(".", ",")} → {h.batVEnd.toFixed(2).replace(".", ",")} V v posledním ponoru · {pp.est ? `odhad z napětí ${pp.pct} % (NiMH procenta Petrel neukládá)` : `${pp.pct} % podle Petrelu`}</small>
             {b.petrelAlerts.length ? b.petrelAlerts.map((a, i) => <div key={i} className={"reason " + a.level}>{a.text}</div>) : <div className="reason ok">✓ v pořádku{b.swapped ? " · výměna baterie zadaná ručně, platí do dalšího ponoru" : ""}</div>}
             {!b.guest && (b.petrelAlerts.length > 0 || b.swapped) && <button className="btn small" onClick={() => setBatSwap(h.serial, !b.swapped)}>{b.swapped ? "Zrušit „Baterii jsem vyměnil“" : "Baterii jsem vyměnil"}</button>}
           </div>
-          {!b.guest && b.head.map((x) => (
+          {!b.guest && isCC(h) && b.head.map((x) => (
             <div key={x.pos} className={"pcell ptile " + (x.reasons.length ? "warn" : x.cur ? "ok" : "none")}>
               <div className="pcell-h"><b className={"c-" + (x.reasons.length ? "warn" : x.cur ? "ok" : "none")}>Hlava – baterie {x.pos}</b><span className={"pill " + (x.reasons.length ? "warn" : x.cur ? "ok" : "")}>{x.reasons.length ? "Vyměnit" : x.cur ? "V pořádku" : "Nezadaná"}</span></div>
               {x.cur ? <small>{x.cur.maker || "Baterie"}{x.cur.model ? ` ${x.cur.model}` : ""}{x.cur.volt ? ` (${x.cur.volt})` : ""} · výměna {fmtIso(x.cur.installed)} · {x.dives} ponorů · {hm(x.minutes)} pod vodou{b.th.headBatHours > 0 ? ` z limitu ${b.th.headBatHours} h` : ""}</small> : <small>Výměna zatím nezadaná.</small>}

@@ -4,6 +4,7 @@ import { SqliteFile } from "./sqlite";
 
 export interface RawDive {
   id: string;          // log_id z databáze Shearwater Cloud
+  vendor?: string;     // dekodér (výrobce), chybí = Shearwater
   num: number;         // číslo ponoru v počítači
   start: number;       // místní čas počítače jako „UTC“ sekundy
   blob: Uint8Array;    // původní data_bytes_1 (4 B délka + gzip)
@@ -76,6 +77,8 @@ const u16 = (b: Uint8Array, i: number) => (b[i] << 8) | b[i + 1];
 const u24 = (b: Uint8Array, i: number) => (b[i] << 16) | (b[i + 1] << 8) | b[i + 2];
 const u32 = (b: Uint8Array, i: number) => ((b[i] << 24) >>> 0) + ((b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]);
 const PSI2 = 2 / 14.5038;
+/** Mód počítače v hlavičce (0x14, bajt 1) – podle libdivecomputer; 5 = CC/BO 2. sada. */
+const MODES: Record<number, string> = { 0: "CCR", 1: "OC", 2: "Gauge", 3: "pO₂ displej", 4: "SCR", 5: "CCR", 6: "OC", 7: "Freedive" };
 export const BAT_TYPES: Record<number, string> = { 1: "Alkalická 1,5 V", 2: "Lithiová 1,5 V", 3: "NiMH 1,2 V" };
 const EVN: Record<number, string> = {
   11: "Začátek ponoru", 46: "ID záznamu", 0: "Varování zobrazeno", 1: "Varování potvrzeno / zmizelo", 2: "Varování potvrzeno tlačítkem", 19: "Výběr plynu (P)", 22: "Uložení kurzu (?)",
@@ -151,7 +154,7 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
   const surfP = u16(O1, 16), salinity = u16(O3, 3) || 1000;
   const h: Header = {
     num: u16(O, 2), start, end, diveTimeS: u24(C, 6), maxDepth: u16(C, 4) / 10, siMin: si === 65535 ? null : si,
-    mode: O4[1] === 0 ? "CCR" : O4[1] === 1 || O4[1] === 6 ? "OC" : String(O4[1]),
+    mode: MODES[O4[1]] ?? `mód ${O4[1]}`,
     gfLo: O[4], gfHi: O[5], spLo: O[17] / 100, spHi: O[18] / 100,
     ocGases: [0, 1, 2, 3, 4].map(gas).filter(Boolean), ccGases: [5, 6, 7, 8, 9].map(gas).filter(Boolean),
     cnsStart: u16(O, 10), cnsEnd: u16(C, 10), surfP, surfPEnd: u16(C1, 16), salinity,

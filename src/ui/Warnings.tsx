@@ -1,4 +1,5 @@
 // Okno Varování: všechna upozornění seskupená podle objektu (scrubber, čidla, CO₂, baterie, dotazy na výměnu čidla).
+import { isCC } from "../core/rig";
 import { alerts, scrubberInfo } from "../core/analysis";
 import { compName, localNow } from "../app/store";
 import { CellPrompt, useCells, useCo2 } from "./Cells";
@@ -23,12 +24,14 @@ export function useWarnings() {
     if (RANK[level] < RANK[g.level]) g.level = level;
     groups.set(key, g);
   };
-  const sc = scrubberInfo(st.metas.map((m) => m.h), localNow(), th, st.lb.settings.manualFill);
+  // scrubber a čidla jen u ponorů s čidly O₂ (CC mód) – Gauge / OC je nemá
+  const ccMetas = st.metas.filter((m) => isCC(m.h));
+  const sc = ccMetas.length ? scrubberInfo(ccMetas.map((m) => m.h), localNow(), th, st.lb.settings.manualFill) : null;
   for (const a of sc?.alerts || []) add("scrub", "Scrubber", a.level, `${a.title}: ${a.text}`);
-  c.status.forEach((s, k) => s.reasons.forEach((r) => {
+  if (ccMetas.length) c.status.forEach((s, k) => s.reasons.forEach((r) => {
     if (s.level !== "ok") add("cell" + (k + 1), `Čidlo ${k + 1}`, s.level === "info" ? "info" : s.level, r, { t: "cells", pos: k + 1 });
   }));
-  for (const p of c.prompts.filter((p) => c.now - p.meta.start < 400 * DAY)) {
+  for (const p of ccMetas.length ? c.prompts.filter((p) => c.now - p.meta.start < 400 * DAY && isCC(p.meta.h)) : []) {
     add("cell" + p.pos, `Čidlo ${p.pos}`, "info", "", { t: "cells", pos: p.pos });
     groups.get("cell" + p.pos)!.prompts.push(p);
   }
