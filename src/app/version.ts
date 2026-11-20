@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.41.2";
+export const APP_VERSION = "1.41.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.41.3", date: "2026-11-20", title: "Přepočet ponorů", items: [
+    "Po aktualizaci se znovu přepočítají údaje všech ponorů (i cizích logů), takže tlaky z vysílačů se ukážou i u logů načtených před verzí 1.41.2.",
+  ] },
   { version: "1.41.2", date: "2026-11-20", title: "Import a tlaky z vysílačů", items: [
     "Import nepřestane na ponoru, který nejde přečíst – přeskočí ho, načte ostatní a nahlásí čísla přeskočených.",
     "Tlaky lahví z bezdrátových vysílačů Shearwater (AI) – když log nemá tlaky z DiveCAN a vysílače jsou pojmenované (D1 = diluent, O2 = kyslík), použijí se pro spotřebu, doplnění diluentu a graf tlaku.",
