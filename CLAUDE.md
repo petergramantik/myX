@@ -2,9 +2,11 @@
 
 - S uživatelem komunikuj česky.
 - Nové požadavky zapisuj jen do číslovaného TODO listu (v chatu, ne do repozitáře). Implementuj až po pokynu „imp“ (nebo „im“).
-- Jen produkční verze (větev `main`), žádná dev větev.
-- Po implementaci: `bun tests/core.test.ts` musí projít, `./build.sh` musí projít, commit a push do `main` – GitHub Actions otestují a nasadí na GitHub Pages.
-- Verze: v `src/app/version.ts` zvýšit `APP_VERSION` a přidat nahoru položku do `RELEASES`. Drobnosti zvyšují setinu (1.0 → 1.0.1), desetina (1.0 → 1.1) jen u významných změn.
+- Dvě větve: `main` = produkce (…/myX/), `dev` = dev verze (…/myX/dev/). Uživatel přepíná v Nastavení → Dev.
+- „imp“/„im“ implementuje do větve `dev` (nikdy přímo do `main`): `bun tests/core.test.ts` a `./build.sh` musí projít, commit a push do `dev`. Workflow „Dev verze“ spustí nasazení, které sestaví produkci (main) i dev (dev).
+- „release“ převede dev do produkce: sloučit `dev` do `main`, verzi bez „-dev“, push `main`. Nové funkce se do produkce nesmí dostat jinak než přes „release“. Výjimka: oprava chyby v produkci jen na výslovný pokyn („hotfix“) – commit do `main` a hned sloučit i do `dev`.
+- Verze: v `src/app/version.ts` zvýšit `APP_VERSION` a přidat nahoru položku do `RELEASES`. V dev „X.Y-dev.N“ (každé imp zvýší N), při release „X.Y“ (položky RELEASES z dev sloučit do jedné). Drobnosti zvyšují setinu, desetina jen u významných změn.
+- Dev verze: vlastní kopie dat v IndexedDB („dev-myx“, „dev-myx-guest“, zkopírováno z produkce), žádná synchronizace. Změna formátu dat v dev nesmí měnit produkční úložiště.
 - Dekódování logu Shearwater (`src/core/shearwater.ts`) a analýzy (`src/core/analysis.ts`) měň opatrně a doplň test. Do repozitáře nikdy nedávej soubory s daty ponorů (repo je veřejné).
 - Worker (`proxy/worker.js`) – synchronizace (KV `MYX_KV`, secret `MYX_KEY`) a proxy Stran potápěčských. Změnu Workeru musí uživatel vložit do Cloudflare ručně; adresa je v `public/config.js`.
 

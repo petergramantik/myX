@@ -1,5 +1,6 @@
 name: Nasadit web
-# Každý push do main: testy, sestavení a nasazení na GitHub Pages.
+# Push do main (nebo spuštění z dev větve): testy, sestavení a nasazení na GitHub Pages.
+# Produkce z větve main → …/myX/, dev verze z větve dev → …/myX/dev/ (když větev dev existuje).
 on:
   push:
     branches: [main]
@@ -19,15 +20,29 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
-      - name: Testy a sestavení
+      - name: Produkce (main) – testy a sestavení
         run: |
           bun install
           bun tests/core.test.ts
-          ./build.sh
+          ./build.sh site
+      - name: Dev (větev dev) – testy a sestavení do site/dev
+        run: |
+          if git ls-remote --exit-code --heads origin dev >/dev/null; then
+            git worktree add ../devsrc origin/dev
+            cd ../devsrc
+            bun install
+            bun tests/core.test.ts
+            ./build.sh "$GITHUB_WORKSPACE/site/dev"
+          else
+            echo "Větev dev neexistuje – nasazuji jen produkci."
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v4

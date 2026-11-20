@@ -7,6 +7,7 @@ import { OwnerPicker } from "./Owner";
 import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, adoptGuestAsOwn, ownComputers, removeOwnComputer, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
+import { IS_DEV, copyProdToDev, devCopiedAt } from "../app/db";
 import { Card, KV, fmtDate, go, tab, useBackLayer, useStore } from "./common";
 import { ImportButton } from "./Overview";
 
@@ -115,6 +116,8 @@ export function SettingsScreen() {
         <KV rows={[["Verze", <a onClick={() => go({ t: "about" })}>{APP_VERSION} – co je nového ›</a>], ["Ponorů v telefonu", st.metas.length]]} />
         <button className="btn" onClick={() => go({ t: "help" })}>Nápověda ›</button>
       </Sec>
+
+      <DevSec />
 
       <Sec title="Dev">
         <p className="note">Vývojářská funkce: synchronizace a záloha přes vlastní Cloudflare Worker.</p>
@@ -273,3 +276,24 @@ export function GuestCard() {
   );
 }
 
+
+/** Přepnutí mezi běžnou (produkční) a dev verzí. Dev verze běží na …/dev/, bez synchronizace, na vlastní kopii dat. */
+function DevSec() {
+  const [copied, setCopied] = useState(0);
+  useEffect(() => { devCopiedAt().then(setCopied); }, []);
+  const base = location.pathname.replace(/\/dev(\/.*)?$/, "/").replace(/[^/]*$/, "");
+  const goTo = (dev: boolean) => { location.href = base + (dev ? "dev/" : ""); };
+  return (
+    <Sec title="Dev">
+      <label className="inline dev-sw"><input type="checkbox" checked={IS_DEV} onChange={(e) => goTo(e.target.checked)} /> Dev verze {IS_DEV ? "ON" : "OFF"}</label>
+      <p className="note">Dev verze je testovací a může obsahovat chyby. Pracuje na vlastní kopii tvých dat (bez synchronizace). Změny v ní se do běžné verze nepřenesou.</p>
+      {IS_DEV && <>
+        <p className="note">Kopie dat z běžné verze: {copied ? new Date(copied).toLocaleString("cs-CZ") : "–"}</p>
+        <button className="btn" onClick={async () => {
+          if (!await ask("Zahodit data dev verze a znovu zkopírovat aktuální data z běžné verze?")) return;
+          await copyProdToDev(); location.reload();
+        }}>Obnovit kopii z produkce</button>
+      </>}
+    </Sec>
+  );
+}

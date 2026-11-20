@@ -135,8 +135,8 @@ export async function init() {
   await autoLinkDrafts();
   await cleanupForeign();
   propagateExisting().catch(() => {});
-  if (workerUrl() && syncKey()) syncNow();
-  else set({ sync: { state: "off", msg: "Synchronizace není nastavená", at: 0 } });
+  if (syncOn()) syncNow();
+  else set({ sync: { state: "off", msg: db.IS_DEV ? "V dev verzi se nesynchronizuje" : "Synchronizace není nastavená", at: 0 } });
 }
 
 async function saveLb(lb: Logbook) {
@@ -1045,11 +1045,13 @@ export function nearestSite(pos = st.pos): { site: Site; km: number } | null {
 
 // ---------- synchronizace
 const pendingUpload = new Set<string>();
+/** Synchronizace jen v produkční verzi a s nastaveným Workerem. */
+const syncOn = () => !db.IS_DEV && !!workerUrl() && !!syncKey();
 let syncTimer: ReturnType<typeof setTimeout> | undefined;
 let syncing = false;
 let lastSyncErr = "";
 export function scheduleSync() {
-  if (!workerUrl() || !syncKey() || st.guest) return;
+  if (!syncOn() || st.guest) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(syncNow, 1500);
 }
@@ -1062,7 +1064,7 @@ async function api(path: string, init?: RequestInit): Promise<Response> {
 
 export async function syncNow(): Promise<void> {
   if (st.guest) return;
-  if (!workerUrl() || !syncKey()) { set({ sync: { state: "off", msg: "Synchronizace není nastavená", at: 0 } }); return; }
+  if (!syncOn()) { set({ sync: { state: "off", msg: db.IS_DEV ? "V dev verzi se nesynchronizuje" : "Synchronizace není nastavená", at: 0 } }); return; }
   if (syncing || !navigator.onLine) { if (!navigator.onLine) set({ sync: { ...st.sync, state: "idle", msg: "Bez připojení – odešle se později" } }); return; }
   syncing = true;
   set({ sync: { ...st.sync, state: "busy", msg: "Synchronizuji…" } });
@@ -1124,7 +1126,7 @@ export async function resetAll(): Promise<void> {
   const lb = resetLogbook(st.lb);
   set({ lb });
   await db.put("kv", lb, "lb");
-  if (workerUrl() && syncKey()) {
+  if (syncOn()) {
     try {
       for (let i = 0; i < 3; i++) {
         const r = await api("/sync");

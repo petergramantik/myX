@@ -1,0 +1,16 @@
+name: Dev verze
+# Push do větve dev: spustí nasazení (běží z main kvůli pravidlům GitHub Pages), které sestaví produkci i dev verzi.
+on:
+  push:
+    branches: [dev]
+permissions:
+  actions: write
+  contents: read
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Spustit nasazení
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run "Nasadit web" --repo "$GITHUB_REPOSITORY" --ref main

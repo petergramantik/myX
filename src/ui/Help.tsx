@@ -25,6 +25,7 @@ export function HelpScreen() {
 
       <H title="2. Sdílení">
         <p><b>Sdílet aplikaci:</b> Nastavení → Sdílení – odkaz nebo QR kód.</p>
+        <p><b>Dev verze:</b> Nastavení → Dev – testovací verze s novinkami ve vývoji (štítek DEV v záhlaví). Pracuje na vlastní kopii tvých dat, nesynchronizuje a do běžné verze nic nepřenese; „Obnovit kopii z produkce“ ji načte znovu. Vypnutím se vrátíš do běžné verze.</p>
         <p><b>Sdílet svůj log:</b> záložka DB → Sdílet můj log – pošle parťákovi tvůj původní export, aby si mohl ponory porovnat.</p>
         <p><b>Sdílet jen vybrané ponory:</b> v detailu ponoru tlačítko ⤴ (spojený ponor se všemi částmi), v seznamu ponorů ☑ (v cizím logu „Vybrat“) → klepnutím vyber ponory → Sdílet. Vznikne malý soubor .db se záznamy beze změny a s tvou lokalitou a parťáky; hodnocení a poznámka se nesdílí. Jde sdílet i ponory z otevřeného cizího logu – u příjemce patří původnímu majiteli. Po klepnutí vybereš: Poslat přes… (WhatsApp, Messenger, mail – soubor odejde jako .txt, příjemce ho otevře přes Sdílet → myX nebo importem) nebo Uložit jako .db.</p>
         <p><b>Smazání cizího ponoru:</b> v detailu ponoru z cizího logu „Smazat ponor z cizího logu“, nebo víc najednou přes Vybrat → Smazat. Prázdný log zmizí; majitel a aliasy zůstanou.</p>
