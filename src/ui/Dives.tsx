@@ -9,7 +9,7 @@ import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { partIds, shareDives } from "./share";
 import { ask, askText, choose } from "../app/dialog";
 import { RIGS, hasDeco, isCC, pscrLoopPo2, supplyPo2, type Rig } from "../core/rig";
-import { compName, rigChoices, rigInfo, setDiveRig } from "../app/store";
+import { compName, rigChoices, rigInfo, setDiveRig, typeBreakdown } from "../app/store";
 import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, useBackLayer, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { co2BadRanges, co2Valid, dilVents, effortOf, gasDensity, workloadIndex, workloadSkip, type EffortBase } from "../core/effort";
@@ -154,6 +154,7 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
         );
       })}
       {!rows.length && !drafts.length && <p className="muted center">Žádné ponory</p>}
+      {st.hidden.length > 0 && <p className="muted small center hidden-info">Skryto: {typeBreakdown(st.hidden).text.replace(/ – skryté, zatím nepodporováno/g, "")} – typ ponoru zatím nepodporujeme (zůstávají uložené).</p>}
       {pickMode && <div className="pickbar">
         <span>{picked.length ? `Vybráno ${picked.length}` : "Klepnutím vyber ponory"}</span>
         <button className="btn" onClick={() => setPicked(picked.length === rows.length ? [] : rows.map((r) => r.m.id))}>{picked.length === rows.length ? "Nic" : "Vše"}</button>
@@ -802,7 +803,7 @@ function RigLine({ meta }: { meta: Meta }) {
   useStore();
   const ri = rigInfo(meta.h.serial, meta.id, meta.h), cc = isCC(meta.h);
   const edit = async () => {
-    const k = await choose(`Typ přístroje u tohoto ponoru (výchozí se nastavuje u počítače v Nastavení).`, [...rigChoices(ri.rig), ...(ri.byDive ? [{ key: "reset", label: "Podle počítače" }] : [])]);
+    const k = await choose(`Typ přístroje u tohoto ponoru (výchozí se nastavuje u počítače v Nastavení).`, [...rigChoices(ri.rig, meta.h.mode), ...(ri.byDive ? [{ key: "reset", label: "Podle počítače" }] : [])]);
     if (!k) return;
     if (k === "reset") { await setDiveRig(meta.h.serial, meta.id, { rig: null, supplyO2: null }); return; }
     await setDiveRig(meta.h.serial, meta.id, { rig: k as Rig });

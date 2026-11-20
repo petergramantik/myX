@@ -395,7 +395,7 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
 
 { // Gauge mód (Peregrine, pSCR): bez čidel – žádná varování o pO₂, setpointu, čidlech; odhad smyčky pSCR
   const { diveWarnings, summarize, DEFAULT_THRESHOLDS } = await import("../src/core/analysis");
-  const { isCC, hasDeco, defaultRig, pscrLoopPo2, supplyPo2 } = await import("../src/core/rig");
+  const { isCC, hasDeco, defaultRig, pscrLoopPo2, supplyPo2, isSupported, rigsForMode } = await import("../src/core/rig");
   const { decoderFor } = await import("../src/core/decoders");
   const t = [...Array(241).keys()].map((i) => i * 5);
   const depth = t.map((x) => (x < 60 ? x / 6 : x < 1000 ? 20 : Math.max(0, 20 - (x - 1000) / 10)));
@@ -406,7 +406,8 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
       temp: t.map(() => 10), cns: z0, gf99: z0, ceil: z0, stop: z0, stopt: t.map(() => 99), tts: z0, at5: z0, st: t.map(() => 18), bv: z0, bp: z0, dil: n0, o2p: n0, co2: n0, co2raw: n0 },
     tissues: [], events: [], alarms: [], buttons: [] } as any;
   const w = diveWarnings(d, summarize(d), DEFAULT_THRESHOLDS);
-  ok(!isCC(d.h) && !hasDeco(d.h) && defaultRig(d.h) === undefined, "Gauge: bez čidel, bez deko, přístroj nezadán");
+  ok(!isCC(d.h) && !hasDeco(d.h) && defaultRig(d.h) === "pSCR" && !rigsForMode("Gauge").includes("eCCR"), "Gauge: bez čidel, bez deko, výchozí pSCR, bez eCCR");
+  ok(isSupported(d.h, "pSCR") && !isSupported(d.h, "OC") && isSupported({ mode: "CCR" } as any, "eCCR") && !isSupported({ mode: "OC" } as any, "OC"), "podporované typy ponoru: CC+eCCR, Gauge+pSCR");
   ok(!w.some((x) => /hypoxi|pO₂ při zanoření|etpoint|Čidlo|čidl/.test(x.title)), `Gauge: žádná varování z čidel ani setpointu (${w.map((x) => x.title).join(", ")})`);
   const sup = supplyPo2(d, 40), lo = pscrLoopPo2(d, 40, 8, 20), hi = pscrLoopPo2(d, 40, 8, 30);
   const k = 200; // 20 m

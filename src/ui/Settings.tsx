@@ -8,7 +8,7 @@ import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerNa
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { IS_DEV, copyProdToDev, devCopiedAt } from "../app/db";
-import { openTempOwn, ownLb, rigChoices, setComputerRig } from "../app/store";
+import { openTempOwn, ownHidden, ownLb, rigChoices, setComputerRig, typeBreakdown } from "../app/store";
 import type { Rig } from "../core/rig";
 import { Card, KV, fmtDate, go, tab, useBackLayer, useStore } from "./common";
 import { ImportButton } from "./Overview";
@@ -145,7 +145,7 @@ function OwnComputers() {
       {cs.map((c) => (
         <div key={c.serial} className="row between">
           <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)} · přístroj {rigLabel(parseInt(c.serial, 16))}</span>
-          <button className="btn small" onClick={() => editRig(parseInt(c.serial, 16))}>Přístroj</button>
+          <button className="btn small" onClick={() => editRig(parseInt(c.serial, 16), majorityMode([...ownMetas(), ...ownHidden()].filter((m) => m.h.serial === parseInt(c.serial, 16))))}>Přístroj</button>
           {cs.length > 1 && <button className="btn small" onClick={async () => { if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako cizí log a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
         </div>
       ))}
@@ -202,7 +202,7 @@ function ShareInner() {
 /** Cizí logy: jen k prohlížení, uložené zvlášť, bez synchronizace. */
 export function GuestCard() {
   const st = useStore();
-  const [groups, setGroups] = useState<{ log: GuestLog; logs: GuestLog[]; counts: Record<string, number>; from: number; to: number; common: number; alts: number }[]>([]);
+  const [groups, setGroups] = useState<{ log: GuestLog; logs: GuestLog[]; counts: Record<string, number>; types: Record<string, string>; modes: Record<string, string>; from: number; to: number; common: number; alts: number }[]>([]);
   const [busy, setBusy] = useState(false);
   const [ownerFor, setOwnerFor] = useState<string | null>(null);
   const [actFor, setActFor] = useState<string | null>(null);
@@ -213,8 +213,9 @@ export function GuestCard() {
     const raw = await guestRawIndex(), ix = await guestIndexLoad(), mine = ownMetas();
     setGroups(ix.map((g) => {
       const logs = g.log.logs || [g.log], st0 = g.metas.map((m) => m.start);
-      const counts: Record<string, number> = {}; for (const l of logs) counts[l.id] = raw.find((x) => x.log.id === l.id)?.metas.length ?? l.count;
-      return { log: g.log, logs, counts, from: Math.min(...st0), to: Math.max(...st0), common: mine.filter((m) => nearestPair(g.metas, m).length).length, alts: g.alts.length };
+      const counts: Record<string, number> = {}, types: Record<string, string> = {}, modes: Record<string, string> = {};
+      for (const l of logs) { const ms = raw.find((x) => x.log.id === l.id)?.metas || []; counts[l.id] = ms.length || l.count; const tb = typeBreakdown(ms); types[l.id] = tb.text; modes[l.id] = majorityMode(ms); }
+      return { log: g.log, logs, counts, types, modes, from: Math.min(...st0), to: Math.max(...st0), common: mine.filter((m) => nearestPair(g.metas, m).length).length, alts: g.alts.length };
     }));
   };
   useEffect(() => { reload(); }, [st.guest, st.lb.computers, st.guestRev]);
@@ -248,6 +249,7 @@ export function GuestCard() {
               <div key={l.id} className="lt-comp">
                 <div className="lt-comp-h">
                   <div className="small">{compLabel(l)} · {g.counts[l.id]} ponorů{multi && k === 0 ? " · hlavní" : ""}</div>
+                  {g.types[l.id] && <div className="small muted">{g.types[l.id]}</div>}
                   <button className={"btn small act" + (actFor === l.id ? " on" : "")} disabled={moving === l.id} onClick={() => setActFor(actFor === l.id ? null : l.id)}>{moving === l.id ? "Přesouvám…" : "Akce ▾"}</button>
                 </div>
                 {actFor === l.id && <div className="actmenu">
@@ -261,7 +263,7 @@ export function GuestCard() {
                     finally { setMoving(null); }
                     reload();
                   }}>To je můj počítač</button>
-                  {l.serial && <button onClick={() => { setActFor(null); editRig(parseInt(l.serial!, 16)); }}>Přístroj: {rigLabel(parseInt(l.serial, 16))}</button>}
+                  {l.serial && <button onClick={() => { setActFor(null); editRig(parseInt(l.serial!, 16), g.modes[l.id]); }}>Přístroj: {rigLabel(parseInt(l.serial, 16))}</button>}
                   <button className="danger" onClick={async () => { setActFor(null); if (await ask(`Smazat log počítače ${compLabel(l)}?`, { danger: true })) { await deleteGuest(l); reload(); } }}>Smazat</button>
                 </div>}
                 {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
@@ -308,12 +310,17 @@ function rigLabel(serial: number): string {
   const c = ownLb().computers?.[serial.toString(16).toUpperCase()];
   return c?.rig ? `${c.rig}${c.supplyO2 ? `, ${c.supplyO2} % O₂` : ""}${c.rig === "pSCR" ? `, 1:${c.pscrRatio ?? 8}` : ""}` : "výchozí";
 }
-async function editRig(serial: number) {
+/** Převládající mód ponorů počítače. */
+function majorityMode(ms: { h: { mode: string } }[]): string {
+  const by = new Map<string, number>(); for (const m of ms) by.set(m.h.mode, (by.get(m.h.mode) || 0) + 1);
+  return [...by].sort((a, b) => b[1] - a[1])[0]?.[0] || "CCR";
+}
+async function editRig(serial: number, mode: string) {
   const c = ownLb().computers?.[serial.toString(16).toUpperCase()];
-  const k = await choose("Typ dýchacího přístroje pro ponory z tohoto počítače (u jednotlivého ponoru jde změnit v detailu). Zašedlé typy zatím neumíme vyhodnotit.", rigChoices(c?.rig));
+  const k = await choose(`Typ přístroje pro ponory v módu ${mode} z tohoto počítače (převládající mód; ponory v jiném módu se řídí svým módem, u jednotlivého ponoru jde změnit v detailu). Zašedlé typy zatím neumíme vyhodnotit – jejich ponory se nezobrazují.`, rigChoices(c?.rig, mode));
   if (!k) return;
   const patch: { rig: Rig; supplyO2?: number; pscrRatio?: number } = { rig: k as Rig };
-  if (k !== "eCCR") {
+  if (k === "pSCR" || k === "OC" || k === "aSCR") {
     const v = await askText("Zásobní plyn – O₂ % (v Gauge módu ho počítač nezná; prázdné = podle logu)", c?.supplyO2 ? String(c.supplyO2) : "");
     if (v != null && v.trim()) patch.supplyO2 = Math.min(100, Math.max(5, Math.round(+v.replace(",", ".")) || 21));
   }

@@ -2,7 +2,7 @@
 // Mód počítače je v logu (CC, OC, Gauge…), typ přístroje (eCCR, pSCR…) zadává uživatel u počítače nebo u ponoru.
 import type { Dive, Header } from "./shearwater";
 
-export type Rig = "eCCR" | "pSCR" | "OC" | "aSCR" | "mCCR";
+export type Rig = "eCCR" | "pSCR" | "OC" | "aSCR" | "mCCR" | "Freedive";
 /** Aktivní = umíme vyhodnotit (potkali jsme log); ostatní jsou vidět, ale zašedlé. */
 export const RIGS: { id: Rig; label: string; note: string; active: boolean }[] = [
   { id: "eCCR", label: "eCCR", note: "elektronický uzavřený okruh (solenoid, čidla)", active: true },
@@ -10,6 +10,7 @@ export const RIGS: { id: Rig; label: string; note: string; active: boolean }[] =
   { id: "OC", label: "OC", note: "otevřený okruh", active: false },
   { id: "aSCR", label: "aSCR", note: "aktivní polouzavřený okruh (konstantní průtok)", active: false },
   { id: "mCCR", label: "mCCR", note: "manuální uzavřený okruh", active: false },
+  { id: "Freedive", label: "Freedive", note: "nádechové potápění", active: false },
 ];
 
 /** Počítač měří pO₂ čidly (CC mód nebo zobrazení pO₂). */
@@ -17,7 +18,24 @@ export const isCC = (h: Header) => h.mode === "CCR" || h.mode === "pO₂ displej
 /** Počítač počítá dekompresi (v Gauge módu ne). */
 export const hasDeco = (h: Header) => h.mode !== "Gauge";
 /** Výchozí typ přístroje podle módu počítače (Gauge: neznámý, je potřeba zadat). */
-export const defaultRig = (h: Header): Rig | undefined => (isCC(h) ? "eCCR" : h.mode === "OC" ? "OC" : undefined);
+export const defaultRig = (h: Header): Rig | undefined => rigsForMode(h.mode)[0];
+/** Typy přístroje, které pro mód počítače dávají smysl (první = výchozí). Gauge: bez eCCR. */
+export function rigsForMode(mode: string): Rig[] {
+  switch (mode) {
+    case "CCR": case "pO₂ displej": return ["eCCR", "mCCR"];
+    case "Gauge": return ["pSCR", "OC", "Freedive"];
+    case "SCR": return ["aSCR", "pSCR"];
+    case "OC": return ["OC"];
+    case "Freedive": return ["Freedive"];
+    default: return [];
+  }
+}
+/** Podporované kombinace mód + přístroj (ostatní ponory se zatím nezobrazují). */
+export function isSupported(h: Header, rig?: Rig): boolean {
+  return (isCC(h) && rig === "eCCR") || (h.mode === "Gauge" && rig === "pSCR");
+}
+/** Typ ponoru pro informaci: „Gauge (pSCR)“. */
+export const diveType = (h: Header, rig?: Rig) => `${h.mode}${rig ? ` (${rig})` : ""}`;
 
 const amb = (d: Dive, i: number) => (d.h.surfP || 1013) / 1000 + d.s.depth[i] * (d.h.salinity || 1000) / 1000 * 0.0981;
 

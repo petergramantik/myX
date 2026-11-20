@@ -1,5 +1,5 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
-import { ask, askText, choose } from "./dialog";
+import { ask, askText } from "./dialog";
 import { mergeDives, segGroups } from "../core/segments";
 import { writeSqlite } from "../core/sqlitew";
 import { SqliteFile } from "../core/sqlite";
@@ -9,7 +9,7 @@ import { cellsOfDive } from "../core/cells";
 import { loadWeather } from "./weather";
 import * as db from "./db";
 import { decodeAny, readAny } from "../core/decoders";
-import { RIGS, defaultRig, type Rig } from "../core/rig";
+import { RIGS, defaultRig, diveType, isSupported, rigsForMode, type Rig } from "../core/rig";
 import { aliasKey, cleanForeign, emptyLogbook, resetLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
@@ -24,18 +24,32 @@ export interface State {
   guest: GuestLog | null;  // prohlížený cizí log (jen pro čtení); null = vlastní data
   /** dev: cizí log otevřený „jako můj“ – změny jen v paměti do restartu */ temp?: GuestLog | null;
   guestRev: number;        // mění se při přidání / odebrání cizího logu (přenačtení návrhů)
+  /** ponory nepodporovaného typu (mód + přístroj) – uložené, ale nezobrazují se */ hidden: Meta[];
 }
 /** Cizí log uložený v samostatné databázi, nikdy se nesynchronizuje. */
 export interface GuestLog { id: string; name: string; count: number; added: number; serial?: string; model?: string; /** u skupiny počítačů jednoho majitele: všechny jeho logy (hlavní první) */ logs?: GuestLog[] }
 
 let st: State = {
   ready: false, metas: [], lb: emptyLogbook(), pos: null, posErr: null,
-  sync: { state: "off", msg: "", at: 0 }, toast: null, guest: null, guestRev: 0,
+  sync: { state: "off", msg: "", at: 0 }, toast: null, guest: null, guestRev: 0, hidden: [],
 };
 const subs = new Set<() => void>();
 export const getState = () => st;
 export const subscribe = (f: () => void) => { subs.add(f); return () => subs.delete(f); };
-function set(p: Partial<State>) { st = { ...st, ...p }; subs.forEach((f) => f()); }
+function set(p: Partial<State>) {
+  // ponory nepodporovaného typu se odloží stranou (zůstávají uložené); „hidden“ v p = nový kontext (jiný log)
+  if (p.metas) {
+    const lb = own?.lb ?? p.lb ?? st.lb, vis: Meta[] = [], hid = new Map(("hidden" in p ? p.hidden! : st.hidden).map((m) => [m.id, m]));
+    for (const m of p.metas) { if (supportedMeta(m, lb)) vis.push(m); else hid.set(m.id, m); }
+    for (const m of vis) hid.delete(m.id);
+    p = { ...p, metas: vis, hidden: [...hid.values()] };
+  }
+  st = { ...st, ...p }; subs.forEach((f) => f());
+}
+/** Ponor podporovaného typu (mód + typ přístroje). */
+function supportedMeta(m: Meta, lb: Logbook): boolean { return isSupported(m.h, rigInfo(m.h.serial, m.id, m.h, lb).rig); }
+/** Po změně typu přístroje: znovu rozdělit ponory na zobrazené a skryté. */
+function repartition() { set({ metas: sortMetas([...st.metas, ...st.hidden]), hidden: [] }); }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 export function toast(msg: string) {
@@ -134,7 +148,7 @@ export async function init() {
   const have = new Set(fresh.map((m) => m.id));
   const missing = raws.filter((r) => !have.has(r.id));
   for (const r of missing) { const m = await metaOf(r); fresh.push(m); await db.put("meta", m); }
-  set({ ready: true, metas: sortMetas(fresh), lb: lb ? mergeLogbooks(emptyLogbook(), lb) : emptyLogbook() });
+  set({ ready: true, hidden: [], metas: sortMetas(fresh), lb: lb ? mergeLogbooks(emptyLogbook(), lb) : emptyLogbook() });
   await autoLinkDrafts();
   await cleanupForeign();
   propagateExisting().catch(() => {});
@@ -163,9 +177,10 @@ function modelFor(ser: number): string {
   return gl?.model || st.lb.computers?.[hex]?.model || ownLb().computers?.[hex]?.model || "Petrel";
 }
 /** Typ přístroje, zásobní plyn a poměr pSCR pro ponor: změna u ponoru → nastavení počítače → výchozí podle módu. */
-export function rigInfo(serial: number, diveId: string, h: Header): { rig?: Rig; supplyO2?: number; ratio: number; byDive: boolean } {
-  const c = ownLb().computers?.[serial.toString(16).toUpperCase()], o = c?.dives?.[diveId];
-  return { rig: o?.rig ?? c?.rig ?? defaultRig(h), supplyO2: o?.supplyO2 ?? c?.supplyO2, ratio: c?.pscrRatio ?? 8, byDive: !!(o?.rig || o?.supplyO2) };
+export function rigInfo(serial: number, diveId: string, h: Header, lb: Logbook = ownLb()): { rig?: Rig; supplyO2?: number; ratio: number; byDive: boolean } {
+  const c = lb.computers?.[serial.toString(16).toUpperCase()], o = c?.dives?.[diveId];
+  const fits = (r?: Rig) => (r && rigsForMode(h.mode).includes(r) ? r : undefined); // výchozí typ počítače jen pro ponory, kde dává smysl
+  return { rig: fits(o?.rig) ?? fits(c?.rig) ?? defaultRig(h), supplyO2: o?.supplyO2 ?? c?.supplyO2, ratio: c?.pscrRatio ?? 8, byDive: !!(o?.rig || o?.supplyO2) };
 }
 /** Nastavení počítače z mého logbooku (typ přístroje, scrubber…). */
 export const computerCfg = (serial: number): Computer | undefined => ownLb().computers?.[serial.toString(16).toUpperCase()];
@@ -175,6 +190,7 @@ export async function setComputerRig(serial: number, patch: Partial<Pick<Compute
   lb.computers = lb.computers || {};
   lb.computers[hex] = { ...lb.computers[hex], id: hex, model: lb.computers[hex]?.model || modelFor(serial), ...patch, updated: Date.now() };
   await saveOwnLb(lb);
+  if ("rig" in patch) repartition();
 }
 /** Změna typu přístroje nebo zásobního plynu u jednoho ponoru (null = podle počítače). */
 export async function setDiveRig(serial: number, diveId: string, patch: { rig?: Rig | null; supplyO2?: number | null }) {
@@ -188,17 +204,22 @@ export async function setDiveRig(serial: number, diveId: string, patch: { rig?: 
   if (o.rig || o.supplyO2) c.dives[diveId] = o; else delete c.dives[diveId];
   lb.computers[hex] = c;
   await saveOwnLb(lb);
+  if (patch.rig !== undefined) repartition();
 }
 /** Volby typu přístroje: nepodporované jsou vidět, ale zašedlé. */
-export const rigChoices = (cur?: Rig) => RIGS.map((r) => ({ key: r.id, label: r.label + (r.active ? "" : " – zatím nepodporováno"), note: r.note, disabled: !r.active, primary: r.id === cur }));
-/** Po importu: u počítače v Gauge módu bez zadaného přístroje se zeptá na typ přístroje. */
-async function askRigFor(metas: Meta[], model?: string) {
-  for (const ser of new Set(metas.filter((m) => !defaultRig(m.h)).map((m) => m.h.serial))) {
-    if (ownLb().computers?.[ser.toString(16).toUpperCase()]?.rig) continue;
-    const k = await choose(`Počítač ${model || modelFor(ser)} ukládá ponory v módu ${metas.find((m) => m.h.serial === ser)!.h.mode} – bez čidel O₂ a bez typu přístroje. S jakým přístrojem se potápí? (Změníš v Nastavení u počítače nebo u ponoru.)`,
-      rigChoices());
-    if (k) await setComputerRig(ser, { rig: k as Rig });
-  }
+export const rigChoices = (cur?: Rig, mode?: string) => RIGS.filter((r) => !mode || rigsForMode(mode).includes(r.id)).map((r) => ({ key: r.id, label: r.label + (r.active ? "" : " – zatím nepodporováno"), note: r.note, disabled: !r.active, primary: r.id === cur }));
+/** Rozpis ponorů počítače podle typu (mód + přístroj): „65× Gauge (pSCR), 5× OC – skryté“. */
+export function typeBreakdown(metas: Meta[], lb: Logbook = ownLb()): { text: string; hidden: number; main?: string } {
+  const by = new Map<string, { n: number; ok: boolean }>();
+  for (const m of metas) { const r = rigInfo(m.h.serial, m.id, m.h, lb).rig, k = diveType(m.h, r), x = by.get(k) || { n: 0, ok: isSupported(m.h, r) }; x.n++; by.set(k, x); }
+  const xs = [...by].sort((a, b) => b[1].n - a[1].n);
+  return { text: xs.map(([k, x]) => `${x.n}× ${k}${x.ok ? "" : " – skryté, zatím nepodporováno"}`).join(", "), hidden: xs.filter(([, x]) => !x.ok).reduce((a, [, x]) => a + x.n, 0), main: xs[0]?.[0] };
+}
+/** Po importu: jen informace, jak se ponory zobrazí (typ přístroje podle módu, převládající typ počítače). */
+function informTypes(metas: Meta[], model?: string) {
+  const sers = [...new Set(metas.map((m) => m.h.serial))];
+  const parts = sers.map((ser) => `${model || modelFor(ser)}: ${typeBreakdown(metas.filter((m) => m.h.serial === ser)).text}`);
+  if (parts.length) setTimeout(() => toast(`${parts.join(" · ")}. Typ přístroje změníš v Nastavení u počítače nebo u ponoru.`), 4000); // po hlášce o importu
 }
 
 /** Název počítače pro zobrazení: model, u dvou stejných modelů pořadí („Petrel 2 (druhý)“). */
@@ -325,7 +346,7 @@ async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promis
   set({ metas: sortMetas([...st.metas, ...added]) });
   await autoLinkDrafts();
   scheduleSync();
-  await askRigFor(added); // Gauge mód: s jakým přístrojem se potápí
+  informTypes(added); // jak se ponory zobrazí (typ podle módu)
   return added.length;
 }
 
@@ -362,10 +383,12 @@ export function applyCloud(lb0: Logbook, cloud: Map<string, CloudDetail>, ids: S
 }
 
 // ---------- cizí logy (jen k prohlížení, oddělená databáze, bez synchronizace)
-let own: { metas: Meta[]; lb: Logbook } | null = null;
+let own: { metas: Meta[]; lb: Logbook; hidden?: Meta[] } | null = null;
 /** Vlastní logbook a ponory i během prohlížení cizího logu. */
 export const ownLb = (): Logbook => own?.lb ?? st.lb;
 export const ownMetas = (): Meta[] => own?.metas ?? st.metas;
+/** Moje skryté ponory (nepodporovaný typ). */
+export const ownHidden = (): Meta[] => (own ? own.hidden || [] : st.hidden);
 /** Změna mých dat – při otevřeném cizím logu se uloží stranou (neprojeví se v cizím zobrazení). */
 function setOwn(p: { metas?: Meta[]; lb?: Logbook }) {
   if (own) own = { ...own, ...p }; else set(p);
@@ -790,7 +813,7 @@ async function importGuestRaws(buf: Uint8Array, raws: RawDive[], open = true): P
   set({ guestRev: st.guestRev + 1 });
   const known = log.serial ? ownLb().computers?.[log.serial] : undefined;
   if (known?.buddyId) await setComputerOwner(log, { id: known.buddyId }); // stejný počítač už má majitele
-  await askRigFor(metas, model); // Gauge mód: s jakým přístrojem se potápí
+  informTypes(metas, model); // jak se ponory zobrazí (typ podle módu)
   if (open) await openGuest(log);
   return log;
 }
@@ -837,12 +860,12 @@ export async function openGuest(log: GuestLog) {
   const ix = await guestIndexLoad();
   const g = ix.find((x) => x.log.id === log.id || x.log.logs?.some((l) => l.id === log.id));
   if (!g) { toast("Cizí log se nepodařilo načíst"); return; }
-  if (!own) own = { metas: st.metas, lb: st.lb };
+  if (!own) own = { metas: st.metas, lb: st.lb, hidden: st.hidden };
   diveCache.clear();
   // nastavení (limity, objemy lahví) zůstávají vlastní, čidla a baterie cizí log nemá; jména přeložit podle mých přiřazení
-  set({ guest: g.log, metas: g.metas, lb: withAliases({ ...g.lb, settings: own.lb.settings }, own.lb) });
+  set({ guest: g.log, metas: g.metas, hidden: [], lb: withAliases({ ...g.lb, settings: own.lb.settings }, own.lb) });
 }
-let tempSaved: { metas: Meta[]; lb: Logbook } | null = null;
+let tempSaved: { metas: Meta[]; lb: Logbook; hidden: Meta[] } | null = null;
 /** Dev verze: cizí log otevřený jako vlastní. Zápisy do úložiště se vypnou – změny platí jen do restartu aplikace. */
 export async function openTempOwn(log: GuestLog) {
   if (!db.IS_DEV) return;
@@ -850,24 +873,24 @@ export async function openTempOwn(log: GuestLog) {
   const ix = await guestIndexLoad();
   const g = ix.find((x) => x.log.id === log.id || x.log.logs?.some((l) => l.id === log.id));
   if (!g) { toast("Cizí log se nepodařilo načíst"); return; }
-  if (!tempSaved) tempSaved = { metas: st.metas, lb: st.lb };
+  if (!tempSaved) tempSaved = { metas: st.metas, lb: st.lb, hidden: st.hidden };
   db.setMemOnly(true);
   diveCache.clear();
-  set({ temp: g.log, metas: g.metas, lb: { ...structuredClone(g.lb), settings: tempSaved.lb.settings } });
+  set({ temp: g.log, hidden: [], lb: { ...structuredClone(g.lb), settings: tempSaved.lb.settings } }); set({ metas: g.metas, hidden: [] });
 }
 /** Zpět na můj log – dočasné změny se zahodí. */
 export function closeTempOwn() {
   if (!tempSaved) return;
   if (st.guest) closeGuest();
   diveCache.clear();
-  set({ temp: null, metas: tempSaved.metas, lb: tempSaved.lb });
+  set({ temp: null, lb: tempSaved.lb }); set({ metas: tempSaved.metas, hidden: tempSaved.hidden });
   tempSaved = null;
   db.setMemOnly(false);
 }
 export function closeGuest() {
   if (!own) return;
   diveCache.clear();
-  set({ guest: null, metas: own.metas, lb: own.lb });
+  set({ guest: null, metas: own.metas, hidden: own.hidden || [], lb: own.lb });
   own = null;
   scheduleSync();
 }
@@ -1140,7 +1163,7 @@ export async function syncNow(): Promise<void> {
       if (!r.ok) throw new Error(`Worker: ${r.status}`);
       const remote = (await r.json()) as { lb: Logbook | null; ver: number; dives: { id: string; num: number; start: number }[] };
       // ponory: stáhnout chybějící, nahrát nové – vždy jen moje (i kdyby se mezitím otevřel cizí log)
-      const local = new Set(ownMetas().map((m) => m.id));
+      const local = new Set([...ownMetas(), ...ownHidden()].map((m) => m.id)); // i skryté (nepodporovaný typ) – zůstávají v záloze
       const remoteIds = new Set(remote.dives.map((d) => d.id));
       const got: Meta[] = [];
       for (const d of remote.dives) {
@@ -1154,7 +1177,7 @@ export async function syncNow(): Promise<void> {
         got.push(m);
       }
       if (got.length) { setOwn({ metas: sortMetas([...ownMetas(), ...got]) }); if (!st.guest) await autoLinkDrafts(); }
-      for (const m of ownMetas()) {
+      for (const m of [...ownMetas(), ...ownHidden()]) {
         if (remoteIds.has(m.id) && !pendingUpload.has(m.id)) continue;
         const raw = await db.get<RawDive>("raw", m.id);
         if (!raw) continue;
@@ -1245,5 +1268,5 @@ export async function importBackup(file: File): Promise<number> {
 export async function wipeLocal() {
   await db.clearAll();
   diveCache.clear();
-  set({ metas: [], lb: emptyLogbook() });
+  set({ metas: [], hidden: [], lb: emptyLogbook() });
 }

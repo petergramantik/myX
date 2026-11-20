@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.3";
+export const APP_VERSION = "1.42-dev.4";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.4", date: "2026-11-20", title: "Typ ponoru podle módu (dev)", items: [
+    "Typ přístroje z módu každého ponoru: CC → eCCR, Gauge → pSCR (OC a Freedive zašedlé) – bez dotazu, jen informace po importu.",
+    "Ponory nepodporovaného typu se nezobrazují, ale zůstávají uložené (i v záloze); v seznamu řádek „Skryto…“, v DB rozpis typů u logu.",
+    "Nabídka typu přístroje podle módu ponoru (u Gauge bez eCCR); výchozí u počítače pro převládající mód.",
+  ] },
   { version: "1.42-dev.3", date: "2026-11-20", title: "Cizí log jako můj (dev)", items: [
     "Dev verze: cizí log jde otevřít jako vlastní (přepínač logů v záhlaví, DB → Logy ostatních); změny jen v paměti do restartu, žlutý pruh s upozorněním a „Zpět na můj log“.",
   ] },
