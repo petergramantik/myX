@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.5";
+export const APP_VERSION = "1.42-dev.6";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.6", date: "2026-11-20", title: "Název počítače (dev)", items: [
+    "U logu otevřeného „jako můj“ se u scrubberu a baterie ukazuje správný model počítače (ne Petrel); obrazovka baterií má název podle počítače; baterie hlavy jen u CC ponorů.",
+  ] },
   { version: "1.42-dev.5", date: "2026-11-20", title: "Oprava čidel bez CC (dev)", items: [
     "Ponory bez čidel O₂ (Gauge) už nemají v seznamu nesmyslné tagy čidel – citlivost čidel se vyhodnocuje jen u CC ponorů.",
   ] },

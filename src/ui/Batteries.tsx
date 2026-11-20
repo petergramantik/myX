@@ -60,7 +60,7 @@ export function BatteryTiles() {
           <div className="ct-u">na začátku ponoru</div>
           <div className={"ct-l " + pLvl}>{pLvl === "ok" ? "V pořádku" : pLvl === "warn" ? "Varování" : "Vyměnit"}</div>
         </div>
-        {!b.guest && b.head.map((x) => {
+        {!b.guest && isCC(h) && b.head.map((x) => {
           const lvl = x.reasons.length ? "warn" : x.cur ? "ok" : "info";
           return (
             <div key={x.pos} className={"celltile " + lvl} onClick={() => go({ t: "bats", pos: x.pos })}>
@@ -130,7 +130,7 @@ export function BatteriesScreen({ pos }: { pos?: number }) {
   return (
     <div className="screen">
       {!pos && b.last && (
-        <Card title="Petrel">
+        <Card title={compName(b.last.h.serial)}>
           {b.petrelAlerts.map((a, i) => <AlertBox key={i} a={a} />)}
           <p>{b.last.h.batType} · práh varování {b.last.h.batWarn.toFixed(2)} V · kritický {b.last.h.batCrit.toFixed(2)} V</p>
           <LineChart t={ms.map((m) => st.metas.indexOf(m) + 1)} height={170} xFmt={(v) => String(Math.round(v))}

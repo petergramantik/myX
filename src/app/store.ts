@@ -172,9 +172,9 @@ export const serialHex = (m: Meta) => (m.h.serial || 0).toString(16).toUpperCase
 export const ownSerials = () => new Set([...ownMetas().map(serialHex).filter((x) => x !== "0"), ...Object.values(ownLb().computers || {}).filter((c) => c.mine).map((c) => c.id)]);
 /** Model počítače podle sériového čísla (bez ID – to se ukazuje jen v Databázi). */
 function modelFor(ser: number): string {
-  const hex = ser.toString(16).toUpperCase(), g = st.guest;
+  const hex = ser.toString(16).toUpperCase(), g = st.guest ?? st.temp; // i cizí log otevřený „jako můj“
   const gl = g ? (g.logs || [g]).find((l) => l.serial === hex) : undefined;
-  return gl?.model || st.lb.computers?.[hex]?.model || ownLb().computers?.[hex]?.model || "Petrel";
+  return gl?.model || st.lb.computers?.[hex]?.model || ownLb().computers?.[hex]?.model || tempSaved?.lb.computers?.[hex]?.model || "Počítač";
 }
 /** Typ přístroje, zásobní plyn a poměr pSCR pro ponor: změna u ponoru → nastavení počítače → výchozí podle módu. */
 export function rigInfo(serial: number, diveId: string, h: Header, lb: Logbook = ownLb()): { rig?: Rig; supplyO2?: number; ratio: number; byDive: boolean } {
