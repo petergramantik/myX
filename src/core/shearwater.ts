@@ -79,6 +79,22 @@ const u32 = (b: Uint8Array, i: number) => ((b[i] << 24) >>> 0) + ((b[i + 1] << 1
 const PSI2 = 2 / 14.5038;
 /** Mód počítače v hlavičce (0x14, bajt 1) – podle libdivecomputer; 5 = CC/BO 2. sada. */
 const MODES: Record<number, string> = { 0: "CCR", 1: "OC", 2: "Gauge", 3: "pO₂ displej", 4: "SCR", 5: "CCR", 6: "OC", 7: "Freedive" };
+/** Tlak z vysílače AI ve vzorku (bar), null = vysílač není spárovaný / bez spojení. */
+function aiBar(r: Uint8Array, at: number): number | null {
+  const v = (r[at] << 8) | r[at + 1];
+  return v === 0 || v >= 0xfff0 ? null : Math.round((v & 0x0fff) * PSI2 * 10) / 10;
+}
+/** Který vysílač je diluent a který kyslík – podle jména vysílače v hlavičce (D…, O…). Bez jména nebo dat null. */
+export function aiRoles(O6: Uint8Array | undefined, t1: (number | null)[], t2: (number | null)[]): { dil: (number | null)[]; o2: (number | null)[] } | null {
+  const has = (a: (number | null)[]) => a.filter((v) => v != null).length >= 10;
+  if (!has(t1) && !has(t2)) return null;
+  const nm = (a: number) => (O6 ? String.fromCharCode(O6[a], O6[a + 1]).toUpperCase() : "");
+  const n1 = nm(20), n2 = nm(23); // 0x16: jména vysílačů T1 (bajty 20–21) a T2 (23–24)
+  if (n1.startsWith("O") || n2.startsWith("D")) return { dil: t2, o2: t1 };
+  if (n1.startsWith("D") || n2.startsWith("O")) return { dil: t1, o2: t2 };
+  // bez jmen (výchozí T1/T2, starší firmware) roli spolehlivě poznat nejde (ověřeno na starších logech) – nevyužít
+  return null;
+}
 export const BAT_TYPES: Record<number, string> = { 1: "Alkalická 1,5 V", 2: "Lithiová 1,5 V", 3: "NiMH 1,2 V" };
 const EVN: Record<number, string> = {
   11: "Začátek ponoru", 46: "ID záznamu", 0: "Varování zobrazeno", 1: "Varování potvrzeno / zmizelo", 2: "Varování potvrzeno tlačítkem", 19: "Výběr plynu (P)", 22: "Uložení kurzu (?)",
@@ -171,6 +187,7 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
   const sd = new Date(start * 1000), startClock = sd.getUTCMinutes() * 60 + sd.getUTCSeconds();
   const open: Record<string, Alarm> = {};
   let tb: number[] = [];
+  const ai1: (number | null)[] = [], ai2: (number | null)[] = [];
   const pressure = (depth: number) => surfP / 1000 + depth * salinity / 1000 * 0.0981;
   for (const r of R) {
     const t = r[0];
@@ -182,6 +199,8 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
       s.sp.push(r[19] / 100); s.temp.push((r[14] << 24) >> 24); s.cns.push(r[23]); s.gf99.push(r[25] === 255 ? null : r[25]);
       s.o2.push(r[8]); s.he.push(r[9]); s.st.push(r[12]); s.bv.push(r[18] / 100); s.bp.push(r[11]);
       s.dil.push(null); s.o2p.push(null); s.co2raw.push(null); s.co2.push(null);
+      // bezdrátové vysílače tlaku (AI): T1 bajty 28–29, T2 bajty 20–21, 2 psi, ≥ 0xFFF0 = bez spojení
+      ai1.push(aiBar(r, 28)); ai2.push(aiBar(r, 20));
     } else if (t === 0xe1 && n) {
       s.dil[n - 1] = Math.round(u16(r, 5) * PSI2 * 10) / 10;
       s.o2p[n - 1] = Math.round(u16(r, 7) * PSI2 * 10) / 10;
@@ -226,6 +245,11 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
   }
   for (const a of Object.values(open)) a!.end = Math.max(a!.start, h.diveTimeS);
   buttons.sort((x, y) => x.t - y.t);
+  // tlaky z vysílačů AI, jen když log nemá tlaky z DiveCAN (0xE1)
+  if (!s.dil.some((v) => v != null) && !s.o2p.some((v) => v != null)) {
+    const roles = aiRoles(O6, ai1, ai2);
+    if (roles) { s.dil = roles.dil; s.o2p = roles.o2; }
+  }
   return { id: raw.id, h, s, tissues, events, alarms, buttons };
 }
 

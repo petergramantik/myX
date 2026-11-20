@@ -147,7 +147,7 @@ export async function init() {
   const fresh = metas.filter((m) => m.v === META_V);
   const have = new Set(fresh.map((m) => m.id));
   const missing = raws.filter((r) => !have.has(r.id));
-  for (const r of missing) { const m = await metaOf(r); fresh.push(m); await db.put("meta", m); }
+  for (const r of missing) { try { const m = await metaOf(r); fresh.push(m); await db.put("meta", m); } catch { /* nečitelný ponor přeskočit */ } }
   set({ ready: true, hidden: [], metas: sortMetas(fresh), lb: lb ? mergeLogbooks(emptyLogbook(), lb) : emptyLogbook() });
   await autoLinkDrafts();
   await cleanupForeign();
@@ -332,16 +332,21 @@ async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promis
   for (const m of st.metas) { const n = cnums.get(m.id); if (n != null && m.cnum !== n) { const raw = await db.get<RawDive>("raw", m.id); if (raw) { await db.put("raw", { ...raw, cnum: n }); } const mm = { ...m, cnum: n }; await db.put("meta", mm); upd.push(mm); } }
   if (upd.length) set({ metas: st.metas.map((m) => upd.find((x) => x.id === m.id) || m) });
   const added: Meta[] = [];
+  const skipped: string[] = [];
   for (const r of raws) {
     if (have.has(r.id)) continue;
-    const ph = await peekHeader(r.blob);
-    const raw: RawDive = { ...r, num: ph.num, start: ph.start, blob: r.blob.slice(), cnum: cnums.get(r.id) };
-    await db.put("raw", raw);
-    const m = await metaOf(raw);
-    await db.put("meta", m);
-    added.push(m);
-    pendingUpload.add(raw.id);
+    // ponor, který nejde přečíst, přeskočit – ostatní se načtou
+    try {
+      const ph = await peekHeader(r.blob);
+      const raw: RawDive = { ...r, num: ph.num, start: ph.start, blob: r.blob.slice(), cnum: cnums.get(r.id) };
+      const m = await metaOf(raw);
+      await db.put("raw", raw);
+      await db.put("meta", m);
+      added.push(m);
+      pendingUpload.add(raw.id);
+    } catch { skipped.push(/#(\d+)/.exec(r.fn || "")?.[1] ?? "?"); }
   }
+  if (skipped.length) setTimeout(() => toast(`${skipped.length} ${skipped.length === 1 ? "ponor se nepodařilo" : "ponorů se nepodařilo"} přečíst (č. ${skipped.slice(0, 8).join(", ")}${skipped.length > 8 ? "…" : ""}) – ostatní jsou načtené. Pošli prosím export autorovi aplikace.`), 4500);
   if (!added.length) return 0;
   set({ metas: sortMetas([...st.metas, ...added]) });
   await autoLinkDrafts();
@@ -1177,7 +1182,7 @@ export async function syncNow(): Promise<void> {
         if (!b.ok) continue;
         const raw: RawDive = { id: d.id, num: d.num, start: d.start, blob: new Uint8Array(await b.arrayBuffer()) };
         await db.put("raw", raw);
-        const m = await metaOf(raw);
+        let m: Meta; try { m = await metaOf(raw); } catch { continue; } // nečitelný ponor přeskočit
         await db.put("meta", m);
         got.push(m);
       }
