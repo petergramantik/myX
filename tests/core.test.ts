@@ -393,5 +393,13 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(dilVents(mk(t.map((x) => (x < 80 ? 20 : x < 110 ? 20 + (x - 80) / 10 : 23 - (x - 110) / 10)))).length === 0, "ADV při klesání (i s návratem) se nepočítá");
 }
 
+{ // tlaky z vysílačů AI: role podle jména v hlavičce (0x16), bez jmen nevyužít
+  const { aiRoles } = await import("../src/core/shearwater");
+  const t1 = Array.from({ length: 20 }, (_, i) => 200 - i), t2 = Array.from({ length: 20 }, (_, i) => 180 - i * 2);
+  const hdr = (a: string, b: string) => { const r = new Uint8Array(32); r[20] = a.charCodeAt(0); r[21] = a.charCodeAt(1); r[23] = b.charCodeAt(0); r[24] = b.charCodeAt(1); return r; };
+  const jj = aiRoles(hdr("D1", "O2"), t1, t2), sw = aiRoles(hdr("O2", "D1"), t1, t2), none = aiRoles(hdr("T1", "T2"), t1, t2);
+  ok(jj?.dil === t1 && jj?.o2 === t2 && sw?.dil === t2 && none === null, "AI: D1/O2 podle jména, T1/T2 bez role");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");
