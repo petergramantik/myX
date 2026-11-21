@@ -3,9 +3,10 @@ import { useEffect, useState } from "react";
 import type { DiveNote } from "../app/model";
 import { findBuddyByName, findSiteByName, upsertBuddy, upsertSite } from "../app/store";
 import { weatherText } from "../app/weather";
+import { PrepCard } from "./Prep";
 import { Card, Chip, Picker, RatingPicker, go, num, useStore } from "./common";
 
-export function NoteEditor({ note, onChange, pos }: { note: DiveNote; onChange: (p: Partial<DiveNote>) => void; pos?: { lat?: number; lon?: number } }) {
+export function NoteEditor({ note, onChange, pos, real, cc }: { note: DiveNote; onChange: (p: Partial<DiveNote>) => void; pos?: { lat?: number; lon?: number }; /** tlaky onboard lahví z počítače (u spárovaného ponoru) */ real?: { dil: number | null; o2: number | null }; cc?: boolean }) {
   const st = useStore();
   const lb = st.lb;
   const [text, setText] = useState(note.note);
@@ -39,6 +40,7 @@ export function NoteEditor({ note, onChange, pos }: { note: DiveNote; onChange: 
           onCreate={async (name) => { const b = findBuddyByName(name) || (await upsertBuddy({ name })); onChange({ buddyIds: [...new Set([...note.buddyIds, b.id])] }); }} />
         {topBuddies.length > 0 && <div className="quick">{topBuddies.map((id) => <button key={id} className="btn small" onClick={() => onChange({ buddyIds: [...note.buddyIds, id] })}>＋ {lb.buddies[id].name}</button>)}</div>}
       </Card>
+      <PrepCard prep={note.prep} real={real} cc={cc} onChange={(prep) => onChange({ prep })} />
       <Card title="Hodnocení">
         <RatingPicker value={note.rating} onChange={(rating) => onChange({ rating })} />
       </Card>

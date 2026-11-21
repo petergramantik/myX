@@ -482,3 +482,13 @@ label.inline input[type=checkbox] { width: auto; padding: 0; }
 .dev-sw { font-size: 16px; display: inline-flex; align-items: center; gap: 8px; }
 .pscr-prompt { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--warn); border-radius: 12px; margin: 8px 0; background: rgba(255,183,77,0.08); }
 .tempbar { background: rgba(255, 183, 77, 0.22); border-bottom: 1px solid var(--warn); }
+/* předponorová příprava */
+.prep .card-h { cursor: pointer; }
+.prep-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.prep-l { min-width: 72px; }
+.prep-tank { display: grid; grid-template-columns: 1.3fr 0.9fr 1.1fr 0.9fr auto; gap: 6px; margin: 6px 0; align-items: center; }
+.prep input.bar-in { width: 72px; }
+.prep-tank input, .prep-tank select { min-width: 0; width: 100%; }
+.prep input.bar-in.c-warn { color: var(--warn); border-color: var(--warn); } .prep input.bar-in.c-bad { color: #ff6e66; border-color: #ff6e66; }
+.prep-row select { width: auto; flex: 1; min-width: 0; }
+.prep-row .btn.small { white-space: nowrap; }

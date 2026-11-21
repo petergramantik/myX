@@ -1,7 +1,7 @@
 // Dekodéry logů podle výrobce. Každý převede soubor na surové ponory a ty na normalizovaný ponor (Dive)
 // se stejnou strukturou – zbytek aplikace (analýzy, grafy, srovnání) na výrobci nezávisí.
 // Co ponor umí (čidla O₂, dekomprese…), určuje mód v hlavičce (viz rig.ts), ne výrobce.
-import { decodeDive as swDecode, readShearwaterDb, type Dive, type RawDive } from "./shearwater";
+import { decodeDive as swDecode, readShearwaterDb, type DecodeOpts, type Dive, type RawDive } from "./shearwater";
 
 export interface Decoder {
   id: string; vendor: string;
@@ -10,7 +10,7 @@ export interface Decoder {
   /** Surové ponory ze souboru. */
   read: (buf: Uint8Array) => RawDive[];
   /** Normalizovaný ponor. */
-  decode: (raw: RawDive) => Promise<Dive>;
+  decode: (raw: RawDive, opts?: DecodeOpts) => Promise<Dive>;
 }
 
 const SQLITE = "SQLite format 3";
@@ -30,6 +30,6 @@ export function readAny(buf: Uint8Array): RawDive[] {
   return dec.read(buf).map((r) => ({ ...r, vendor: r.vendor ?? dec.id }));
 }
 /** Normalizovaný ponor podle výrobce surového záznamu (starší záznamy bez výrobce = Shearwater). */
-export function decodeAny(raw: RawDive): Promise<Dive> {
-  return (DECODERS.find((x) => x.id === (raw.vendor ?? "shearwater")) ?? DECODERS[0]).decode(raw);
+export function decodeAny(raw: RawDive, opts?: DecodeOpts): Promise<Dive> {
+  return (DECODERS.find((x) => x.id === (raw.vendor ?? "shearwater")) ?? DECODERS[0]).decode(raw, opts);
 }

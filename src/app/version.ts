@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.9";
+export const APP_VERSION = "1.42-dev.10";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.10", date: "2026-11-21", title: "Předponorová příprava, čidla, vysílače (dev)", items: [
+    "Předponorová příprava v rozpracovaném ponoru: tlaky onboard lahví (porovnání s počítačem), offboard lahve (bailout, O₂, deko), potvrzení kalibrace čidel O₂ a CO₂; pod 100 bar žlutě, pod 50 bar červeně.",
+    "Rozpracovaný ponor se páruje s ponorem 3 h před až 48 h po založení (příprava večer předem).",
+    "Nové čidlo O₂: zelené se štítkem NOVÉ, dokud nemá data; stav jen z ponorů od instalace. Opraveny dotazy na výměnu z historie (formulář se ukáže, potvrzení kalibrace hlásí zápis).",
+    "Nepojmenované vysílače tlaku (T1/T2): v Nastavení u počítače volba, který je na diluentu.",
+    "Dlaždice „Proplach“ s poklesem tlaku diluentu při sestupu.",
+    "„Hlášení CO₂ z počítače“ přejmenováno na „Varování z počítače (význam neznámý)“; spolu s alarmem CO₂ se nehlásí zvlášť.",
+  ] },
   { version: "1.42-dev.9", date: "2026-11-20", title: "Hotfix 1.41.3 v dev", items: [
     "Převzat hotfix 1.41.3: přepočet údajů všech ponorů (tlaky z vysílačů i u dříve načtených logů).",
   ] },

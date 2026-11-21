@@ -8,7 +8,7 @@ import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerNa
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { IS_DEV, copyProdToDev, devCopiedAt } from "../app/db";
-import { openTempOwn, ownHidden, ownLb, rigChoices, setComputerRig, typeBreakdown } from "../app/store";
+import { computerCfg, openTempOwn, ownHidden, ownLb, rigChoices, setAiDil, setComputerRig, typeBreakdown } from "../app/store";
 import type { Rig } from "../core/rig";
 import { Card, KV, fmtDate, go, tab, useBackLayer, useStore } from "./common";
 import { ImportButton } from "./Overview";
@@ -146,6 +146,7 @@ function OwnComputers() {
         <div key={c.serial} className="row between">
           <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)} · přístroj {rigLabel(parseInt(c.serial, 16))}</span>
           <button className="btn small" onClick={() => editRig(parseInt(c.serial, 16), majorityMode([...ownMetas(), ...ownHidden()].filter((m) => m.h.serial === parseInt(c.serial, 16))))}>Přístroj</button>
+          {aiUnnamed(parseInt(c.serial, 16)) && <button className="btn small" onClick={() => editAi(parseInt(c.serial, 16))}>Vysílače: {aiLabel(parseInt(c.serial, 16))}</button>}
           {cs.length > 1 && <button className="btn small" onClick={async () => { if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako cizí log a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
         </div>
       ))}
@@ -202,7 +203,7 @@ function ShareInner() {
 /** Cizí logy: jen k prohlížení, uložené zvlášť, bez synchronizace. */
 export function GuestCard() {
   const st = useStore();
-  const [groups, setGroups] = useState<{ log: GuestLog; logs: GuestLog[]; counts: Record<string, number>; types: Record<string, string>; modes: Record<string, string>; from: number; to: number; common: number; alts: number }[]>([]);
+  const [groups, setGroups] = useState<{ log: GuestLog; logs: GuestLog[]; counts: Record<string, number>; types: Record<string, string>; modes: Record<string, string>; ai: Record<string, boolean>; from: number; to: number; common: number; alts: number }[]>([]);
   const [busy, setBusy] = useState(false);
   const [ownerFor, setOwnerFor] = useState<string | null>(null);
   const [actFor, setActFor] = useState<string | null>(null);
@@ -213,9 +214,9 @@ export function GuestCard() {
     const raw = await guestRawIndex(), ix = await guestIndexLoad(), mine = ownMetas();
     setGroups(ix.map((g) => {
       const logs = g.log.logs || [g.log], st0 = g.metas.map((m) => m.start);
-      const counts: Record<string, number> = {}, types: Record<string, string> = {}, modes: Record<string, string> = {};
-      for (const l of logs) { const ms = raw.find((x) => x.log.id === l.id)?.metas || []; counts[l.id] = ms.length || l.count; const tb = typeBreakdown(ms); types[l.id] = tb.text; modes[l.id] = majorityMode(ms); }
-      return { log: g.log, logs, counts, types, modes, from: Math.min(...st0), to: Math.max(...st0), common: mine.filter((m) => nearestPair(g.metas, m).length).length, alts: g.alts.length };
+      const counts: Record<string, number> = {}, types: Record<string, string> = {}, modes: Record<string, string> = {}, ai: Record<string, boolean> = {};
+      for (const l of logs) { const ms = raw.find((x) => x.log.id === l.id)?.metas || []; counts[l.id] = ms.length || l.count; const tb = typeBreakdown(ms); types[l.id] = tb.text; modes[l.id] = majorityMode(ms); ai[l.id] = ms.some((m) => m.h.aiUnnamed); }
+      return { log: g.log, logs, counts, types, modes, ai, from: Math.min(...st0), to: Math.max(...st0), common: mine.filter((m) => nearestPair(g.metas, m).length).length, alts: g.alts.length };
     }));
   };
   useEffect(() => { reload(); }, [st.guest, st.lb.computers, st.guestRev]);
@@ -264,6 +265,7 @@ export function GuestCard() {
                     reload();
                   }}>To je můj počítač</button>
                   {l.serial && <button onClick={() => { setActFor(null); editRig(parseInt(l.serial!, 16), g.modes[l.id]); }}>Přístroj: {rigLabel(parseInt(l.serial, 16))}</button>}
+                  {l.serial && g.ai[l.id] && <button onClick={() => { setActFor(null); editAi(parseInt(l.serial!, 16)); }}>Vysílače: {aiLabel(parseInt(l.serial, 16))}</button>}
                   <button className="danger" onClick={async () => { setActFor(null); if (await ask(`Smazat log počítače ${compLabel(l)}?`, { danger: true })) { await deleteGuest(l); reload(); } }}>Smazat</button>
                 </div>}
                 {ownerFor === l.id && <div><OwnerPicker log={l} onDone={() => { setOwnerFor(null); reload(); }} />
@@ -314,6 +316,23 @@ function rigLabel(serial: number): string {
 function majorityMode(ms: { h: { mode: string } }[]): string {
   const by = new Map<string, number>(); for (const m of ms) by.set(m.h.mode, (by.get(m.h.mode) || 0) + 1);
   return [...by].sort((a, b) => b[1] - a[1])[0]?.[0] || "CCR";
+}
+/** Má počítač ponory s nepojmenovanými vysílači tlaku? */
+const aiUnnamed = (serial: number) => [...ownMetas(), ...ownHidden()].some((m) => m.h.serial === serial && m.h.aiUnnamed);
+function aiLabel(serial: number): string {
+  const v = computerCfg(serial)?.aiDil;
+  return v ? `diluent ${v}, O₂ ${v === "T1" ? "T2" : "T1"}` : "nenastaveno";
+}
+async function editAi(serial: number) {
+  const cur = computerCfg(serial)?.aiDil;
+  const k = await choose("Vysílače tlaku nemají v počítači jméno (T1/T2), takže z logu nejde poznat, který je na diluentu a který na kyslíku. Který vysílač je na diluentu?", [
+    { key: "T1", label: "T1 = diluent, T2 = O₂", primary: cur === "T1" },
+    { key: "T2", label: "T2 = diluent, T1 = O₂", primary: cur === "T2" },
+    { key: "none", label: "Nepoužívat tlaky z vysílačů", primary: !cur },
+  ]);
+  if (!k) return;
+  await setAiDil(serial, k === "none" ? null : (k as "T1" | "T2"));
+  toast("Ponory počítače přepočítány");
 }
 async function editRig(serial: number, mode: string) {
   const c = ownLb().computers?.[serial.toString(16).toUpperCase()];

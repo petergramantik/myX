@@ -7,7 +7,7 @@ import type { Dive, Header } from "./shearwater";
 export interface Summary {
   avgDepth: number; tempMin: number; tempMax: number; ppo2Min: number; ppo2Max: number; co2Max: number | null; co2Avg: number | null; co2AlarmN: number; co2AlarmS: number; gases: { mix: string; s: number }[]; dilUse: GasUse; o2Use: GasUse; pn2Max: number;
   btnN: number; menuN: number; offMainS: number;
-  densMax: number; vents: number; co2Bad: boolean; po2HiN: number; po2LoN: number; /** nejdelší čas (s) nad PO2_HI_STEPS mimo deko */ po2Hi?: number[]; /** základ zátěže (bar/min) při nízkém / vysokém SP a spotřeba O₂ z lahve (bar/min) */ wLo?: number | null; wHi?: number | null; o2Rate?: number | null; startPo2: StartPo2Level; spreadMin: number; cellIssue: CellIssue;
+  densMax: number; vents: number; /** pokles tlaku diluentu při sestupu (bar, bez korekce na teplotu), null = bez tlaků */ dilDesc?: number | null; co2Bad: boolean; po2HiN: number; po2LoN: number; /** nejdelší čas (s) nad PO2_HI_STEPS mimo deko */ po2Hi?: number[]; /** základ zátěže (bar/min) při nízkém / vysokém SP a spotřeba O₂ z lahve (bar/min) */ wLo?: number | null; wHi?: number | null; o2Rate?: number | null; startPo2: StartPo2Level; spreadMin: number; cellIssue: CellIssue;
   sp: SpChange[]; /** zpoždění prvního přepnutí na vysoký SP po dosažení dna (min) */ spLate?: number | null; dose: { sol: number; man: number; amb: number; dil: number; manPreSw: number };
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
@@ -389,7 +389,7 @@ export function summarize(d: Dive): Summary {
     spLate: spLateDelay(d, setpointChanges(d)),
     dose: doseSummary(d),
     densMax: Math.max(0, ...gasDensity(d).filter((x): x is number => x != null)),
-    vents: dilVents(d).length,
+    vents: dilVents(d).length, dilDesc: dilDescent(d),
     co2Bad: co2Plausibility(d)?.ok === false,
     po2HiN: d.alarms.filter((a) => a.kind === "po2high").length, po2Hi: po2HiHist(d), ...(() => { const b = workloadBase(d), o = o2RateWindows(d).map((x) => x.rate).sort((p, q) => p - q); return { wLo: b.lo, wHi: b.hi, o2Rate: o.length >= 3 ? o[o.length >> 1] : null }; })(),
     // nízké pO₂ jen pod vodou (ne na hladině) a ne při setpointu 0,19 před výstupem
@@ -481,6 +481,14 @@ export function scrubberInfo(hs: Header[], nowLocal: number, th: Thresholds, man
 /** Upozornění na úvodní obrazovce. hs = hlavičky ponorů, nowLocal = aktuální místní čas jako „UTC“ sekundy. */
 // ---------- vysoké pO₂ (vlastní detekce)
 /** Vzorek je na dekompresní zastávce: po nejhlubším bodě v hloubce zastávky (do 3 m pod ní) nebo do 9 m (P). */
+/** Pokles tlaku diluentu při sestupu – od začátku ponoru po první dosažení 90 % max. hloubky (bar). */
+export function dilDescent(d: Dive): number | null {
+  const s = d.s, mx = Math.max(...s.depth), k = s.depth.findIndex((z) => z >= 0.9 * mx);
+  if (k < 0 || mx < 3) return null;
+  const a = s.dil.slice(0, k + 1).filter((v): v is number => v != null);
+  return a.length >= 2 ? Math.max(0, Math.round((a[0] - a[a.length - 1]) * 10) / 10) : null;
+}
+
 export function decoMask(d: Dive): boolean[] {
   const s = d.s; let imax = 0;
   s.depth.forEach((v, i) => { if (v > s.depth[imax]) imax = i; });
@@ -789,13 +797,15 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
     const nA = d.alarms.filter((a) => a.label.startsWith("Vyřazené čidlo")).length;
     out.push({ level: "warn", title: `Vyřazené čidlo${dc ? " " + dc.cell : ""} (P)`, text: withSteps(`Od ${tpt(t0)}${outW?.how === "open" || !outW ? " do konce ponoru" : ` do ${mmss(outW.end!)}`}${dc ? ` – čidlo ${dc.cell} se odchylovalo o ${dc.pct} %` : ""}${nA > 1 ? `, alarm opakován ${nA}×` : ""}. Počítač ho pravděpodobně vyřadil z hlasování.`, resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th)), blocks: [oneBlock(d, t0, outW?.end ?? outA?.end ?? null, "po2", resolutionSteps(d, t0, outW?.end ?? outA?.end ?? null, "cell", th))] });
   }
-  // „Hlášení CO₂ z počítače“ – přesný význam neznámý (P); Radek: „něco s CO₂“. U výskytu hodnota CO₂ v tu chvíli.
-  const co2s = cws.filter((w) => w.kind === "co2sensor"), co2sA = d.alarms.filter((a) => a.label.startsWith("Hlášení CO₂"));
-  if (co2s.length || co2sA.length) {
-    const cAt = (t: number) => { const i = d.s.t.findIndex((x) => x >= t), v = i < 0 ? null : d.s.co2[i]; return v == null ? "" : `, CO₂ ${v.toLocaleString("cs-CZ", { maximumFractionDigits: v < 10 ? 1 : 0 })} mbar`; };
-    const occ = co2s.length ? co2s.map((w) => `${tpt(w.start)}${cAt(w.start)} (${ackTxt(w)})`) : co2sA.map((a) => `${tpt(a.start)}${cAt(a.start)}`);
-    const blocks = (co2s.length ? co2s.map((w) => oneBlock(d, w.start, w.end, "co2", [])) : co2sA.map((x) => oneBlock(d, x.start, x.end, "co2", []))).map((b, k) => ({ ...b, head: `${occ[k]}` }));
-    out.push({ level: "warn", title: `Hlášení CO₂ z počítače (P)${occ.length > 1 ? ` – ${occ.length}×` : ""}`, text: `${occ.length > 1 ? "Výskyty" : "Výskyt"}: ${occ.join("; ")}. Přesný text hlášení z logu neznáme – souvisí s CO₂ (čidlo nebo vysoká hodnota).${co2Bad.length ? " Čidlo zároveň ukazovalo nemožné hodnoty – hodnoty CO₂ v tomto ponoru ber s rezervou." : ""}`, blocks });
+  // Varování z počítače neznámého významu (bit masky alarmů / varování). Dřív považováno za „hlášení CO₂“ –
+  // vyvráceno: objevilo se i u JJ bez čidla CO₂. Souběh s alarmem CO₂ (±2 min) se nehlásí zvlášť – patří k němu.
+  const co2Al = [...d.alarms.filter((a) => a.kind === "co2"), ...cws.filter((w) => w.kind === "co2")].map((a) => ({ s: a.start, e: (a as { end?: number | null }).end ?? a.start }));
+  const nearCo2 = (t: number) => co2Al.some((a) => t >= a.s - 120 && t <= a.e + 120);
+  const unkW = cws.filter((w) => w.kind === "co2sensor" && !nearCo2(w.start)), unkA = d.alarms.filter((a) => a.label.startsWith("Varování z počítače") && !nearCo2(a.start));
+  if (unkW.length || unkA.length) {
+    const occ = unkW.length ? unkW.map((w) => `${tpt(w.start)} (${ackTxt(w)})`) : unkA.map((a) => tpt(a.start));
+    const blocks = (unkW.length ? unkW.map((w) => oneBlock(d, w.start, w.end, "po2", [])) : unkA.map((x) => oneBlock(d, x.start, x.end, "po2", []))).map((b, k) => ({ ...b, head: `${occ[k]}` }));
+    out.push({ level: "warn", title: `Varování z počítače (význam neznámý)${occ.length > 1 ? ` – ${occ.length}×` : ""}`, text: `${occ.length > 1 ? "Výskyty" : "Výskyt"}: ${occ.join("; ")}. Počítač zobrazil varování, jehož text z logu neumíme přečíst. Pokud si pamatuješ, co hlásil, dej vědět.`, blocks });
   }
   const batW = cws.find((w) => w.kind === "battery");
   if (batW) out.push({ level: "warn", title: "Slabá baterie (P)", text: withSteps(`Počítač hlásil slabou baterii v ${mmss(batW.start)}, ${ackTxt(batW)}.`, resolutionSteps(d, batW.start, batW.end, "other", th)), blocks: [oneBlock(d, batW.start, batW.end, "temp", resolutionSteps(d, batW.start, batW.end, "other", th))] });

@@ -14,7 +14,7 @@ export function DraftScreen({ id }: { id: string }) {
       <p className="muted center">Založeno {fmtDateTime(dr.created)}{dr.lat != null ? ` · poloha ${dr.lat.toFixed(4)}, ${dr.lon!.toFixed(4)}` : " · bez polohy"}</p>
       <NoteEditor note={dr} pos={{ lat: dr.lat, lon: dr.lon }} onChange={(p) => updateDraft(id, p)} />
       <Card title="Data z počítače">
-        {cands.length === 0 && sameDay.length === 0 && <p className="muted">Po importu logu se ponor spáruje automaticky podle času (začátek ponoru 3 h před až 6 h po založení).</p>}
+        {cands.length === 0 && sameDay.length === 0 && <p className="muted">Po importu logu se ponor spáruje automaticky podle času (začátek ponoru 3 h před až 48 h po založení; když se najde víc ponorů, vybereš sám).</p>}
         {cands.length > 1 && <p>Časově odpovídá víc ponorů – vyber, ke kterému patří:</p>}
         {[...cands, ...sameDay].map((m) => (
           <button key={m.id} className="btn block" onClick={async () => { await linkDraft(id, m.id); back(); }}>

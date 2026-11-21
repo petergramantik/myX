@@ -1,7 +1,7 @@
 import { ask, askText } from "../app/dialog";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cellStatus, detectCellEvents, type CellStatus } from "../core/cells";
-import { answerCellPrompt, deleteCell, localNow, saveCell, saveSettings } from "../app/store";
+import { answerCellPrompt, deleteCell, localNow, saveCell, saveSettings, toast } from "../app/store";
 import type { Cell, Meta } from "../app/model";
 import { Card, fmtDate, go, num, useStore } from "./common";
 import { LineChart } from "./Chart";
@@ -31,11 +31,16 @@ export function useCells() {
     const lastRec = cells.filter((c) => c.pos === pos).sort((a, b) => (b.removed || "").localeCompare(a.removed || ""))[0];
     return lastRec?.removed && (!lastMeta || lastRec.removed >= isoOf(lastMeta.start)) ? lastRec : undefined;
   };
-  const ref = lastMeta ? ccr.filter(({ m }) => m.start <= lastMeta.start - 30 * DAY && m.start >= lastMeta.start - 120 * DAY).map(({ m }) => m.cells) : [];
+  // nové čidlo: stav jen z ponorů od jeho instalace; bez ponorů = NOVÉ (zelené), staré údaje se nepočítají
+  const isNew = [1, 2, 3].map((pos) => { const c = current(pos); return !!c && (!lastMeta || isoOf(lastMeta.start) < c.installed); });
   const status: CellStatus[] = [0, 1, 2].map((k) => {
     if (empty(k + 1)) return { level: "info", reasons: ["Pozice prázdná – vlož čidlo"] };
     const c = current(k + 1);
-    return cellStatus(k, series.slice(-5), th, monthsSince(c?.installed, now), monthsSince(c?.made, now), c?.lifeM ?? null, ref);
+    if (isNew[k]) return { level: "ok", reasons: ["Nové čidlo – zatím bez dat z ponorů"] };
+    // jen ponory od instalace aktuálního čidla (údaje starého čidla se nepočítají)
+    const mine = ccr.filter(({ m }) => !c || isoOf(m.start) >= c.installed);
+    const refOwn = lastMeta ? mine.filter(({ m }) => m.start <= lastMeta.start - 30 * DAY && m.start >= lastMeta.start - 120 * DAY).map(({ m }) => m.cells) : [];
+    return cellStatus(k, mine.map(({ m }) => m.cells).slice(-5), th, monthsSince(c?.installed, now), monthsSince(c?.made, now), c?.lifeM ?? null, refOwn);
   });
   const lastCalEv = [...events].reverse().find((e) => e.kind === "cal" || e.kind === "change");
   const lastCal = lastCalEv ? ccr[lastCalEv.index].m : null;
@@ -50,7 +55,7 @@ export function useCells() {
     const lo = isoOf(p.prev.start), hi = isoOf(p.meta.start);
     return !cells.some((c) => c.pos === p.pos && c.installed >= lo && c.installed <= hi);
   });
-  return { ccr, series, events, current, empty, status, lastCal, lastCalNo: lastCalEv ? ccr[lastCalEv.index].i + 1 : null, prompts, changes, now, cells, answered: st.lb.answered, guest: !!st.guest };
+  return { ccr, series, events, current, empty, status, isNew, lastCal, lastCalNo: lastCalEv ? ccr[lastCalEv.index].i + 1 : null, prompts, changes, now, cells, answered: st.lb.answered, guest: !!st.guest };
 }
 
 /** Kontrola data výměny proti logu: najde nejbližší zjištěnou výměnu na pozici a ověří, že datum leží mezi posledním ponorem se starým a prvním s novým čidlem. */
@@ -91,12 +96,13 @@ export function CellTiles() {
               <div className="ct-l info">Vložit</div>
             </div>
           );
+          const nw = c.isNew[pos - 1];
           return (
             <div key={pos} className={"celltile o2t " + s.level} onClick={() => !c.guest && go({ t: "cells", pos })}>
               <div className="ct-h"><b>Čidlo {pos}</b><span className={"dot " + s.level} /></div>
-              <div className="ct-v">{mvb != null ? num(mvb * 0.21, 1) : "–"}<small>mV</small></div>
+              <div className="ct-v">{mvb != null && !nw ? num(mvb * 0.21, 1) : "–"}<small>mV</small></div>
               <div className="ct-u"><span className="long">na vzduchu</span><span className="short">vzduch</span></div>
-              <div className={"ct-l " + s.level}>{LV_SHORT[s.level]}</div>
+              <div className={"ct-l " + s.level}>{nw ? "NOVÉ" : LV_SHORT[s.level]}</div>
             </div>
           );
         })}
@@ -217,7 +223,7 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
   const summary = problems.length === 0 ? "✓ Čidla v pořádku"
     : problems.length === 1 ? `⚠ Čidlo ${problems[0].k + 1}: ${problems[0].s.reasons[0]?.startsWith("Pozice prázdná") ? "prázdná pozice" : LV[problems[0].s.level].toLowerCase()}`
     : `⚠ ${problems.length} čidla s upozorněním`;
-  const lastMv = (pos: number) => c.series[c.series.length - 1]?.mvBar[pos - 1] ?? null;
+  const lastMv = (pos: number) => (c.isNew[pos - 1] ? null : c.series[c.series.length - 1]?.mvBar[pos - 1] ?? null);
   const cal = c.lastCal ? `kalibrace ${fmtDate(c.lastCal.start)} (před ${Math.floor((c.now - c.lastCal.start) / DAY)} dny)` : "kalibrace nezjištěna";
   return (
     <section className={"panel " + worst}>
@@ -232,7 +238,7 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
             const s = c.status[pos - 1], cur = c.current(pos), emp = c.empty(pos);
             return (
               <div key={pos} className={"pcell ptile " + (emp ? "warn" : s.level)}>
-                <div className="pcell-h"><b className={"c-" + (emp ? "warn" : s.level)}>Čidlo {pos}</b><span className={"pill " + s.level}>{emp ? "Prázdná" : LV[s.level]}</span></div>
+                <div className="pcell-h"><b className={"c-" + (emp ? "warn" : s.level)}>Čidlo {pos}</b><span className={"pill " + s.level}>{emp ? "Prázdná" : c.isNew[pos - 1] ? "Nové" : LV[s.level]}</span></div>
                 <div className="pcell-row">
                   <div className="pcell-info">
                     {!emp && <div className="kvline"><span>O₂ 1 bar</span><b>{lastMv(pos) != null ? `${num(lastMv(pos)!, 0)} mV` : "–"}</b><span>na vzduchu</span><b>{lastMv(pos) != null ? `${num(lastMv(pos)! * 0.21, 1)} mV` : "–"}</b></div>}
@@ -243,7 +249,7 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
                       <div className="ct-bar"><i style={{ width: `${Math.min(100, ((monthsSince(cur.installed, c.now) || 0) / (cur.lifeM || 12)) * 100)}%` }} /></div>
                     </> : emp ? <small>Vyjmuto {fmtIso(emp.removed)} ({emp.maker || "čidlo"}{emp.sn ? ` S/N ${emp.sn}` : ""}). Nové čidlo zadej při vložení.</small>
                       : <small>Čidlo na této pozici zatím není zadané.</small>}
-                    {s.level === "ok" ? <div className="reason ok">✓ v pořádku</div> : s.reasons.filter((r) => !r.startsWith("Pozice prázdná")).map((r, i) => <div key={i} className={"reason " + s.level}>{r}</div>)}
+                    {c.isNew[pos - 1] ? <div className="reason ok">✓ nové čidlo – stav se vyhodnotí po prvním ponoru</div> : s.level === "ok" ? <div className="reason ok">✓ v pořádku</div> : s.reasons.filter((r) => !r.startsWith("Pozice prázdná")).map((r, i) => <div key={i} className={"reason " + s.level}>{r}</div>)}
                   </div>
                 </div>
                 <div className="row">
@@ -270,7 +276,7 @@ export function CellPrompt({ p, onYes, bare }: { p: Prompt; onYes?: () => void; 
       <div>Mezi ponory č. {p.myNo - 1} ({fmtDate(p.prev.start)}) a č. {p.myNo} ({fmtDate(p.meta.start)}) vyskočila citlivost. Vyměnil jsi čidlo?</div>
       <div className="row">
         <button className="btn" onClick={() => (onYes ? onYes() : go({ t: "cells", pos: p.pos, install: isoOf(p.meta.start) }))}>Ano, zadat čidlo</button>
-        <button className="btn" onClick={() => answerCellPrompt(p.key, "cal")}>Ne, jen kalibrace</button>
+        <button className="btn" onClick={async () => { await answerCellPrompt(p.key, "cal"); toast(`Zapsáno: ponor č. ${p.myNo} – jen kalibrace`); }}>Ne, jen kalibrace</button>
       </div>
     </div>
   );
@@ -282,6 +288,7 @@ export function CellsScreen({ pos, install }: { pos?: number; install?: string }
   return (
     <div className="screen">
       {c.prompts.filter((p) => !pos || p.pos === pos).map((p) => <CellPrompt key={p.key} p={p} />)}
+      {st.lb.settings.o2Cal && <p className="muted small center">Poslední potvrzená kalibrace čidel O₂: {fmtIso(st.lb.settings.o2Cal.date)}</p>}
       {[1, 2, 3].filter((x) => !pos || x === pos).map((p) => <CellPosition key={p} pos={p as 1 | 2 | 3} c={c} metas={st.metas} install={p === pos ? install : undefined} />)}
       {pos && <button className="btn" onClick={() => go({ t: "cells" })}>Zobrazit všechny pozice</button>}
       <Card title="Jak se stav čidla počítá">
@@ -300,15 +307,17 @@ export function CellsScreen({ pos, install }: { pos?: number; install?: string }
 function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnType<typeof useCells>; metas: Meta[]; install?: string }) {
   const cur = c.current(pos);
   const [edit, setEdit] = useState<Partial<Cell> | null>(install ? { pos, installed: install, lifeM: 12, maker: cur?.maker || "" } : null);
+  const formRef = useRef<HTMLDivElement>(null);
+  // formulář otevřený z dotazu na výměnu: ukázat ho (bývá pod grafem mimo obrazovku)
+  useEffect(() => { if (install) { setEdit({ pos, installed: install, lifeM: 12, maker: cur?.maker || "" }); setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); } }, [install]);
   const hist = c.cells.filter((x) => x.pos === pos).sort((a, b) => b.installed.localeCompare(a.installed));
   const s = c.status[pos - 1];
   const xs = c.ccr.map(({ i }) => i + 1);
   const ys = c.ccr.map(({ m }) => m.cells.mvBar[pos - 1]);
   const lin = c.ccr.map(({ m }) => m.cells.lin[pos - 1]);
   const marks = hist.map((h) => { const t = tsOf(h.installed); const j = c.ccr.findIndex(({ m }) => m.start >= t); return j >= 0 ? xs[j] - 0.5 : null; }).filter((x): x is number => x != null);
-  const proposed = c.prompts.find((p) => p.pos === pos);
   return (
-    <Card title={`Pozice ${pos}`} right={<span className={"pill " + s.level}>{LV[s.level]}</span>}>
+    <Card title={`Pozice ${pos}`} right={<span className={"pill " + s.level}>{c.isNew[pos - 1] ? "Nové" : LV[s.level]}</span>}>
       {s.reasons.map((r, i) => <div key={i} className={"reason " + s.level}>{r}</div>)}
       {cur ? (
         <p><b>{cur.maker || "Čidlo"}{cur.type ? ` ${cur.type}` : ""}</b> · instalace {fmtIso(cur.installed)}{cur.sn ? ` · S/N ${cur.sn}` : ""}{cur.made ? ` · výroba ${fmtIso(cur.made)}` : ""} · životnost {cur.lifeM} měs.</p>
@@ -319,10 +328,10 @@ function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnTyp
           extra={[{ label: "Na vzduchu", values: ys.map((y) => (y != null ? +(y * 0.21).toFixed(1) : null)), unit: "mV" }, { label: "Linearita", values: lin }]} />
       )}
       <div className="row">
-        <button className="btn primary" onClick={() => setEdit({ pos, installed: proposed ? isoOf(proposed.meta.start) : isoOf(c.now), lifeM: 12, maker: cur?.maker || "" })}>Vyměnit / zadat čidlo</button>
+        <button className="btn primary" onClick={() => { setEdit({ pos, installed: isoOf(c.now), lifeM: 12, maker: cur?.maker || "" }); setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}>Vyměnit / zadat čidlo</button>
         {cur && <button className="btn" onClick={() => setEdit({ ...cur })}>Upravit</button>}
       </div>
-      {edit && <CellForm init={edit} c={c} onDone={() => setEdit(null)} />}
+      <div ref={formRef}>{edit && <CellForm init={edit} c={c} onDone={() => setEdit(null)} />}</div>
       {hist.length > 0 && (
         <table className="kv"><thead><tr><th>Čidlo</th><th>Instalace → vyjmutí</th></tr></thead>
           <tbody>{hist.map((h) => (

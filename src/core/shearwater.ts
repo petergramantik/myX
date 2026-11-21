@@ -58,6 +58,7 @@ export interface Header {
   batWarn: number; batCrit: number;
   scrubTotalMin: number; scrubLeftStartMin: number; scrubLeftEndMin: number;
   onTimeH: number; logVersion: number; rateS: number; serial: number; autoInc: number;
+  /** tlaky z vysílačů AI bez pojmenování (T1/T2) – roli určuje uživatel u počítače */ aiUnnamed?: boolean;
 }
 
 /** Alarm z počítače: začátek (událost 9) a konec (událost 10), čas v sekundách od začátku ponoru. */
@@ -69,7 +70,7 @@ const ALARM_BITS: { kind: Alarm["kind"]; label: string; byte: number; bit: numbe
   { kind: "po2low", label: "Nízké pO₂", byte: 3, bit: 0x40 },
   { kind: "po2high", label: "Vysoké pO₂", byte: 3, bit: 0x80 },
   { kind: "other", label: "Vyřazené čidlo (P)", byte: 3, bit: 0x20 }, // P: 9. 12. 2024 – pomalé čidlo 3 po přepnutí SP, opakuje se do konce ponoru
-  { kind: "other", label: "Hlášení CO₂ z počítače (P)", byte: 2, bit: 0x02 },
+  { kind: "other", label: "Varování z počítače (význam neznámý)", byte: 2, bit: 0x02 }, // dřív odhad „CO₂“ – vyvráceno (JJ bez čidla CO₂)
   { kind: "other", label: "Porucha solenoidu / baterie v hlavě (P)", byte: 3, bit: 0x10 }, // P: Laďa 9. 5. 2026 – selhal solenoid (baterie v hlavě), dál jen ruční O₂ // P: souběh s nesmyslnými hodnotami CO₂ (Radek 26. 10. 2026)
 ];
 
@@ -152,7 +153,9 @@ export function readShearwaterDb(buf: Uint8Array): RawDive[] {
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(" ");
 
-export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise<Dive> {
+/** Volby dekódování: který nepojmenovaný vysílač je diluent (podle sériového čísla počítače). */
+export interface DecodeOpts { aiDil?: (serial: number) => "T1" | "T2" | undefined }
+export async function decodeDive(raw: { id: string; blob: Uint8Array }, opts: DecodeOpts = {}): Promise<Dive> {
   const d = await gunzip(raw.blob.subarray(4), rawLen(raw.blob));
   const R: Uint8Array[] = [];
   for (let i = 0; i + 32 <= d.length; i += 32) R.push(d.subarray(i, i + 32));
@@ -247,8 +250,16 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }): Promise
   buttons.sort((x, y) => x.t - y.t);
   // tlaky z vysílačů AI, jen když log nemá tlaky z DiveCAN (0xE1)
   if (!s.dil.some((v) => v != null) && !s.o2p.some((v) => v != null)) {
-    const roles = aiRoles(O6, ai1, ai2);
-    if (roles) { s.dil = roles.dil; s.o2p = roles.o2; }
+    let roles = aiRoles(O6, ai1, ai2);
+    const any = (a: (number | null)[]) => a.filter((v) => v != null).length >= 10;
+    if (!roles && (any(ai1) || any(ai2))) {
+      // vysílače bez jména: roli určí uživatel u počítače (Nastavení → Vysílače)
+      h.aiUnnamed = true;
+      const dil = opts.aiDil?.(h.serial);
+      if (dil === "T1") roles = { dil: ai1, o2: ai2 };
+      else if (dil === "T2") roles = { dil: ai2, o2: ai1 };
+    }
+    if (roles) { s.dil = roles.dil.map((v) => v ?? null); s.o2p = roles.o2.map((v) => v ?? null); }
   }
   return { id: raw.id, h, s, tissues, events, alarms, buttons };
 }

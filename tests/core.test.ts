@@ -424,5 +424,13 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(jj?.dil === t1 && jj?.o2 === t2 && sw?.dil === t2 && none === null, "AI: D1/O2 podle jména, T1/T2 bez role");
 }
 
+{ // pokles diluentu při sestupu (do 90 % max. hloubky)
+  const { dilDescent } = await import("../src/core/analysis");
+  const depth = [0, 10, 30, 50, 60, 60, 40, 5], dil = [200, 195, 185, 176, 175, 175, 176, 178];
+  const d = { s: { depth, dil } } as unknown as Parameters<typeof dilDescent>[0];
+  ok(dilDescent(d) === 25, "Sestup: pokles diluentu 200 → 175 bar = 25");
+  ok(dilDescent({ s: { depth, dil: dil.map(() => null) } } as unknown as Parameters<typeof dilDescent>[0]) === null, "Sestup: bez tlaků null");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

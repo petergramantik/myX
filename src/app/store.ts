@@ -64,7 +64,7 @@ export const myNum = (id: string) => diveHeads().findIndex((m) => m.id === segIn
 // ---------- dekódované ponory (mezipaměť v paměti)
 const diveCache = new Map<string, Promise<Dive>>();
 function loadPart(id: string): Promise<Dive> {
-  return db.get<RawDive>("raw", id, st.guest || st.temp ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeAny(r); });
+  return db.get<RawDive>("raw", id, st.guest || st.temp ? db.GUEST : undefined).then((r) => { if (!r) throw new Error("Ponor není v telefonu"); return decodeAny(r, DEC); });
 }
 export function loadDive(id: string): Promise<Dive> {
   const parts = segInfo().parts.get(id);
@@ -127,11 +127,11 @@ export async function setBatSwap(serial: number, on: boolean) {
 
 /** Ponor z cizího logu (pro porovnání), bez ohledu na to, zda je cizí log právě otevřený. */
 export function loadGuestDive(id: string): Promise<Dive> {
-  return db.get<RawDive>("raw", id, db.GUEST).then((r) => { if (!r) throw new Error("Ponor cizího logu není v telefonu"); return decodeAny(r); });
+  return db.get<RawDive>("raw", id, db.GUEST).then((r) => { if (!r) throw new Error("Ponor cizího logu není v telefonu"); return decodeAny(r, DEC); });
 }
 
 async function metaOf(raw: RawDive): Promise<Meta> {
-  const d = await decodeAny(raw);
+  const d = await decodeAny(raw, DEC);
   // hloubka po 30 s za prvních 30 min – pro párování společných ponorů podle profilu
   const prof: number[] = []; let j = 0;
   for (let t = 0; t <= 1800 && t <= d.h.diveTimeS; t += 30) { while (j + 1 < d.s.t.length && d.s.t[j] < t) j++; prof.push(Math.round(d.s.depth[j] * 10) / 10); }
@@ -181,6 +181,37 @@ export function rigInfo(serial: number, diveId: string, h: Header, lb: Logbook =
   const c = lb.computers?.[serial.toString(16).toUpperCase()], o = c?.dives?.[diveId];
   const fits = (r?: Rig) => (r && rigsForMode(h.mode).includes(r) ? r : undefined); // výchozí typ počítače jen pro ponory, kde dává smysl
   return { rig: fits(o?.rig) ?? fits(c?.rig) ?? defaultRig(h), supplyO2: o?.supplyO2 ?? c?.supplyO2, ratio: c?.pscrRatio ?? 8, byDive: !!(o?.rig || o?.supplyO2) };
+}
+/** Volby dekódování z nastavení počítačů (role nepojmenovaných vysílačů – i u cizích logů z mého logbooku). */
+const DEC = { aiDil: (ser: number) => computerCfg(ser)?.aiDil };
+/** Nastaví, který nepojmenovaný vysílač (T1/T2) je diluent, a přepočítá ponory tohoto počítače. */
+export async function setAiDil(serial: number, v: "T1" | "T2" | null) {
+  const hex = serial.toString(16).toUpperCase(), lb = structuredClone(ownLb());
+  lb.computers = lb.computers || {};
+  const c = { ...lb.computers[hex], id: hex, model: lb.computers[hex]?.model || modelFor(serial), updated: Date.now() } as Computer;
+  if (v) c.aiDil = v; else delete c.aiDil;
+  lb.computers[hex] = c;
+  await saveOwnLb(lb);
+  diveCache.clear();
+  await recomputeSerial(serial);
+  // uložené souhrny cizích logů tohoto počítače přepočítat při dalším otevření
+  for (const l of (await guestLogs()).flatMap((g) => g.logs || [g])) if (l.serial === hex) {
+    const d = await db.get<{ metas: Meta[]; lb: Logbook }>("kv", l.id, db.GUEST);
+    if (d) await db.put("kv", { ...d, metas: d.metas.map((m) => (m.h.serial === serial ? { ...m, v: 0 } : m)) }, l.id, db.GUEST);
+  }
+  guestRaw = null;
+  set({ guestRev: st.guestRev + 1 });
+}
+/** Přepočítá uložené souhrny ponorů jednoho počítače (vlastní i otevřený cizí log). */
+async function recomputeSerial(serial: number) {
+  const guest = !!(st.guest || st.temp), store = guest ? db.GUEST : undefined;
+  const all = [...st.metas, ...(st.hidden || [])].filter((m) => m.h.serial === serial);
+  const fresh = new Map<string, Meta>();
+  for (const m of all) {
+    const r = await db.get<RawDive>("raw", m.id, store); if (!r) continue;
+    try { const n = { ...(await metaOf(r)), comp: m.comp, alt: m.alt }; fresh.set(m.id, n); if (!guest) await db.put("meta", n); } catch { /* nečitelný */ }
+  }
+  if (fresh.size) set({ metas: st.metas.map((m) => fresh.get(m.id) ?? m) });
 }
 /** Nastavení počítače z mého logbooku (typ přístroje, scrubber…). */
 export const computerCfg = (serial: number): Computer | undefined => ownLb().computers?.[serial.toString(16).toUpperCase()];
@@ -942,10 +973,10 @@ export async function deleteGuestDives(ids: string[]): Promise<number> {
 
 // ---------- rozpracované ponory (založené na lokalitě) a jejich spárování s logem
 const H = 3600;
-/** Ponory z počítače, které časově odpovídají rozpracovanému ponoru (začátek −3 h až +6 h od založení). */
+/** Ponory z počítače, které časově odpovídají rozpracovanému ponoru (začátek −3 h až +48 h od založení – příprava bývá večer předem). */
 export function draftCandidates(dr: Draft): Meta[] {
   const linked = new Set(Object.values(st.lb.drafts).map((d) => d.diveId).filter(Boolean));
-  return st.metas.filter((m) => !linked.has(m.id) && m.start >= dr.created - 3 * H && m.start <= dr.created + 6 * H)
+  return st.metas.filter((m) => !linked.has(m.id) && m.start >= dr.created - 3 * H && m.start <= dr.created + 48 * H)
     .sort((a, b) => Math.abs(a.start - dr.created) - Math.abs(b.start - dr.created));
 }
 
@@ -968,6 +999,8 @@ export async function linkDraft(draftId: string, diveId: string, auto = false) {
     note: [cur?.note, dr.note].filter(Boolean).join("\n"),
     rating: dr.rating || cur?.rating,
     weather: dr.weather || cur?.weather,
+    ext: cur?.ext || dr.ext, useManual: cur?.useManual || dr.useManual,
+    prep: cur?.prep || dr.prep,
     updated: Date.now(),
   };
   delete lb.drafts[draftId];

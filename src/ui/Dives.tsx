@@ -670,12 +670,12 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
           ["Setpoint", <SpTile meta={meta} />],
           ["Hustota plynu", <span className="use">{num(meta.sum.densMax, 1)} g/l<small>max · hranice 5,2 / 6,2</small></span>],
-          ["Doplnění diluentu", <span className="use">{meta.sum.vents}×<small>ADV, proplach, maska</small></span>],
+          ["Proplach", <span className="use">{meta.sum.vents}×<small>{meta.sum.dilDesc != null ? `sestup ${num(meta.sum.dilDesc, 0)} bar` : "mimo sestup"}</small></span>],
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
       {!st.guest && <SuggestCard meta={meta} />}
-      {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} />}
+      {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} real={{ dil: meta.sum.dilStart, o2: meta.sum.o2Start }} cc={isCC(meta.h)} />}
       {isCC(meta.h) ? <GasUseCard id={id} meta={meta} note={note} /> : <SupplyGasCard id={id} meta={meta} note={note} />}
       <BuddyDivesCard meta={meta} />
       {st.guest && <button className="btn danger guest-del" onClick={async () => {
@@ -823,7 +823,7 @@ function RigLine({ meta }: { meta: Meta }) {
 /** Dlaždice V kostce, které pro daný ponor nedávají smysl (bez čidel, bez dekomprese, bez dat). */
 function tilesHidden(meta: Meta, _th: unknown): string[] {
   const out: string[] = [];
-  if (!isCC(meta.h)) out.push("Max. pN₂", "Diluent", "O₂", "Scrubber", "Dávkování O₂", "Setpoint", "Doplnění diluentu");
+  if (!isCC(meta.h)) out.push("Max. pN₂", "Diluent", "O₂", "Scrubber", "Dávkování O₂", "Setpoint", "Proplach");
   if (!hasDeco(meta.h)) out.push("GF / CNS");
   if (meta.sum.co2Max == null && !isCC(meta.h)) out.push("Max. CO₂");
   return out;
