@@ -253,7 +253,7 @@ function CellPanel({ c }: { c: ReturnType<typeof useCells> }) {
                   </div>
                 </div>
                 <div className="row">
-                  <button className="btn" onClick={() => setForm({ pos: pos as 1 | 2 | 3, installed: isoOf(c.now), lifeM: 12, maker: cur?.maker || emp?.maker || "" })}>{cur ? "Zadat výměnu" : "Zadat čidlo"}</button>
+                  <button className="btn" onClick={() => setForm({ pos: pos as 1 | 2 | 3, installed: isoOf(c.now), lifeM: 12, maker: cur?.maker || emp?.maker || "", type: cur?.type || emp?.type })}>{cur ? "Zadat výměnu" : "Zadat čidlo"}</button>
                   {cur && <button className="btn" onClick={() => setForm({ ...cur })}>Upravit</button>}
                   {cur && <button className="btn" onClick={() => setForm({ ...cur, removed: isoOf(c.now) })}>Vyjmout</button>}
                 </div>
@@ -306,10 +306,10 @@ export function CellsScreen({ pos, install }: { pos?: number; install?: string }
 
 function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnType<typeof useCells>; metas: Meta[]; install?: string }) {
   const cur = c.current(pos);
-  const [edit, setEdit] = useState<Partial<Cell> | null>(install ? { pos, installed: install, lifeM: 12, maker: cur?.maker || "" } : null);
+  const [edit, setEdit] = useState<Partial<Cell> | null>(install ? { pos, installed: install, lifeM: 12, maker: cur?.maker || "", type: cur?.type } : null);
   const formRef = useRef<HTMLDivElement>(null);
   // formulář otevřený z dotazu na výměnu: ukázat ho (bývá pod grafem mimo obrazovku)
-  useEffect(() => { if (install) { setEdit({ pos, installed: install, lifeM: 12, maker: cur?.maker || "" }); setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); } }, [install]);
+  useEffect(() => { if (install) { setEdit({ pos, installed: install, lifeM: 12, maker: cur?.maker || "", type: cur?.type }); setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); } }, [install]);
   const hist = c.cells.filter((x) => x.pos === pos).sort((a, b) => b.installed.localeCompare(a.installed));
   const s = c.status[pos - 1];
   const xs = c.ccr.map(({ i }) => i + 1);
@@ -328,7 +328,7 @@ function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnTyp
           extra={[{ label: "Na vzduchu", values: ys.map((y) => (y != null ? +(y * 0.21).toFixed(1) : null)), unit: "mV" }, { label: "Linearita", values: lin }]} />
       )}
       <div className="row">
-        <button className="btn primary" onClick={() => { setEdit({ pos, installed: isoOf(c.now), lifeM: 12, maker: cur?.maker || "" }); setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}>Vyměnit / zadat čidlo</button>
+        <button className="btn primary" onClick={() => { setEdit({ pos, installed: isoOf(c.now), lifeM: 12, maker: cur?.maker || "", type: cur?.type }); setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}>Vyměnit / zadat čidlo</button>
         {cur && <button className="btn" onClick={() => setEdit({ ...cur })}>Upravit</button>}
       </div>
       <div ref={formRef}>{edit && <CellForm init={edit} c={c} onDone={() => setEdit(null)} />}</div>
@@ -352,9 +352,20 @@ function CellForm({ init, c, onDone }: { init: Partial<Cell>; c: ReturnType<type
   const [f, setF] = useState<Partial<Cell>>(init);
   const set = (k: keyof Cell, v: string | number | undefined) => setF({ ...f, [k]: v });
   const chk = f.pos && f.installed ? checkInstallDate(c, f.pos, f.installed) : null;
+  // dříve zadané druhy čidel (výrobce + model) – nejčastější a nejnovější první
+  const kinds = (() => {
+    const m = new Map<string, { maker: string; type: string; lifeM: number; n: number; last: string }>();
+    for (const x of c.cells) { if (!x.maker && !x.type) continue; const k = (x.maker || "") + "|" + (x.type || ""); const o = m.get(k);
+      m.set(k, { maker: x.maker || "", type: x.type || "", lifeM: x.lifeM || 12, n: (o?.n || 0) + 1, last: !o || x.installed > o.last ? x.installed : o.last }); }
+    return [...m.values()].sort((a, b) => b.n - a.n || b.last.localeCompare(a.last)).slice(0, 6);
+  })();
   return (
     <div className="form">
-      <label>Výrobce a typ<div className="row"><input value={f.maker || ""} placeholder="např. Narked@90" onChange={(e) => set("maker", e.target.value)} /><input value={f.type || ""} placeholder="typ" onChange={(e) => set("type", e.target.value)} /></div></label>
+      {kinds.length > 0 && <div className="quick">{kinds.map((k) => (
+        <button key={k.maker + "|" + k.type} className={"btn small" + (f.maker === k.maker && (f.type || "") === k.type ? " primary" : "")} onClick={() => setF({ ...f, maker: k.maker, type: k.type || undefined, lifeM: f.id ? f.lifeM : k.lifeM })}>{[k.maker, k.type].filter(Boolean).join(" ")}</button>
+      ))}</div>}
+      <label>Výrobce<input value={f.maker || ""} placeholder="např. Narked@90" onChange={(e) => set("maker", e.target.value)} /></label>
+      <label>Model<input value={f.type || ""} placeholder="např. R22D" onChange={(e) => set("type", e.target.value)} /></label>
       <label>Sériové číslo (S/N)<input value={f.sn || ""} placeholder="např. S01119633" onChange={(e) => set("sn", e.target.value)} /></label>
       <label>Datum výroby (ze štítku)<input type="date" value={f.made || ""} onChange={(e) => set("made", e.target.value || undefined)} /></label>
       <label>Datum výměny (vložení do rebreatheru)<input type="date" value={f.installed || ""} onChange={(e) => set("installed", e.target.value)} /></label>

@@ -54,7 +54,7 @@ export function HelpScreen() {
       </H>
 
       <H title="5. Co myX z logu vyčte">
-        <p><b>O₂ čidla:</b> historie citlivosti (mV na vzduchu, stárnutí, current limiting), rozjetí v ponoru – jedno vadné čidlo, nebo vlhkost / zatékání (víc čidel najednou), vyřazené čidlo z hlasování. Po zadání výměny je čidlo zelené se štítkem NOVÉ, dokud pro něj nejsou data z ponoru; stav se pak počítá jen z ponorů od jeho instalace. Výměna zjištěná z historie předvyplní datum prvního ponoru s novým čidlem, tlačítko „Vyměnit / zadat čidlo“ dnešní datum.</p>
+        <p><b>O₂ čidla:</b> historie citlivosti (mV na vzduchu, stárnutí, current limiting), rozjetí v ponoru – jedno vadné čidlo, nebo vlhkost / zatékání (víc čidel najednou), vyřazené čidlo z hlasování. Po zadání výměny je čidlo zelené se štítkem NOVÉ, dokud pro něj nejsou data z ponoru; stav se pak počítá jen z ponorů od jeho instalace. Výměna zjištěná z historie předvyplní datum prvního ponoru s novým čidlem, tlačítko „Vyměnit / zadat čidlo“ dnešní datum. Ve formuláři jsou nahoře dříve zadaná čidla (výrobce + model) – klepnutím je vyplníš.</p>
         <p><b>CO₂:</b> vysoké hodnoty a alarmy, věrohodnost čidla (oříznutá nula, nesmyslné hodnoty), souvislost s námahou, hustotou plynu a dávkami.</p>
         <p><b>pO₂:</b> nízké pO₂ při zanoření rozlišené podle průběhu – dohánění setpointu vs. podezření na hypoxii (zavřený ventil O₂), vysoké pO₂, pN₂ / END.</p>
         <p><b>Setpoint:</b> kdy a jak jsi přepnul (ručně v menu), pozdní přepnutí (víc než 2 min po dosažení dna, hodnotí se jen první přepnutí nahoru; jako informace v Událostech, nebo po zapnutí v Nastavení jako žluté varování s tagem SP), klesání s vysokým SP, 0,19 mimo závěr.</p>

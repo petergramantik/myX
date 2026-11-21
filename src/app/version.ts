@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.10";
+export const APP_VERSION = "1.42-dev.11";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.11", date: "2026-11-21", title: "Výběr čidla ze seznamu (dev)", items: [
+    "Při zadání čidla nabídka dříve zadaných čidel (výrobce + model) – jedním klepnutím vyplní obě pole i životnost; pole Typ přejmenováno na Model.",
+  ] },
   { version: "1.42-dev.10", date: "2026-11-21", title: "Předponorová příprava, čidla, vysílače (dev)", items: [
     "Předponorová příprava v rozpracovaném ponoru: tlaky onboard lahví (porovnání s počítačem), offboard lahve (bailout, O₂, deko), potvrzení kalibrace čidel O₂ a CO₂; pod 100 bar žlutě, pod 50 bar červeně.",
     "Rozpracovaný ponor se páruje s ponorem 3 h před až 48 h po založení (příprava večer předem).",
