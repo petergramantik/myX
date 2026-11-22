@@ -4,12 +4,12 @@ import { BTN_NAMES, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones
 import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
-import { TAG_ORDER, diveTagsOf, type DiveTag, type TagCat } from "../core/tags";
-import { norm, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
+import { TAG_ORDER, diveTagsOf, isHiddenW, tagCat, withEmptiedCats, type DiveTag, type TagCat } from "../core/tags";
+import { norm, tankMix, tankVol, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { partIds, shareDives } from "./share";
 import { ask, askText, choose } from "../app/dialog";
 import { RIGS, hasDeco, isCC, pscrLoopPo2, supplyPo2, type Rig } from "../core/rig";
-import { compName, rigChoices, rigInfo, setDiveRig, typeBreakdown } from "../app/store";
+import { compName, getState, rigChoices, rigInfo, setDiveRig, typeBreakdown } from "../app/store";
 import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, useBackLayer, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { co2BadRanges, co2Valid, dilVents, effortOf, gasDensity, workloadIndex, workloadSkip, type EffortBase } from "../core/effort";
@@ -265,6 +265,34 @@ function groupAlerts<T extends { level: string; title: string; text: string; par
   return [...m.values()].map((g) => g.parts.length > 1 ? { level: g.level, title: `${g.title} – ${g.parts.length}×`, text: g.text, parts: g.parts } : { level: g.level, title: g.title, text: g.text, parts: g.own, blocks: g.blocks });
 }
 
+/** Skrýt upozornění u ponoru: jen toto, nebo celou kategorii (tag v seznamu). */
+async function hideWarn(id: string, note: DiveNote, title: string, all: string[]) {
+  const base = title.replace(/ – \d+×$/, ""), cat = tagCat(base);
+  const k = await choose(`Skrýt u tohoto ponoru „${base}“? Nebude se počítat do hodnocení ponoru (barva a tagy v seznamu), v událostech pod grafy zůstane.`, [
+    { key: "t", label: "Jen toto upozornění", primary: true },
+    ...(cat ? [{ key: "c", label: `Celou kategorii ${cat}` }] : []),
+  ]);
+  if (!k) return;
+  setNote(id, { hideW: withEmptiedCats([...new Set([...(note.hideW || []), k === "c" ? "c:" + cat : "t:" + base])], all) });
+}
+
+/** Skrytá upozornění ponoru – sbalený seznam s možností vrátit. */
+function HiddenWarns({ id, note, all }: { id: string; note: DiveNote; all: string[] }) {
+  const [open, setOpen] = useState(false);
+  const keys = (note.hideW || []).filter((k) => !k.startsWith("x:"));
+  const titles = [...new Set(all.filter((t) => isHiddenW(t, keys)))];
+  if (!keys.length) return null;
+  return (
+    <div className="hidden-w small muted">
+      <a onClick={() => setOpen(!open)}>{open ? "▾" : "▸"} Skrytá upozornění ({titles.length || keys.length})</a>
+      {open && keys.map((k) => (
+        <div key={k} className="hw-row">{k.startsWith("c:") ? `kategorie ${k.slice(2)}` : k.slice(2)}{k.startsWith("t:") && !titles.some((t) => t.replace(/ – \d+×$/, "") === k.slice(2)) ? " (v ponoru teď není)" : ""}
+          <button className="btn small" onClick={() => setNote(id, { hideW: withEmptiedCats(keys.filter((x) => x !== k), all) })}>Vrátit</button></div>
+      ))}
+    </div>
+  );
+}
+
 /** Štítek hlavního diluentu (plyn s nejdelším časem) v pravém horním rohu řádku. */
 function DilChip({ m }: { m: Meta }) {
   const g = [...(m.sum.gases || [])].sort((a, b) => b.s - a.s)[0];
@@ -294,7 +322,8 @@ function diveTagsOfMeta(metas: Meta[], m: Meta, th: Parameters<typeof cellDiveWa
   const cw = idx >= 0 && isCC(m.h) ? cellDiveWarnings(metas, idx, th) : []; // čidla jen u CC ponorů
   const hi = po2HiLevel(m.sum, th);
   const late = th.spLateWarn && m.sum.spLate != null && m.sum.spLate > (th.spLateMin ?? 2);
-  return diveTagsOf([...(m.warns || []), ...cw, ...(hi ? [{ level: hi, title: "Vysoké pO₂ (vlastní detekce)" }] : []), ...(late ? [{ level: "warn", title: "Pozdní přepnutí na vysoký setpoint" }] : [])]);
+  const hide = getState().lb.notes[m.id]?.hideW;
+  return diveTagsOf([...(m.warns || []), ...cw, ...(hi ? [{ level: hi, title: "Vysoké pO₂ (vlastní detekce)" }] : []), ...(late ? [{ level: "warn", title: "Pozdní přepnutí na vysoký setpoint" }] : [])].filter((w) => !isHiddenW(w.title, hide)));
 }
 
 /** Nejzávažnější úroveň tagů pro rámeček kompaktního řádku. */
@@ -482,12 +511,25 @@ export function personalO2Rate(metas: Meta[], notes: Record<string, DiveNote>, c
 function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol: number, rate?: { lo: number; hi: number; n: number } | null) {
   const u = gas === "dil" ? meta.sum.dilUse : meta.sum.o2Use;
   const manual = note?.useManual?.[gas];
-  const ext = (note?.ext || []).filter((e) => e.gas === gas);
+  // offboard lahve z předponorové přípravy mají přednost před ručním zadáním externí lahve u ponoru
+  const pe = prepExt(gas, meta, note);
+  const ext = pe.length ? pe : (note?.ext || []).filter((e) => e.gas === gas);
   const extL = ext.reduce((a, e) => a + (e.start != null && e.end != null ? Math.max(0, e.start - e.end) * e.vol : 0), 0);
   const ownL = u.ok && !u.noisy ? u.bar * vol : null;
   const min = meta.h.diveTimeS / 60;
   const metab = rate ? [rate.lo * min, rate.hi * min] as const : [0.8 * min, 1.5 * min] as const;
   return { u, manual, ext, extL, ownL, total: manual ?? (ownL != null || extL ? (ownL || 0) + extL : null), min, metab, personal: !!rate };
+}
+
+/**
+ * Offboard lahve z předponorové přípravy jako externí plyn: O₂ lahve → O₂, Dil → diluent;
+ * bailouty se stejným plynem jako diluent se počítají do diluentu jen při zjištěném externím diluentu.
+ */
+function prepExt(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined): ExtGas[] {
+  const tanks = (note?.prep?.tanks || []).filter((t) => t.bar != null && t.end != null && tankVol(t));
+  const dilMix = meta.sum.gases.map((g) => g.mix).find((m) => m !== "100/0");
+  const pick = tanks.filter((t) => gas === "o2" ? t.role === "o2" : t.role === "dil" || (t.role === "bo" && extDetected(meta.sum.dilUse) && (tankMix(t.gas) ?? dilMix) === dilMix));
+  return pick.map((t) => ({ id: t.id, gas, kind: t.name, vol: tankVol(t)!, start: t.bar, end: t.end }));
 }
 
 /** Externí plyn: snímač ukazuje mezitlak, tlak během ponoru výrazně vzrostl, nebo je zadaná externí lahev. */
@@ -507,9 +549,11 @@ function UseVal({ gas, meta, note }: { gas: "dil" | "o2"; meta: Meta; note?: Div
   const rate = gas === "o2" ? personalO2Rate(st.metas, st.lb.notes, st.lb.settings.cyl?.o2 ?? 3) : null;
   const g = gasUseOf(gas, meta, note, vol, rate);
   if (g.manual != null) return <span className="use">{fmtL(g.manual)}<small>zadáno ručně</small></span>;
-  if (g.total != null) return (
-    <span className="use">{fmtL(g.total)}<small>{g.u.ok && !g.u.noisy ? `${g.u.bar} bar · ` : ""}{num(g.total / g.min, 1)} l/min{g.extL ? ` · ext. ${fmtL(g.extL)}` : ""}</small></span>
-  );
+  if (g.total != null) {
+    // velkým písmem bary (vlastní lahev + offboard), malým spotřeba v litrech
+    const bars = [g.u.ok && !g.u.noisy && g.ownL ? `${g.u.bar} bar` : "", ...g.ext.filter((e) => e.start != null && e.end != null).map((e) => `${Math.max(0, e.start! - e.end!)} bar ${e.kind}`)].filter(Boolean);
+    return <span className="use">{bars.length ? bars.join(" + ") : fmtL(g.total)}<small>{fmtL(g.total)} · {num(g.total / g.min, 1)} l/min</small></span>;
+  }
   if (gas === "o2") return <span className="use">~{Math.round(g.metab[0])}–{Math.round(g.metab[1])} l<small>{g.u.noisy ? "tlak nespolehlivý · " : ""}{g.personal ? "osobní odhad" : "odhad z doby"}</small></span>;
   return <span className="use">–<small>{g.u.noisy ? "tlak nespolehlivý" : "zadej tlak externí lahve"}</small></span>;
 }
@@ -533,7 +577,7 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
             ? ` Do té doby osobní odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (tvoje spotřeba ${num(rate.lo, 2)}–${num(rate.hi, 2)} l/min z ${rate.n} ponorů se známou spotřebou).`
             : ` Do té doby obecný metabolický odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (0,8–1,5 l/min; osobní odhad bude po 2 ponorech se známou spotřebou O₂).`) : ""}</>}</small>
         {u.ext.length > 0 && <small className="c-warn">Externí plyn nebo zavřená lahev nejspíš: {u.ext.map(([a, b]) => (a === b ? tpt(a * 60) : `${tpt(a * 60)}–${tpt(b * 60)}`)).join(", ")}</small>}
-        {(() => {
+        {prepExt(gas, meta, note).length > 0 ? <small>Offboard lahve z předponorové přípravy: {prepExt(gas, meta, note).map((e) => `${e.kind} ${e.start} → ${e.end} bar (${fmtL(Math.max(0, e.start! - e.end!) * e.vol)})`).join(", ")}</small> : (() => {
           const mine = ext.filter((e) => e.gas === gas);
           const kind = gas === "dil" ? "S80" : "S40";
           const virt: ExtGas | null = !mine.length && extDetected(u) ? { id: "auto-" + gas, gas, kind, vol: EXT_KINDS[kind] } : null;
@@ -651,7 +695,8 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
       <RigLine meta={meta} />
       {!st.guest && <PscrPrompt id={id} meta={meta} note={note} />}
       {meta.comp && <div className="comp-line small muted">Z počítače {compModel(meta.comp)}{meta.alt && <> · <span className="pill">2 počítače</span> <a onClick={() => go({ t: "cmp", id: meta.id, other: meta.alt! })}>Srovnání počítačů ›</a></>}</div>}
-      {groupAlerts(warns.filter((a) => a.level !== "info")).map((a, i) => <AlertBox key={i} a={a} fold onShow={d ? showInChart : undefined} />)}
+      {groupAlerts(warns.filter((a) => a.level !== "info" && !isHiddenW(a.title, note.hideW))).map((a, i) => <AlertBox key={i} a={a} fold onShow={d ? showInChart : undefined} onHide={st.guest ? undefined : () => hideWarn(id, note, a.title, warns.filter((w) => w.level !== "info").map((w) => w.title))} />)}
+      <HiddenWarns id={id} note={note} all={warns.filter((a) => a.level !== "info").map((a) => a.title)} />
       <PartsCard meta={meta} />
       <Card title="V kostce" right={<GasChips mixes={meta.sum.gases.map((g) => g.mix)} />}>
         <Tiles cols={2} hide={meta.h ? tilesHidden(meta, lb.settings.th) : []} cls={{ "Scrubber": scr.cls, "Max. pO₂": meta.sum.ppo2Max > (lb.settings.th.po2HiBad ?? 1.6) ? "bad" : po2HiLevel(meta.sum, lb.settings.th) === "warn" ? "hot" : "", "Max. pN₂": meta.sum.pn2Max > (lb.settings.th.pn2Hot ?? 3.16) ? "hot" : "", "Hustota plynu": meta.sum.densMax > 5.2 ? "hot" : "" }} items={[

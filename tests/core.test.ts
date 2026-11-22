@@ -479,5 +479,12 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(diveComplete(cat(rec(0x10), rec(1), rec(0x20), rec(0xff))) && !diveComplete(cat(rec(0x10), rec(1), rec(1))), "Bluetooth: neúplný ponor se pozná");
 }
 
+{ // skrytí upozornění u ponoru: titul, kategorie, vyprázdněná kategorie
+  const { isHiddenW, withEmptiedCats } = await import("../src/core/tags");
+  const all = ["Problém s čidlem 1", "Alarm CO₂ – 2×"];
+  const k = withEmptiedCats(["t:Problém s čidlem 1"], all);
+  ok(isHiddenW("Problém s čidlem 1", k) && isHiddenW("Čidlo 1 rozjeté", k) && !isHiddenW("Alarm CO₂", k) && isHiddenW("Alarm CO₂ – 2×", ["c:CO₂"]), "Skrytí upozornění: titul, kategorie a vyprázdněný tag");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

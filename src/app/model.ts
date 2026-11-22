@@ -16,12 +16,31 @@ export interface WeatherSnap { at: number; temp: number; wind: number; gust: num
 /** Externí lahev připojená během ponoru (Petrel její tlak neměří). */
 export interface ExtGas { id: string; /** sup = zásobní plyn přístroje bez vysílačů (pSCR, OC…) */ gas: "dil" | "o2" | "sup"; kind: string; vol: number; start?: number; end?: number }
 /** Offboard lahev z předponorové přípravy (bailout, offboard O₂…). */
-export interface PrepTank { id: string; role: "bo" | "o2" | "deco" | "other"; name: string; gas: string; bar?: number }
+export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "other"; name: string; gas: string; bar?: number; /** tlak po ponoru */ end?: number; /** objem (l); jinak z označení S80/S40… */ vol?: number }
+/** Objem lahve (l) z ručního zadání nebo z označení (S80, S40, 12 l…). */
+export function tankVol(t: { vol?: number; name: string }): number | null {
+  if (t.vol) return t.vol;
+  const n = t.name.trim().toUpperCase().replace(",", ".");
+  const al: Record<string, number> = { S80: 11.1, S63: 9, S40: 5.7, S30: 4.3, S20: 2.8, S13: 1.9 };
+  if (al[n]) return al[n];
+  const m = /^(\d+(?:\.\d+)?)\s*L?$/.exec(n);
+  return m ? +m[1] : null;
+}
+/** Plyn lahve jako směs O₂/He (vzduch, EAN32, 18/45, O₂…); null = nečitelné. */
+export function tankMix(g: string): string | null {
+  const t = g.trim().toLowerCase().replace(/\s+/g, "");
+  if (!t) return null;
+  if (/^(vzduch|air)$/.test(t)) return "21/0";
+  if (/^(o2|o₂|kyslík|kyslik|100)$/.test(t)) return "100/0";
+  let m = /^(?:ean|nx|nitrox)(\d+)$/.exec(t); if (m) return `${+m[1]}/0`;
+  m = /^(?:tmx|tx|trimix)?(\d+)\/(\d+)$/.exec(t); if (m) return `${+m[1]}/${+m[2]}`;
+  return null;
+}
 /** Předponorová příprava: naměřené tlaky (bar) onboard lahví, offboard lahve a potvrzení kalibrace (ms). */
 export interface Prep { o2?: number; dil?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string } }
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
-  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; updated: number;
+  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; updated: number;
 }
 /** Ponor založený na lokalitě před stažením logu; po importu se spáruje s ponorem z počítače. */
 export interface Draft extends DiveNote { id: string; created: number; lat?: number; lon?: number; diveId?: string }

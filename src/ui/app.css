@@ -497,3 +497,12 @@ label.inline input[type=checkbox] { width: auto; padding: 0; }
 .ble-log { text-align: left; margin: 6px 0; }
 .plus { position: relative; }
 .plus-badge { position: absolute; right: -4px; bottom: -4px; min-width: 16px; height: 16px; padding: 0 2px; border-radius: 8px; background: #fff; color: #0277bd; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; box-shadow: 0 0 0 1.5px #0277bd; }
+.prep-tank { display: block; border-top: 1px solid rgba(255,255,255,.06); padding-top: 6px; }
+.prep-tank .pt-row { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+.prep-tank .pt-row select { width: 64px; flex: none; }
+.prep-tank .pt-row .tank-name { width: 64px; flex: none; }
+.prep-tank .pt-row .tank-gas { flex: 1; min-width: 0; }
+.prep-tank .tank-vol { width: 70px; }
+.alert-hide { display: block; margin-top: 8px; font-size: 12px; opacity: .8; }
+.hidden-w { margin: 4px 0 10px; }
+.hidden-w .hw-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; }

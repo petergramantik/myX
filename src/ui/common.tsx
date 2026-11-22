@@ -165,7 +165,7 @@ export function RatingPicker({ value, onChange }: { value?: string; onChange: (v
 export { hm } from "../core/analysis";
 
 type ABlock = { head: string; steps: string[]; from: number; to: number; chart: string };
-export function AlertBox({ a, fold, onShow }: { a: { level: string; title: string; text: string; parts?: string[]; blocks?: ABlock[] }; fold?: boolean; onShow?: (b: ABlock) => void }) {
+export function AlertBox({ a, fold, onShow, onHide }: { a: { level: string; title: string; text: string; parts?: string[]; blocks?: ABlock[] }; fold?: boolean; onShow?: (b: ABlock) => void; /** skrýt upozornění u ponoru */ onHide?: () => void }) {
   const [open, setOpen] = useState(false);
   const [openB, setOpenB] = useState<number | null>(null);
   if (!fold || !a.text) return <div className={"alert " + a.level}><b>{a.title}</b>{a.text && <div>{a.text}</div>}</div>;
@@ -182,5 +182,6 @@ export function AlertBox({ a, fold, onShow }: { a: { level: string; title: strin
           </>}
         </div>
       ))}
-    </div> : a.parts ? <div className="alert-parts">{a.parts.map((p, i) => <div key={i}>{p}</div>)}</div> : <div>{a.text}</div>)}</div>;
+    </div> : a.parts ? <div className="alert-parts">{a.parts.map((p, i) => <div key={i}>{p}</div>)}</div> : <div>{a.text}</div>)}
+    {open && onHide && <a className="alert-hide" onClick={(e) => { e.stopPropagation(); onHide(); }}>Skrýt u tohoto ponoru…</a>}</div>;
 }

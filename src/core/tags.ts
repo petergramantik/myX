@@ -33,3 +33,20 @@ export function diveTagsOf(ws: { level: string; title: string; text?: string }[]
   }
   return TAG_ORDER.filter((c) => map.has(c)).map((c) => { const t = map.get(c)!; return { ...t, label: c === "ČIDLO" && t.cells.length ? `ČIDLO ${t.cells.join(" ")}` : c }; });
 }
+
+/** Upozornění skryté u ponoru (hideW: „t:název“ nebo „c:KATEGORIE“) – nepočítá se do hodnocení, zůstane v událostech. */
+export function isHiddenW(title: string, hide?: string[]): boolean {
+  if (!hide?.length) return false;
+  const base = title.replace(/ – \d+×$/, "");
+  const cat = tagCat(base);
+  // x: = kategorie, ve které po skrytí nezůstalo žádné viditelné upozornění (tag v seznamu má zmizet)
+  return hide.includes("t:" + base) || (!!cat && (hide.includes("c:" + cat) || hide.includes("x:" + cat)));
+}
+
+/** Klíče skrytí doplněné o kategorie, ve kterých po skrytí nezůstalo žádné viditelné upozornění („x:“). */
+export function withEmptiedCats(keys: string[], titles: string[]): string[] {
+  const base = keys.filter((k) => !k.startsWith("x:"));
+  const cats = new Set(titles.map(tagCat).filter(Boolean) as TagCat[]);
+  const vis = new Set(titles.filter((t) => !isHiddenW(t, base)).map(tagCat).filter(Boolean) as TagCat[]);
+  return [...base, ...[...cats].filter((c) => !vis.has(c)).map((c) => "x:" + c)];
+}

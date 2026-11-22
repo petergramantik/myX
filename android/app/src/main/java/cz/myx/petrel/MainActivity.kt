@@ -41,6 +41,8 @@ class MainActivity : Activity() {
     private lateinit var log: TextView
     private lateinit var status: TextView
     private lateinit var go: Button
+    private lateinit var resend: Button
+    private val prefs by lazy { getSharedPreferences("petrel", MODE_PRIVATE) }
     private lateinit var devs: Spinner
     private lateinit var count: RadioGroup
     private var devices: List<BluetoothDevice> = emptyList()
@@ -60,11 +62,14 @@ class MainActivity : Activity() {
         root.addView(devs)
         count = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
         listOf("Poslední ponor", "Posledních 5 ponorů", "Všechny ponory").forEachIndexed { i, s ->
-            count.addView(RadioButton(this).apply { text = s; id = 100 + i; setTextColor(Color.rgb(220, 230, 240)); isChecked = i == 0 })
+            count.addView(RadioButton(this).apply { text = s; id = 100 + i; setTextColor(Color.rgb(220, 230, 240)); isChecked = i == prefs.getInt("count", 0) })
         }
         root.addView(count)
         go = Button(this).apply { text = "Stáhnout"; setOnClickListener { if (running) cancel() else start() } }
         root.addView(go)
+        resend = Button(this).apply { text = "Poslat znovu do myX"; setOnClickListener { lastFile()?.let { share(it, prefs.getInt("lastN", 0)) } } }
+        root.addView(resend)
+        resend.isEnabled = lastFile() != null
         status = text("", 16f)
         root.addView(status)
         log = text("", 11f).apply { typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.TOP }
@@ -92,8 +97,12 @@ class MainActivity : Activity() {
         val dive = all.filter { (it.name ?: "").matches(Regex("(?i).*(petrel|perdix|peregrine|teric|nerd|predator|tern).*")) }
         devices = dive.ifEmpty { all }
         devs.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, devices.map { "${it.name ?: "?"} (${it.address})" })
+        devs.setSelection(devices.indexOfFirst { it.address == prefs.getString("dev", "") }.coerceAtLeast(0))
         if (devices.isEmpty()) status.text = "Žádný spárovaný počítač – spáruj Petrel v Nastavení → Bluetooth (PIN 0000)."
     }
+
+    /** Poslední stažený soubor (pro „Poslat znovu do myX“). */
+    private fun lastFile(): File? = prefs.getString("lastFile", null)?.let { File(it) }?.takeIf { it.exists() }
 
     private fun add(s: String) = runOnUiThread { log.append("${SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(Date())} $s\n") }
     private fun setStatus(s: String) = runOnUiThread { status.text = s }
@@ -104,11 +113,15 @@ class MainActivity : Activity() {
     private fun start() {
         val dev = devices.getOrNull(devs.selectedItemPosition) ?: return
         val limit = when (count.checkedRadioButtonId) { 100 -> 1; 101 -> 5; else -> Int.MAX_VALUE }
+        prefs.edit().putString("dev", dev.address).putInt("count", count.checkedRadioButtonId - 100).apply()
         stop = false; running = true; go.text = "Ukončit"; log.text = ""
         Thread {
             try {
                 val res = run(dev, limit)
-                if (res != null) runOnUiThread { share(res.first, res.second) }
+                if (res != null) {
+                    prefs.edit().putString("lastFile", res.first.absolutePath).putInt("lastN", res.second).apply()
+                    runOnUiThread { resend.isEnabled = true; share(res.first, res.second) }
+                }
             } catch (e: Exception) {
                 add("Chyba: ${e.message}")
                 setStatus(if (stop) "Ukončeno." else "Chyba: ${e.message}")
@@ -124,19 +137,7 @@ class MainActivity : Activity() {
     @SuppressLint("MissingPermission")
     private fun run(dev: BluetoothDevice, limit: Int): Pair<File, Int>? {
         setStatus("Připojuji ${dev.name}…")
-        // zastavit případné vyhledávání (vyžaduje povolení BLUETOOTH_SCAN – bez něj se jen přeskočí)
-        try { getSystemService(BluetoothManager::class.java)?.adapter?.cancelDiscovery() } catch (_: SecurityException) {}
-        val s = try {
-            dev.createRfcommSocketToServiceRecord(spp).also { it.connect() }
-        } catch (e: Exception) {
-            add("Připojení přes SPP selhalo (${e.message}) – zkouším kanál 5")
-            // Petrel 2 má sériový port na kanálu RFCOMM 5
-            (dev.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType).invoke(dev, 5) as BluetoothSocket).also { it.connect() }
-        }
-        socket = s
-        add("Připojeno")
-        val sw = Shearwater(s.inputStream, s.outputStream) { stop }
-        sw.purge()
+        var sw = connect(dev)
         setStatus("Čtu údaje počítače…")
         val serial = String(sw.rdbi(Shearwater.ID_SERIAL)).trim().uppercase()
         val fw = String(sw.rdbi(Shearwater.ID_FIRMWARE)).replace("\u0000", "").trim()
@@ -155,14 +156,22 @@ class MainActivity : Activity() {
             if (stop) break
             val t0 = System.currentTimeMillis()
             setStatus("Stahuji ponor ${k + 1}/${todo.size}…")
-            val d = try {
-                sw.download(base + e.addr, Shearwater.DIVE_SIZE, true) { b -> setStatus("Stahuji ponor ${k + 1}/${todo.size} · ${b / 1024} kB") }
-            } catch (x: Exception) {
-                // ukončení / přerušení: už stažené ponory se předají, rozpracovaný se zahodí
-                add(if (stop) "Ukončeno uprostřed ponoru ${k + 1}" else "Přerušeno: ${x.message}")
-                if (arr.length() == 0) throw x
-                break
+            var got = 0
+            var d: ByteArray? = null
+            for (attempt in 0..3) {
+                try {
+                    d = sw.download(base + e.addr, Shearwater.DIVE_SIZE, true) { b -> got = b; setStatus("Stahuji ponor ${k + 1}/${todo.size} · ${b / 1024} kB") }
+                    break
+                } catch (x: Exception) {
+                    if (stop) { add("Ukončeno uprostřed ponoru ${k + 1}"); break }
+                    // přerušení: zapsat kdy a kolik, znovu se připojit (max. 3×) a ponor stáhnout znovu
+                    add("Přerušeno po ${(System.currentTimeMillis() - t0) / 1000} s, ${got / 1024} kB: ${x.message}")
+                    if (attempt == 3) break
+                    setStatus("Znovu se připojuji (${attempt + 1}/3)…")
+                    try { Thread.sleep(1500); sw = connect(dev) } catch (y: Exception) { add("Znovu připojit nešlo: ${y.message}") }
+                }
             }
+            if (d == null) { if (arr.length() == 0 && !stop) throw Exception("Ponor se nepodařilo stáhnout"); break }
             if (!Shearwater.complete(d)) { add("Ponor ${k + 1} se nestáhl celý – vynechán"); continue }
             var num = 0
             var i = 0
@@ -176,6 +185,23 @@ class MainActivity : Activity() {
         f.writeText(JSONObject().put("myxbt", 1).put("serial", serial).put("model", model).put("firmware", fw).put("dives", arr).toString())
         setStatus("Staženo ${arr.length()} ${if (arr.length() == 1) "ponor" else "ponorů"}${if (stop) " (ukončeno)" else ""} – vyber myX")
         return f to arr.length()
+    }
+
+    /** Připojí sériový port počítače (SPP, při neúspěchu RFCOMM kanál 5 – Petrel 2). */
+    @SuppressLint("MissingPermission")
+    private fun connect(dev: BluetoothDevice): Shearwater {
+        try { socket?.close() } catch (_: Exception) {}
+        // zastavit případné vyhledávání (vyžaduje povolení BLUETOOTH_SCAN – bez něj se jen přeskočí)
+        try { getSystemService(BluetoothManager::class.java)?.adapter?.cancelDiscovery() } catch (_: SecurityException) {}
+        val s = try {
+            dev.createRfcommSocketToServiceRecord(spp).also { it.connect() }
+        } catch (e: Exception) {
+            add("Připojení přes SPP selhalo (${e.message}) – zkouším kanál 5")
+            (dev.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType).invoke(dev, 5) as BluetoothSocket).also { it.connect() }
+        }
+        socket = s
+        add("Připojeno")
+        return Shearwater(s.inputStream, s.outputStream) { stop }.also { it.purge() }
     }
 
     private fun share(f: File, n: Int) {
