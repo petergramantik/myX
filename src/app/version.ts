@@ -1,109 +1,20 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.23";
+export const APP_VERSION = "1.42";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.42-dev.23", date: "2026-11-22", title: "Baterie v hlavě podle modelu rebreatheru (dev)", items: [
-    "Nastavení → Moje počítače → Rebreather: X-CCR, FLEX2, FX CCR, JJ-CCR, Tres Presidentes, Jiný – určuje počet, typ a funkci baterií v hlavě (X-CCR 2× 18650, FLEX2 2× 18500; #1 solenoid, #2 HUD a výstup pO₂).",
-    "Alarm „Porucha solenoidu / baterie v hlavě“ v ponoru od výměny označí baterii solenoidu jako podezřelou (červeně).",
-  ] },
-  { version: "1.42-dev.22", date: "2026-11-22", title: "Lahve a spotřeba plynu (dev)", items: [
-    "Před a po ponoru: lahev a plyn z nabídky (S40, S80, 12 l, 3 l, 2,5 l, Jiná; vzduch, O₂, EAN, TMX, Argon, Jiný), role Oblek pro argon.",
-    "Spotřeba plynu: tlak větším písmem, litry pod ním; vlastní lahev bez tlaku = off; externí lahve jen v Před a po ponoru (starší zadání převedena), ruční spotřeba zrušena.",
-    "Baterie: každá část řádku má vlastní barvu, nezadané hlavy šedě; typ počítače místo „Počítač“.",
-    "Běžné přepnutí setpointu se v Událostech nehlásí (jen pozdní); všechna jsou v kartě Setpoint.",
-  ] },
-  { version: "1.42-dev.21", date: "2026-11-22", title: "Před a po ponoru, lokality, opravy (dev)", items: [
-    "Sekce „Před a po ponoru“ (dřív Předponorová příprava): u offboard lahví „beze změny“; ve Spotřebě plynu všechny lahve a po vyplnění skutečná spotřeba O₂ a diluentu (i v kostce).",
-    "Oprava: stisky tlačítek po první hodině ponoru se řadily o hodinu dřív – přepnutí SP na konci dlouhých ponorů se hlásilo jako nepotvrzené.",
-    "Lokalita: ruční zadání souřadnic, poloha z ponoru; ruční aktualizace polohy rozpracovaného ponoru ji uloží i k lokalitě bez polohy.",
-    "Scrubber na Přehledu s procenty; baterie v hlavě bez zadané výměny šedě, ne zeleně; posuvník v grafu po skoku na událost zapulzuje; při sdílení ponoru krátký návod pro příjemce.",
-  ] },
-  { version: "1.42-dev.20", date: "2026-11-22", title: "Offboard lahve, skrytí upozornění (dev)", items: [
-    "Předponorová příprava: offboard lahve s tlakem před i po ponoru a objemem; skutečná spotřeba O₂ a diluentu v kostce (bary + litry), bailout jako externí diluent.",
-    "Zavřená onboard lahev (jen středotlak) se v přípravě ukáže jako „bez změny“.",
-    "Upozornění jde u ponoru skrýt (jedno nebo celou kategorii) – nepočítá se do barev a tagů v seznamu.",
-    "myX Petrel: pamatuje si počítač a počet ponorů, při přerušení se sám znovu připojí, „Poslat znovu do myX“.",
-  ] },
-  { version: "1.42-dev.19", date: "2026-11-22", title: "Stahování: ukončení, cizí počítač, Petrel 2 (dev)", items: [
-    "Stahování přes Bluetooth jde ukončit; neúplný ponor se neuloží.",
-    "Cizí počítač: ve výchozím stavu jen poslední ponor, uloží se do DB majitele (nebo nová DB přiřazená buddymu); ponory, které už v telefonu jsou, se nestahují.",
-    "Android aplikace „myX Petrel“ pro Petrel 2 (klasický Bluetooth) – stažené ponory pošle do myX.",
-  ] },
-  { version: "1.42-dev.18", date: "2026-11-22", title: "Bluetooth: Petrel 2 (dev)", items: [
-    "Služby počítače se po připojení hledají opakovaně (Petrel 2 je zveřejní se zpožděním / po spárování).",
-  ] },
-  { version: "1.42-dev.17", date: "2026-11-22", title: "Bluetooth: Petrel 2 (dev)", items: [
-    "Stahování přes Bluetooth zkouší i starší sériovou službu Stollmann Terminal I/O (pravděpodobně Petrel 2).",
-  ] },
-  { version: "1.42-dev.16", date: "2026-11-22", title: "Bluetooth: Petrel 2 (dev)", items: [
-    "Stahování přes Bluetooth zkouší i sériovou službu Terminal I/O (starší modul Petrelu 2) a do ladicího výpisu vypíše všechny služby počítače.",
-  ] },
-  { version: "1.42-dev.15", date: "2026-11-22", title: "Tlačítko ＋ a rozpracovaný ponor (dev)", items: [
-    "Horní ＋ při existujícím rozpracovaném ponoru (posledních 48 h): 1. stisk aktualizuje jeho polohu a počasí (📍), další ho otevře (E). Nový ponor pak jen tlačítkem Nový ponor na Přehledu.",
-    "Ruční aktualizace polohy bere vždy čerstvou polohu z GPS.",
-  ] },
-  { version: "1.42-dev.14", date: "2026-11-22", title: "Poloha a počasí rozpracovaného ponoru (dev)", items: [
-    "Rozpracovaný ponor přesune polohu na místo, kde myX otevřeš (se zvolenou lokalitou až u ní); tlačítko „Aktualizovat polohu a počasí“.",
-    "Po spárování s logem se počasí načte pro čas začátku ponoru na lokalitě – ne z doby přípravy.",
-  ] },
-  { version: "1.42-dev.13", date: "2026-11-22", title: "Odolné stahování přes Bluetooth (dev)", items: [
-    "Každý ponor se uloží hned po stažení; při přerušení spojení až 3 automatická nová připojení, další pokus stáhne jen zbývající ponory.",
-    "Během stahování displej nezhasne; ladicí výpis zaznamená, kdy a po kolika kB se spojení přerušilo.",
-    "Pojistka: k počítači se odešlou jen čtecí příkazy.",
-  ] },
-  { version: "1.42-dev.12", date: "2026-11-22", title: "Stažení z počítače přes Bluetooth (dev)", items: [
-    "Na Přehledu „Stáhnout z počítače (Bluetooth)“ – nové ponory přímo z Petrelu 2 / Petrelu 3 (Chrome na Androidu); zkušební verze s ladicím výpisem.",
-    "Stejný ponor z Bluetooth a z exportu Cloudu se nenačte dvakrát (počítač + čas začátku).",
-    "Historie čidel: konec platnosti staršího čidla = vyjmutí, jinak instalace dalšího čidla na pozici.",
-  ] },
-  { version: "1.42-dev.11", date: "2026-11-21", title: "Výběr čidla ze seznamu (dev)", items: [
-    "Při zadání čidla nabídka dříve zadaných čidel (výrobce + model) – jedním klepnutím vyplní obě pole i životnost; pole Typ přejmenováno na Model.",
-  ] },
-  { version: "1.42-dev.10", date: "2026-11-21", title: "Předponorová příprava, čidla, vysílače (dev)", items: [
-    "Předponorová příprava v rozpracovaném ponoru: tlaky onboard lahví (porovnání s počítačem), offboard lahve (bailout, O₂, deko), potvrzení kalibrace čidel O₂ a CO₂; pod 100 bar žlutě, pod 50 bar červeně.",
-    "Rozpracovaný ponor se páruje s ponorem 3 h před až 48 h po založení (příprava večer předem).",
-    "Nové čidlo O₂: zelené se štítkem NOVÉ, dokud nemá data; stav jen z ponorů od instalace. Opraveny dotazy na výměnu z historie (formulář se ukáže, potvrzení kalibrace hlásí zápis).",
-    "Nepojmenované vysílače tlaku (T1/T2): v Nastavení u počítače volba, který je na diluentu.",
-    "Dlaždice „Proplach“ s poklesem tlaku diluentu při sestupu.",
-    "„Hlášení CO₂ z počítače“ přejmenováno na „Varování z počítače (význam neznámý)“; spolu s alarmem CO₂ se nehlásí zvlášť.",
-  ] },
-  { version: "1.42-dev.9", date: "2026-11-20", title: "Hotfix 1.41.3 v dev", items: [
-    "Převzat hotfix 1.41.3: přepočet údajů všech ponorů (tlaky z vysílačů i u dříve načtených logů).",
-  ] },
-  { version: "1.42-dev.8", date: "2026-11-20", title: "Hotfix 1.41.2 v dev", items: [
-    "Převzat hotfix 1.41.2: import přeskočí nečitelné ponory, tlaky z pojmenovaných vysílačů AI.",
-  ] },
-  { version: "1.42-dev.7", date: "2026-11-20", title: "Převzaté názvy (dev)", items: [
-    "U logu otevřeného „jako můj“ se u převzatých lokalit a buddy ukazuje jméno majitele zdrojového logu (např. Radek), ne model počítače.",
-  ] },
-  { version: "1.42-dev.6", date: "2026-11-20", title: "Název počítače (dev)", items: [
-    "U logu otevřeného „jako můj“ se u scrubberu a baterie ukazuje správný model počítače (ne Petrel); obrazovka baterií má název podle počítače; baterie hlavy jen u CC ponorů.",
-  ] },
-  { version: "1.42-dev.5", date: "2026-11-20", title: "Oprava čidel bez CC (dev)", items: [
-    "Ponory bez čidel O₂ (Gauge) už nemají v seznamu nesmyslné tagy čidel – citlivost čidel se vyhodnocuje jen u CC ponorů.",
-  ] },
-  { version: "1.42-dev.4", date: "2026-11-20", title: "Typ ponoru podle módu (dev)", items: [
-    "Typ přístroje z módu každého ponoru: CC → eCCR, Gauge → pSCR (OC a Freedive zašedlé) – bez dotazu, jen informace po importu.",
-    "Ponory nepodporovaného typu se nezobrazují, ale zůstávají uložené (i v záloze); v seznamu řádek „Skryto…“, v DB rozpis typů u logu.",
-    "Nabídka typu přístroje podle módu ponoru (u Gauge bez eCCR); výchozí u počítače pro převládající mód.",
-  ] },
-  { version: "1.42-dev.3", date: "2026-11-20", title: "Cizí log jako můj (dev)", items: [
-    "Dev verze: cizí log jde otevřít jako vlastní (přepínač logů v záhlaví, DB → Logy ostatních); změny jen v paměti do restartu, žlutý pruh s upozorněním a „Zpět na můj log“.",
-  ] },
-  { version: "1.42-dev.2", date: "2026-11-20", title: "Scrubber a spotřeba bez čidel (dev)", items: [
-    "Scrubber na Přehledu u každého rebreatheru; bez časovače v logu ruční datum naplnění a výdrž náplně u počítače, zbývající čas ze součtu ponorů.",
-    "Spotřeba plynu u ponorů bez vysílačů: ruční lahev, objem a tlak před a po.",
-    "pSCR: výrazná výzva k zadání zásobního plynu a tlaku lahve před a po ponoru.",
-  ] },
-  { version: "1.42-dev.1", date: "2026-11-20", title: "Další počítače a typy přístrojů (dev)", items: [
-    "Mód počítače z logu (CC, OC, Gauge, SCR…) a model (Petrel 2, Petrel 3, Peregrine…).",
-    "Typ přístroje u počítače i u ponoru: eCCR, pSCR (OC, aSCR, mCCR zatím zašedlé); u Gauge logu se myX při importu zeptá.",
-    "Ponory bez čidel O₂: žádná varování z čidel, setpointu a dávek; skryté scrubber, čidla, lahve, zátěž a dekomprese; pO₂ jen ze zásobního plynu.",
-    "pSCR: odhad pO₂ ve smyčce (?) podle zásobního plynu a poměru (výchozí 1:8) s varováním na možnou hypoxii.",
-    "Srovnání porovná jen veličiny, které mají oba ponory.",
-    "Dekodéry logů oddělené podle výrobce (příprava na další počítače).",
+  { version: "1.42", date: "2026-11-22", title: "Stahování přes Bluetooth, Před a po ponoru, další přístroje", items: [
+    "Stažení ponorů přímo z počítače: Petrel 3 přes Bluetooth v Chrome na Androidu, Petrel 2 přes Android aplikaci „myX Petrel“ (Sdílet → myX). Jen čtecí příkazy, každý ponor se uloží hned, po přerušení spojení se myX znovu připojí a naváže, kde ponor přestal; duplicity s exportem Cloudu se poznají.",
+    "Cizí počítač: ve výchozím stavu jen poslední ponor, uloží se do DB majitele nebo do nové DB přiřazené buddymu.",
+    "Rozpracovaný ponor: sekce „Před a po ponoru“ – tlaky onboard a offboard lahví (lahev a plyn z nabídky, argon do obleku), potvrzení kalibrace O₂ a CO₂; poloha a počasí z místa a času ponoru, horní ＋ aktualizuje polohu a otevře ponor; páruje se s logem 3 h před až 48 h po založení.",
+    "Spotřeba plynu: skutečná spotřeba O₂ a diluentu z lahví v Před a po ponoru (bary a litry), bailout jako externí diluent; ruční spotřeba zrušena (starší zadání převedena).",
+    "Další počítače a přístroje: mód z logu (CC, Gauge…), model počítače, typ přístroje (eCCR, pSCR s odhadem pO₂ ve smyčce); ponory bez čidel bez nesmyslných varování; nepodporované typy skryté, ale uložené.",
+    "Baterie v hlavě podle modelu rebreatheru (X-CCR, FLEX2, FX, JJ, Tres Presidentes): počet, typ a funkce (#1 solenoid, #2 HUD); alarm „Porucha solenoidu / baterie v hlavě“ označí baterii solenoidu jako podezřelou.",
+    "Scrubber u každého rebreatheru (i ruční náplň bez časovače), procenta na Přehledu; nová čidla se štítkem NOVÉ, výběr čidla ze seznamu, historie s datem vyjmutí; nepojmenované vysílače tlaku T1/T2 v Nastavení.",
+    "Upozornění jde u ponoru skrýt (jedno nebo celou kategorii); dlaždice Proplach; běžné přepnutí setpointu se nehlásí (jen pozdní); „Varování z počítače (význam neznámý)“ místo chybného „Hlášení CO₂“.",
+    "Lokality: ruční souřadnice a poloha z ponoru; posuvník grafu po skoku na událost zapulzuje; sdílení ponoru s návodem pro příjemce.",
+    "Opravy: stisky tlačítek po první hodině ponoru se řadily o hodinu dřív; sdílený soubor, který nejde načíst, ukáže důvod.",
   ] },
   { version: "1.41.3", date: "2026-11-20", title: "Přepočet ponorů", items: [
     "Po aktualizaci se znovu přepočítají údaje všech ponorů (i cizích logů), takže tlaky z vysílačů se ukážou i u logů načtených před verzí 1.41.2.",

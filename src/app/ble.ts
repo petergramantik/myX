@@ -1,6 +1,6 @@
 // Stažení ponorů ze Shearwater přes Web Bluetooth (Chrome na Androidu). Protokol v core/swproto.ts.
 import type { RawDive } from "../core/shearwater";
-import { download, ID_FIRMWARE, ID_LOGUPLOAD, ID_MODEL, ID_SERIAL, MANIFEST_ADDR, MANIFEST_SIZE, DIVE_SIZE, parseManifest, rdbi, SlipReader, slipFrames, SW_MODELS, SW_SERVICE, SW_SERVICE_V2, unwrapResponse, wrapBlob, wrapRequest, type Proto } from "../core/swproto";
+import { download, downloadDive, type DiveState, ID_FIRMWARE, ID_LOGUPLOAD, ID_MODEL, ID_SERIAL, MANIFEST_ADDR, MANIFEST_SIZE, parseManifest, rdbi, SlipReader, slipFrames, SW_MODELS, SW_SERVICE, SW_SERVICE_V2, unwrapResponse, wrapBlob, wrapRequest, type Proto } from "../core/swproto";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Char = any;
@@ -109,7 +109,7 @@ async function openSession(device: any, log: (s: string) => void, first: boolean
 
 /**
  * Spojí se s počítačem a stáhne ponory, které ještě nemám (have = časy začátků uložených ponorů daného počítače).
- * Každý stažený ponor hned předá k uložení (onDive); při přerušení se až 3× znovu připojí a pokračuje dalším ponorem.
+ * Každý stažený ponor hned předá k uložení (onDive); při přerušení se až 3× znovu připojí a naváže tam, kde ponor přestal.
  */
 export async function bleDownload(plan: BlePlan, onDive: (r: RawDive) => Promise<void>, onProgress: (p: BleProgress) => void, log: (s: string) => void, cancelled: () => boolean = () => false): Promise<BleResult> {
   const bt = (navigator as any).bluetooth;
@@ -167,14 +167,15 @@ export async function bleDownload(plan: BlePlan, onDive: (r: RawDive) => Promise
       const t1 = Date.now();
       onProgress({ phase: "Stahuji ponory…", dive: k + 1, of: todo.length });
       if (cancelled()) return { serial, model, firmware, saved, listed: list.length, cancelled: true };
+      const ds: DiveState = { have: null }; // po přerušení navázat, ne stahovat znovu od začátku
       const nat = await step(async (s) => {
         bytesNow = 0;
-        const d = await download(s.tx, s.proto, base + todo[k].addr, DIVE_SIZE, true, (b) => { if (cancelled()) throw new Error(CANCEL); bytesNow = b; onProgress({ phase: "Stahuji ponory…", dive: k + 1, of: todo.length, bytes: b }); });
-        if (!diveComplete(d)) throw new Error("Ponor se nestáhl celý");
+        const d = await downloadDive(s.tx, s.proto, base + todo[k].addr, ds, (b) => { if (cancelled()) throw new Error(CANCEL); bytesNow = b; onProgress({ phase: ds.have ? "Navazuji ponor…" : "Stahuji ponory…", dive: k + 1, of: todo.length, bytes: b }); }, log);
+        if (!diveComplete(d)) { ds.have = null; ds.noTail = true; throw new Error("Ponor se nestáhl celý"); }
         return d;
       }).catch((e) => { if (cancelled() || (e as Error).message === CANCEL) return null; throw e; });
       if (!nat) return { serial, model, firmware, saved, listed: list.length, cancelled: true };
-      log(`Ponor ${k + 1}/${todo.length}: ${Math.round(bytesNow / 1024)} kB za ${Math.round((Date.now() - t1) / 1000)} s`);
+      log(`Ponor ${k + 1}/${todo.length}: ${Math.round(bytesNow / 1024)} kB za ${Math.round((Date.now() - t1) / 1000)} s${ds.resumed ? " (navázáno po přerušení)" : ""}`);
       const blob = await wrapBlob(nat);
       let num = 0;
       for (let i = 0; i + 32 <= nat.length; i += 32) if (nat[i] === 0x10) { num = (nat[i + 2] << 8) | nat[i + 3]; break; }

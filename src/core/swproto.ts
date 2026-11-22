@@ -99,10 +99,10 @@ export async function rdbi(tx: Transfer, id: number): Promise<Uint8Array> {
 }
 
 /** Stáhne blok paměti (upload); s kompresí LRE+XOR do konce proudu. */
-export async function download(tx: Transfer, proto: Proto, addr: number, size: number, compressed: boolean, onBytes?: (n: number) => void): Promise<Uint8Array> {
+/** out: průběžný výstup (při přerušení v něm zůstane, co se stihlo stáhnout). */
+export async function download(tx: Transfer, proto: Proto, addr: number, size: number, compressed: boolean, onBytes?: (n: number) => void, out: number[] = []): Promise<Uint8Array> {
   const init = await tx(Uint8Array.from([UP_INIT, compressed ? 0x10 : 0, 0x34, addr >>> 24, (addr >> 16) & 0xff, (addr >> 8) & 0xff, addr & 0xff, (size >> 16) & 0xff, (size >> 8) & 0xff, size & 0xff]));
   if (init.length < 2 || init[0] !== UP_INIT_RES) throw new Error("Neočekávaná odpověď (upload init)");
-  const out: number[] = [];
   let block = 1, n = 0, done = false;
   while (n < size && !done) {
     const req = proto === 2 ? [UP_DATA, block, 0] : [UP_DATA, block];
@@ -118,6 +118,56 @@ export async function download(tx: Transfer, proto: Proto, addr: number, size: n
   if (q[0] !== UP_EXIT_RES) throw new Error("Neočekávaná odpověď (upload exit)");
   const res = Uint8Array.from(out);
   return compressed ? unxor(res) : res;
+}
+
+/** Konec ponoru v nativních datech: za prvním závěrečným záznamem (0xFF) po patičce (0x20); −1 = ještě nekončí. */
+export function nativeEnd(nat: Uint8Array): number {
+  let foot = false;
+  for (let i = 0; i + 32 <= nat.length; i += 32) { if (nat[i] === 0x20) foot = true; else if (nat[i] === 0xff && foot) return i + 32; }
+  return -1;
+}
+const cat = (a: Uint8Array, b: Uint8Array) => { const o = new Uint8Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
+/** Zbytek ponoru po přerušení se čte bez komprese po blocích (nekomprimovaná paměť = nativní data, P). */
+export const TAIL_CHUNK = 0x8000;
+/** Stav stahování jednoho ponoru mezi pokusy (přes znovupřipojení). */
+export interface DiveState { have: Uint8Array | null; noTail?: boolean; resumed?: boolean }
+
+/**
+ * Stáhne ponor (LRE+XOR). Po přerušení si pamatuje stažený začátek (celé 32B záznamy) a při dalším pokusu
+ * naváže – zbytek čte bez komprese od adresy za staženou částí. Když to počítač neumí nebo zbytek nesedí,
+ * stáhne ponor znovu celý. Úplnost ověří volající (hlavička, patička, závěr).
+ */
+export async function downloadDive(tx: Transfer, proto: Proto, addr: number, st: DiveState, onBytes?: (n: number) => void, log?: (s: string) => void): Promise<Uint8Array> {
+  if (st.have?.length && !st.noTail) {
+    try {
+      log?.(`Navazuji od ${Math.round(st.have.length / 1024)} kB`);
+      for (let k = 0; k < 64; k++) {
+        const end = nativeEnd(st.have);
+        if (end > 0) { st.resumed = true; return st.have.slice(0, end); }
+        const base = st.have.length;
+        const c = await download(tx, proto, addr + base, TAIL_CHUNK, false, (n) => onBytes?.(base + n));
+        const whole = c.subarray(0, c.length - (c.length % 32));
+        if (!whole.length) break;
+        st.have = cat(st.have, whole);
+      }
+      log?.("Navázání: konec ponoru nenalezen – stahuji znovu celý");
+    } catch (e) {
+      const m = (e as Error).message;
+      if (!/Neočekávaná|odmítl/.test(m)) throw e; // přerušené spojení: zkusit navázat znovu
+      log?.(`Navázání počítač neumí (${m}) – stahuji znovu celý`);
+    }
+    st.have = null; st.noTail = true;
+  }
+  const acc: number[] = [];
+  try { return await download(tx, proto, addr, DIVE_SIZE, true, onBytes, acc); }
+  catch (e) {
+    if (!st.noTail) {
+      const pre = unxor(Uint8Array.from(acc));
+      const n = Math.max(0, Math.floor(pre.length / 32) - 1) * 32; // poslední záznam může být neúplný
+      if (n > (st.have?.length || 0)) st.have = pre.slice(0, n);
+    }
+    throw e;
+  }
 }
 
 /** Obal ponoru jako v Shearwater Cloud: 4 B délka (LE) + gzip nativních dat. */

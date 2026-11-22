@@ -19,6 +19,8 @@
           "accept": [
             "*/*",
             ".db",
+            ".myxbt",
+            "application/json",
             "application/octet-stream",
             "application/x-sqlite3",
             "application/vnd.sqlite3"

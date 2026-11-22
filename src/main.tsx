@@ -126,8 +126,9 @@ function App() {
     init().then(async () => {
       if (!new URLSearchParams(location.search).has("shared")) return;
       history.replaceState(null, "", location.pathname);
-      const r = await takeShared().catch(() => null);
-      if (!r) { toast("Sdílený soubor se nepodařilo načíst"); return; }
+      let msg = "";
+      const r = await takeShared().catch((e: Error) => { msg = e?.message || ""; return null; });
+      if (!r) { toast(`Sdílený soubor se nepodařilo načíst${msg ? `: ${msg}` : ""}`); return; }
       if (!r.log) { if (r.last) go({ t: "dive", id: r.last.id }); toast(r.own ? `Načten tvůj log: ${r.own} nových ponorů` : "Tvůj log je aktuální – žádné nové ponory"); return; }
       const who = logName(r.log);
       if (r.mine && r.last) { closeGuest(); go({ t: "cmp", id: r.mine.id, other: r.last.id }); toast(`Načten log: ${who} – porovnání s tvým ponorem`); }

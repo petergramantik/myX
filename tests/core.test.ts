@@ -469,6 +469,30 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
     ok(got.length >= native.length && got.subarray(0, native.length).join() === native.join(), "Stažení: LRE + XOR vrátí nativní data");
     const d1 = await decodeDive(raw), d2 = await decodeDive({ id: "ble", blob: await P.wrapBlob(got) });
     ok(d2.h.start === d1.h.start && d2.h.start === fp && d2.s.depth.length === d1.s.depth.length && d2.h.serial === d1.h.serial, "Obal ponoru: dekodér přečte stažený ponor stejně jako z Cloudu");
+    // přerušení uprostřed ponoru: navázání nekomprimovaným čtením zbytku (simulovaný počítač)
+    let fail = 6, mode = 0, raw0 = 0, rsize = 0;
+    const tx2: import("../src/core/swproto").Transfer = async (q) => {
+      if (q[0] === 0x35) { const addr = ((q[3] << 24) | (q[4] << 16) | (q[5] << 8) | q[6]) >>> 0; mode = q[1]; pos = 0; rsize = (q[7] << 16) | (q[8] << 8) | q[9]; raw0 = addr - 0x80002000; return Uint8Array.from([0x75, 0x10, 0xfe]); }
+      if (q[0] === 0x36) {
+        if (fail-- === 0) throw new Error("GATT Server is disconnected");
+        const n = 0xf9 - (0xf9 % 9);
+        const chunk = mode ? comp.subarray(pos, pos + n) : native.subarray(raw0 + pos, raw0 + Math.min(pos + n, rsize));
+        pos += chunk.length; return Uint8Array.from([0x76, q[1], ...chunk]);
+      }
+      return Uint8Array.from([0x77, 0]);
+    };
+    const ds: import("../src/core/swproto").DiveState = { have: null };
+    let err = ""; try { await P.downloadDive(tx2, 1, 0x80002000, ds); } catch (e) { err = (e as Error).message; }
+    const part = ds.have?.length || 0;
+    fail = 1e9;
+    const got2 = await P.downloadDive(tx2, 1, 0x80002000, ds);
+    const end = P.nativeEnd(native);
+    ok(err.includes("disconnected") && part > 0 && part % 32 === 0 && ds.resumed === true && got2.length === end && got2.join() === native.subarray(0, end).join(), "Bluetooth: po přerušení naváže a složí stejný ponor");
+    // počítač nekomprimované čtení odmítne → stáhne celý znovu
+    const ds2: import("../src/core/swproto").DiveState = { have: native.slice(0, 320) };
+    const txNo: import("../src/core/swproto").Transfer = async (q) => (q[1] === 0 && q[0] === 0x35 ? Uint8Array.from([0x7f, 0x35, 0x22]) : tx2(q));
+    const got3 = await P.downloadDive(txNo, 1, 0x80002000, ds2);
+    ok(ds2.noTail === true && got3.subarray(0, native.length).join() === native.join(), "Bluetooth: bez podpory navázání stáhne ponor znovu celý");
   }
 }
 
