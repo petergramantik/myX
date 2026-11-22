@@ -124,7 +124,8 @@ class MainActivity : Activity() {
     @SuppressLint("MissingPermission")
     private fun run(dev: BluetoothDevice, limit: Int): Pair<File, Int>? {
         setStatus("Připojuji ${dev.name}…")
-        getSystemService(BluetoothManager::class.java)?.adapter?.cancelDiscovery()
+        // zastavit případné vyhledávání (vyžaduje povolení BLUETOOTH_SCAN – bez něj se jen přeskočí)
+        try { getSystemService(BluetoothManager::class.java)?.adapter?.cancelDiscovery() } catch (_: SecurityException) {}
         val s = try {
             dev.createRfcommSocketToServiceRecord(spp).also { it.connect() }
         } catch (e: Exception) {
