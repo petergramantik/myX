@@ -2,7 +2,7 @@ import { ask, askText, choose } from "../app/dialog";
 import { AliasCard } from "./Sites";
 import { useEffect, useRef, useState } from "react";
 import { scrubberFill } from "../core/analysis";
-import { DEFAULT_ALL_TH } from "../app/model";
+import { CCR_MODELS, DEFAULT_ALL_TH, ccrModel, type CcrModel } from "../app/model";
 import { OwnerPicker } from "./Owner";
 import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, adoptGuestAsOwn, ownComputers, removeOwnComputer, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
@@ -146,6 +146,7 @@ function OwnComputers() {
         <div key={c.serial} className="row between">
           <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)} · přístroj {rigLabel(parseInt(c.serial, 16))}</span>
           <button className="btn small" onClick={() => editRig(parseInt(c.serial, 16), majorityMode([...ownMetas(), ...ownHidden()].filter((m) => m.h.serial === parseInt(c.serial, 16))))}>Přístroj</button>
+          <button className="btn small" onClick={() => editCcr(parseInt(c.serial, 16))}>Rebreather: {ccrModel(computerCfg(parseInt(c.serial, 16))?.ccr).label}</button>
           {aiUnnamed(parseInt(c.serial, 16)) && <button className="btn small" onClick={() => editAi(parseInt(c.serial, 16))}>Vysílače: {aiLabel(parseInt(c.serial, 16))}</button>}
           {cs.length > 1 && <button className="btn small" onClick={async () => { if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako cizí log a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
         </div>
@@ -322,6 +323,16 @@ const aiUnnamed = (serial: number) => [...ownMetas(), ...ownHidden()].some((m) =
 function aiLabel(serial: number): string {
   const v = computerCfg(serial)?.aiDil;
   return v ? `diluent ${v}, O₂ ${v === "T1" ? "T2" : "T1"}` : "nenastaveno";
+}
+/** Model rebreatheru u počítače – určuje počet, typ a funkci baterií v hlavě. */
+async function editCcr(serial: number) {
+  const cur = ccrModel(computerCfg(serial)?.ccr).id;
+  const k = await choose("Model rebreatheru (podle něj se evidují baterie v hlavě – počet, typ a co napájí):", CCR_MODELS.map((m) => ({
+    key: m.id, label: `${m.label}${m.bats.length ? ` – ${m.bats.length}× ${m.bats[0].type || "baterie (?)"}` : " – bez baterií"}`, primary: m.id === cur,
+  })));
+  if (!k) return;
+  await setComputerRig(serial, { ccr: k as CcrModel });
+  toast(`Rebreather: ${ccrModel(k as CcrModel).label}`);
 }
 async function editAi(serial: number) {
   const cur = computerCfg(serial)?.aiDil;

@@ -51,7 +51,7 @@ function Motto() {
   if (sc) lv.push(scrubLevel(sc, st.lb.settings.th.scrubDays).lvl);
   if (c.ccr.length && ccH.length) c.status.forEach((s) => lv.push(s.level));
   b.petrelAlerts.forEach((a) => lv.push(a.level));
-  b.head.forEach((x) => x.reasons.length && lv.push("warn"));
+  b.head.forEach((x) => x.reasons.length && lv.push(x.suspect ? "bad" : "warn"));
   const worst = lv.includes("bad") ? "bad" : lv.includes("warn") ? "warn" : "ok";
   return worst === "ok"
     ? <div className="motto ok" onClick={hide}>Všecko v cajku, jdeme na to!</div>

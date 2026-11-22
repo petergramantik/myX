@@ -492,5 +492,11 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(buttonTime(39, 50, start, 1235) === 1167 && buttonTime(39, 5, start, 4790) === 4722 && buttonTime(19, 41, start, 35) === -42, "Tlačítka: hodina podle pozice v logu (78′42″ ne 18′42″)");
 }
 
+{ // baterie v hlavě podle modelu rebreatheru
+  const { ccrModel } = await import("../src/app/model");
+  const x = ccrModel(undefined), f = ccrModel("flex2"), t = ccrModel("tp");
+  ok(x.id === "xccr" && x.bats.length === 2 && x.bats[0].role === "solenoid" && x.bats[0].type!.includes("18650") && f.bats[1].type!.includes("18500") && t.bats.length === 0, "Baterie v hlavě: X-CCR výchozí, #1 solenoid, FLEX2 18500, TP bez baterií");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

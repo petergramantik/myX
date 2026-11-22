@@ -74,9 +74,24 @@ export interface Computer { id: string; model: string; buddyId?: string; primary
   /** typ dýchacího přístroje (výchozí pro ponory z tohoto počítače) */ rig?: Rig; /** zásobní plyn O₂ % (polouzavřený okruh v Gauge módu – počítač plyn nezná) */ supplyO2?: number;
   /** poměr dávkování pSCR (1 : N) */ pscrRatio?: number;
   /** scrubber bez časovače v logu: ruční datum naplnění (s, místní čas) a výdrž náplně (min) */ scrubFill?: number; scrubMin?: number; /** nepojmenované vysílače AI: který je diluent (druhý = O₂) */ aiDil?: "T1" | "T2";
+  /** model rebreatheru (určuje baterie v hlavě) */ ccr?: CcrModel;
   /** změny u jednotlivých ponorů */ dives?: Record<string, { rig?: Rig; supplyO2?: number }>; updated: number }
 
 export const META_V = 30;
+
+/** Model rebreatheru – kolik baterií má hlava, jakého typu a co napájí. */
+export type CcrModel = "xccr" | "flex2" | "fx" | "jj" | "tp" | "other";
+export interface HeadBat { pos: 1 | 2; role?: string; type?: string }
+export const CCR_MODELS: { id: CcrModel; label: string; bats: HeadBat[]; note?: string }[] = [
+  { id: "xccr", label: "X-CCR (iQsub)", bats: [{ pos: 1, role: "solenoid", type: "Li-Ion 3,7 V 18650" }, { pos: 2, role: "HUD a výstup pO₂", type: "Li-Ion 3,7 V 18650" }] },
+  { id: "flex2", label: "FLEX2 (iQsub)", bats: [{ pos: 1, role: "solenoid", type: "Li-Ion 18500" }, { pos: 2, role: "HUD a výstup pO₂", type: "Li-Ion 18500" }] },
+  { id: "fx", label: "FX CCR (iQsub)", bats: [{ pos: 1, role: "elektronika, solenoid a HUD" }], note: "Bateriový kontejner na kabelu – typ baterií neznáme (?)." },
+  { id: "jj", label: "JJ-CCR", bats: [{ pos: 1 }, { pos: 2 }], note: "Typ a funkce baterií neznáme (?)." },
+  { id: "tp", label: "Tres Presidentes (pSCR)", bats: [], note: "Bez elektroniky – žádné baterie v hlavě." },
+  { id: "other", label: "Jiný", bats: [{ pos: 1 }, { pos: 2 }] },
+];
+/** Výchozí X-CCR (aplikace vznikla pro X-CCR). */
+export const ccrModel = (id?: CcrModel) => CCR_MODELS.find((m) => m.id === (id || "xccr"))!;
 export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; cnum?: number; /** model počítače z názvu souboru (Petrel 2…) */ model?: string; comp?: string; /** spojený ponor: všechny záznamy (jen v zobrazení) */ parts?: Meta[]; alt?: string; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };

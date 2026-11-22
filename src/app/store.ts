@@ -245,7 +245,7 @@ async function recomputeSerial(serial: number) {
 /** Nastavení počítače z mého logbooku (typ přístroje, scrubber…). */
 export const computerCfg = (serial: number): Computer | undefined => ownLb().computers?.[serial.toString(16).toUpperCase()];
 /** Uloží nastavení přístroje u počítače (do mého logbooku – zálohuje se). */
-export async function setComputerRig(serial: number, patch: Partial<Pick<Computer, "rig" | "supplyO2" | "pscrRatio" | "scrubFill" | "scrubMin">>) {
+export async function setComputerRig(serial: number, patch: Partial<Pick<Computer, "rig" | "supplyO2" | "pscrRatio" | "scrubFill" | "scrubMin" | "ccr">>) {
   const hex = serial.toString(16).toUpperCase(), lb = structuredClone(ownLb());
   lb.computers = lb.computers || {};
   lb.computers[hex] = { ...lb.computers[hex], id: hex, model: lb.computers[hex]?.model || modelFor(serial), ...patch, updated: Date.now() };

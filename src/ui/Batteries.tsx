@@ -1,11 +1,11 @@
-// Baterie: Petrel (z logu) a dvě baterie v hlavě X-CCR (ruční evidence).
+// Baterie: Petrel (z logu) a baterie v hlavě rebreatheru (ruční evidence, počet a typ podle modelu u počítače).
 import { isCC } from "../core/rig";
 import { ask, askText } from "../app/dialog";
 import { useState } from "react";
 import type { Header } from "../core/shearwater";
 import { alerts, batSinceSwap } from "../core/analysis";
-import { compName, deleteBattery, localNow, saveBattery, setBatSwap } from "../app/store";
-import type { Battery } from "../app/model";
+import { compName, computerCfg, deleteBattery, localNow, saveBattery, setBatSwap } from "../app/store";
+import { ccrModel, type Battery } from "../app/model";
 import { AlertBox, Card, fmtDate, go, hm, num, useStore } from "./common";
 import { LineChart } from "./Chart";
 import { fmtIso } from "./Cells";
@@ -21,7 +21,9 @@ export function useBatteries() {
   const last = st.metas[st.metas.length - 1];
   const petrel = last ? st.metas.filter((m) => m.h.serial === last.h.serial) : [];
   const petrelAlerts = petrel.length ? alerts(petrel.map((m) => m.h), now, th, null, last ? st.lb.settings.batSwap?.[String(last.h.serial)] : null).filter((a) => a.kind === "battery") : [];
-  const head = ([1, 2] as const).map((pos) => {
+  const model = ccrModel(last ? computerCfg(last.h.serial)?.ccr : undefined);
+  const solAlarm = (m: (typeof st.metas)[number]) => (m.warns || []).some((w) => w.title.startsWith("Porucha solenoidu"));
+  const head = model.bats.map(({ pos, role, type }) => {
     const all = Object.values(st.lb.batteries).filter((b) => b.pos === pos).sort((a, b) => b.installed.localeCompare(a.installed));
     const cur = all.find((b) => !b.removed);
     const since = cur ? st.metas.filter((m) => m.start >= tsOf(cur.installed) - 12 * 3600) : [];
@@ -30,11 +32,16 @@ export function useBatteries() {
     const reasons: string[] = [];
     if (cur && th.headBatHours > 0 && minutes / 60 >= th.headBatHours) reasons.push(`${hm(minutes)} pod vodou od výměny (limit ${th.headBatHours} h)`);
     if (cur && th.headBatMonths > 0 && months != null && months >= th.headBatMonths) reasons.push(`${Math.floor(months)} měsíců od výměny (limit ${th.headBatMonths})`);
-    return { pos, all, cur, dives: since.length, minutes, months, reasons };
+    // alarm „Porucha solenoidu / baterie v hlavě“ od výměny (bez zadané výměny jen v posledním ponoru) → baterie solenoidu podezřelá
+    const solenoid = !!role && role.includes("solenoid");
+    const hit = solenoid ? (cur ? since : last ? [last] : []).filter(solAlarm) : [];
+    const suspect = hit.length > 0;
+    if (suspect) reasons.unshift(`Alarm „Porucha solenoidu / baterie v hlavě“ v ponoru ${fmtDate(hit[hit.length - 1].start)}${hit.length > 1 ? ` (celkem ${hit.length} ponorů)` : ""} – baterie solenoidu podezřelá (P)`);
+    return { pos, role, type, all, cur, dives: since.length, minutes, months, reasons, suspect };
   });
   const sw = last ? st.lb.settings.batSwap?.[String(last.h.serial)] : undefined;
   const swapped = !!(last && sw != null && sw > last.h.start);
-  return { petrel, petrelAlerts, head, last, th, swapped, guest: !!st.guest };
+  return { petrel, petrelAlerts, head, model, last, th, swapped, guest: !!st.guest };
 }
 
 /** Procenta baterie Petrelu: u NiMH je v logu vždy 100 %, proto odhad z napětí mezi kritickým prahem a plnou baterií. */
@@ -61,15 +68,15 @@ export function BatteryTiles() {
           <div className={"ct-l " + pLvl}>{pLvl === "ok" ? "V pořádku" : pLvl === "warn" ? "Varování" : "Vyměnit"}</div>
         </div>
         {!b.guest && isCC(h) && b.head.map((x) => {
-          const lvl = x.reasons.length ? "warn" : x.cur ? "ok" : "none"; // bez zadané výměny šedě, ne zeleně
+          const lvl = x.suspect ? "bad" : x.reasons.length ? "warn" : x.cur ? "ok" : "none"; // bez zadané výměny šedě, ne zeleně
           return (
             <div key={x.pos} className={"celltile " + lvl} onClick={() => go({ t: "bats", pos: x.pos })}>
-              <div className="ct-h"><b>Hlava {x.pos}</b><span className={"dot " + lvl} /></div>
+              <div className="ct-h"><b>Hlava {x.pos}{x.role ? <small> · {x.role}</small> : null}</b><span className={"dot " + lvl} /></div>
               {x.cur ? <>
                 <div className="ct-v">{num(x.minutes / 60, 1)} <small>h</small></div>
                 <div className="ct-u">pod vodou od výměny</div>
               </> : <><div className="ct-v">–</div><div className="ct-u">výměna nezadaná</div></>}
-              <div className={"ct-l " + lvl}>{lvl === "ok" ? "V pořádku" : lvl === "warn" ? "Vyměnit" : "Nezadáno"}</div>
+              <div className={"ct-l " + lvl}>{lvl === "ok" ? "V pořádku" : lvl === "bad" ? "Podezřelá" : lvl === "warn" ? "Vyměnit" : "Nezadáno"}</div>
             </div>
           );
         })}
@@ -90,17 +97,17 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
   const prev = since.slice(-4, -1);
   const trend = prev.length ? h.batVStart - prev[0].batVStart : 0;
   const headTxt = (x: (typeof b.head)[number]) => !x.cur ? "–" : b.th.headBatHours > 0 ? `${Math.max(0, Math.round(100 - (x.minutes / 60 / b.th.headBatHours) * 100))} %` : `${num(x.minutes / 60, 1)} h`;
-  const bad = b.petrelAlerts.some((a) => a.level === "bad");
+  const bad = b.petrelAlerts.some((a) => a.level === "bad") || b.head.some((x) => x.suspect);
   const warn = b.petrelAlerts.length > 0 || b.head.some((x) => x.reasons.length);
   // každá část řádku má vlastní barvu: počítač podle stavu, hlava bez zadané výměny šedě
   const unknown = isCC(h) && b.head.some((x) => !x.cur);
   const lvl = bad ? "bad" : warn ? "warn" : unknown ? "none" : "ok";
   const pLvl = bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok";
-  const hLvl = (x: (typeof b.head)[number]) => (!x.cur ? "none" : x.reasons.length ? "warn" : "ok");
+  const hLvl = (x: (typeof b.head)[number]) => (x.suspect ? "bad" : !x.cur ? "none" : x.reasons.length ? "warn" : "ok");
   return (
     <section className={"panel " + lvl}>
       <button className="panel-h" onClick={toggle}>
-        <span className="ph-main">{lvl === "ok" ? "✓ " : lvl === "none" ? "" : "⚠ "}<span className={"c-" + pLvl}>{compName(h.serial)} {pp.est ? "~" : ""}{pp.pct} %</span>{isCC(h) ? <> · <span className={"c-" + hLvl(b.head[0])}>Hlava 1 {headTxt(b.head[0])}</span> · <span className={"c-" + hLvl(b.head[1])}>Hlava 2 {headTxt(b.head[1])}</span></> : null}</span>
+        <span className="ph-main">{lvl === "ok" ? "✓ " : lvl === "none" ? "" : "⚠ "}<span className={"c-" + pLvl}>{compName(h.serial)} {pp.est ? "~" : ""}{pp.pct} %</span>{isCC(h) ? b.head.map((x) => <span key={x.pos}> · <span className={"c-" + hLvl(x)}>Hlava {x.pos} {headTxt(x)}</span></span>) : null}</span>
         <span className="ph-sub">{lvl === "ok" ? "Baterie v pořádku" : lvl === "none" ? "Baterie v hlavě nezadané" : "Baterie – upozornění"}</span>
         <span className="ph-arrow">{open ? "▴" : "▾"}</span>
       </button>
@@ -114,10 +121,10 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
             {!b.guest && (b.petrelAlerts.length > 0 || b.swapped) && <button className="btn small" onClick={() => setBatSwap(h.serial, !b.swapped)}>{b.swapped ? "Zrušit „Baterii jsem vyměnil“" : "Baterii jsem vyměnil"}</button>}
           </div>
           {!b.guest && isCC(h) && b.head.map((x) => (
-            <div key={x.pos} className={"pcell ptile " + (x.reasons.length ? "warn" : x.cur ? "ok" : "none")}>
-              <div className="pcell-h"><b className={"c-" + (x.reasons.length ? "warn" : x.cur ? "ok" : "none")}>Hlava – baterie {x.pos}</b><span className={"pill " + (x.reasons.length ? "warn" : x.cur ? "ok" : "")}>{x.reasons.length ? "Vyměnit" : x.cur ? "V pořádku" : "Nezadaná"}</span></div>
+            <div key={x.pos} className={"pcell ptile " + hLvl(x)}>
+              <div className="pcell-h"><b className={"c-" + hLvl(x)}>Hlava – baterie {x.pos}{x.role ? ` (${x.role})` : ""}</b><span className={"pill " + (hLvl(x) === "none" ? "" : hLvl(x))}>{x.suspect ? "Podezřelá" : x.reasons.length ? "Vyměnit" : x.cur ? "V pořádku" : "Nezadaná"}</span></div>
               {x.cur ? <small>{x.cur.maker || "Baterie"}{x.cur.model ? ` ${x.cur.model}` : ""}{x.cur.volt ? ` (${x.cur.volt})` : ""} · výměna {fmtIso(x.cur.installed)} · {x.dives} ponorů · {hm(x.minutes)} pod vodou{b.th.headBatHours > 0 ? ` z limitu ${b.th.headBatHours} h` : ""}</small> : <small>Výměna zatím nezadaná.</small>}
-              {x.reasons.length ? x.reasons.map((r, i) => <div key={i} className="reason warn">{r}</div>) : x.cur ? <div className="reason ok">✓ v pořádku</div> : null}
+              {x.reasons.length ? x.reasons.map((r, i) => <div key={i} className={"reason " + (x.suspect && i === 0 ? "bad" : "warn")}>{r}</div>) : x.cur ? <div className="reason ok">✓ v pořádku</div> : null}
             </div>
           ))}
           <p className="note"><a onClick={() => go({ t: "bats" })}>Zadat výměnu, historie a graf napětí ›</a>{b.th.headBatHours > 0 ? "" : " · Procenta baterií v hlavě se ukážou po nastavení limitu hodin v Nastavení."}</p>
@@ -144,9 +151,10 @@ export function BatteriesScreen({ pos }: { pos?: number }) {
         </Card>
       )}
       {b.head.filter((x) => !pos || x.pos === pos).map((x) => <HeadBattery key={x.pos} x={x} />)}
+      {!b.head.length && <Card title="Baterie v hlavě"><p className="muted">{b.model.label}: {b.model.note || "bez baterií v hlavě"}</p></Card>}
       {pos && <button className="btn" onClick={() => go({ t: "bats" })}>Zobrazit všechny baterie</button>}
       <Card title="Baterie v hlavě">
-        <p className="note">Napětí baterií v hlavě X-CCR Petrel do logu neukládá, proto se evidují ručně. Hodiny a ponory od výměny se počítají z logbooku. Limity pro varování nastavíš v Nastavení (0 = vypnuto).</p>
+        <p className="note">Rebreather: <b>{b.model.label}</b> (změníš v Nastavení → Moje počítače → Rebreather).{b.model.note ? ` ${b.model.note}` : ""} Napětí baterií v hlavě Petrel ukazuje jen na info obrazovce, do logu ho neukládá – proto se evidují ručně. Z logu jde jen alarm „Porucha solenoidu / baterie v hlavě“, ten označí baterii solenoidu jako podezřelou. Hodiny a ponory od výměny se počítají z logbooku. Limity pro varování nastavíš v Nastavení (0 = vypnuto).</p>
       </Card>
     </div>
   );
@@ -155,13 +163,14 @@ export function BatteriesScreen({ pos }: { pos?: number }) {
 function HeadBattery({ x }: { x: ReturnType<typeof useBatteries>["head"][number] }) {
   const [edit, setEdit] = useState<Partial<Battery> | null>(null);
   return (
-    <Card title={`Hlava – baterie ${x.pos}`}>
-      {x.reasons.map((r, i) => <div key={i} className="reason warn">{r}</div>)}
+    <Card title={`Hlava – baterie ${x.pos}${x.role ? ` (${x.role})` : ""}`}>
+      {x.type && <p className="small muted">Typ: {x.type}</p>}
+      {x.reasons.map((r, i) => <div key={i} className={"reason " + (x.suspect && i === 0 ? "bad" : "warn")}>{r}</div>)}
       {x.cur ? (
         <p><b>{x.cur.maker || "Baterie"}{x.cur.model ? ` ${x.cur.model}` : ""}{x.cur.volt ? ` (${x.cur.volt})` : ""}</b> · výměna {fmtIso(x.cur.installed)} · {x.dives} ponorů · {hm(x.minutes)} pod vodou{x.months != null ? ` · ${Math.floor(x.months)} měs.` : ""}</p>
       ) : <p className="muted">Zatím nezadaná.</p>}
       <div className="row">
-        <button className="btn primary" onClick={() => setEdit({ pos: x.pos, installed: isoOf(localNow()), maker: x.cur?.maker || "", model: x.cur?.model, volt: x.cur?.volt })}>Vyměnit / zadat baterii</button>
+        <button className="btn primary" onClick={() => setEdit({ pos: x.pos, installed: isoOf(localNow()), maker: x.cur?.maker || "", model: x.cur?.model, volt: x.cur?.volt || x.type })}>Vyměnit / zadat baterii</button>
         {x.cur && <button className="btn" onClick={() => setEdit({ ...x.cur })}>Upravit</button>}
       </div>
       {edit && <BatteryForm init={edit} onDone={() => setEdit(null)} />}

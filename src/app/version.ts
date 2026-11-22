@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.22";
+export const APP_VERSION = "1.42-dev.23";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.23", date: "2026-11-22", title: "Baterie v hlavě podle modelu rebreatheru (dev)", items: [
+    "Nastavení → Moje počítače → Rebreather: X-CCR, FLEX2, FX CCR, JJ-CCR, Tres Presidentes, Jiný – určuje počet, typ a funkci baterií v hlavě (X-CCR 2× 18650, FLEX2 2× 18500; #1 solenoid, #2 HUD a výstup pO₂).",
+    "Alarm „Porucha solenoidu / baterie v hlavě“ v ponoru od výměny označí baterii solenoidu jako podezřelou (červeně).",
+  ] },
   { version: "1.42-dev.22", date: "2026-11-22", title: "Lahve a spotřeba plynu (dev)", items: [
     "Před a po ponoru: lahev a plyn z nabídky (S40, S80, 12 l, 3 l, 2,5 l, Jiná; vzduch, O₂, EAN, TMX, Argon, Jiný), role Oblek pro argon.",
     "Spotřeba plynu: tlak větším písmem, litry pod ním; vlastní lahev bez tlaku = off; externí lahve jen v Před a po ponoru (starší zadání převedena), ruční spotřeba zrušena.",
