@@ -193,7 +193,7 @@ export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RU
     if (k > 0) continue;
     // odkaz do grafu (posuvník na okamžik přepnutí) jen u varování; modré informace zůstávají v Událostech
     if (delay > r.lateMin && s.depth[p] >= 10) out.push({ level: r.lateWarn ? "warn" : "info", title: "Pozdní přepnutí na vysoký setpoint", text: txt, ...(r.lateWarn ? { blocks: [{ head: "", steps: [], from: c.t, to: c.t + 60, chart: "po2" as ChartKey }] } : {}) });
-    else out.push({ level: "info", title: "Přepnutí setpointu", text: txt });
+    // běžné (včasné) přepnutí se nehlásí – všechna přepnutí jsou v kartě Setpoint
   }
   if (!startHigh && !ups.length && d.h.maxDepth > 10) {
     // bez přepnutí: varovat jen pokud se potápěč na dně ≥ lateMin zdržel

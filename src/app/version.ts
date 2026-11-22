@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.21";
+export const APP_VERSION = "1.42-dev.22";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.22", date: "2026-11-22", title: "Lahve a spotřeba plynu (dev)", items: [
+    "Před a po ponoru: lahev a plyn z nabídky (S40, S80, 12 l, 3 l, 2,5 l, Jiná; vzduch, O₂, EAN, TMX, Argon, Jiný), role Oblek pro argon.",
+    "Spotřeba plynu: tlak větším písmem, litry pod ním; vlastní lahev bez tlaku = off; externí lahve jen v Před a po ponoru (starší zadání převedena), ruční spotřeba zrušena.",
+    "Baterie: každá část řádku má vlastní barvu, nezadané hlavy šedě; typ počítače místo „Počítač“.",
+    "Běžné přepnutí setpointu se v Událostech nehlásí (jen pozdní); všechna jsou v kartě Setpoint.",
+  ] },
   { version: "1.42-dev.21", date: "2026-11-22", title: "Před a po ponoru, lokality, opravy (dev)", items: [
     "Sekce „Před a po ponoru“ (dřív Předponorová příprava): u offboard lahví „beze změny“; ve Spotřebě plynu všechny lahve a po vyplnění skutečná spotřeba O₂ a diluentu (i v kostce).",
     "Oprava: stisky tlačítek po první hodině ponoru se řadily o hodinu dřív – přepnutí SP na konci dlouhých ponorů se hlásilo jako nepotvrzené.",

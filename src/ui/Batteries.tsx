@@ -92,13 +92,15 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
   const headTxt = (x: (typeof b.head)[number]) => !x.cur ? "–" : b.th.headBatHours > 0 ? `${Math.max(0, Math.round(100 - (x.minutes / 60 / b.th.headBatHours) * 100))} %` : `${num(x.minutes / 60, 1)} h`;
   const bad = b.petrelAlerts.some((a) => a.level === "bad");
   const warn = b.petrelAlerts.length > 0 || b.head.some((x) => x.reasons.length);
-  // baterie v hlavě bez zadané výměny: stav nejde potvrdit → šedě, ne zelená fajfka
+  // každá část řádku má vlastní barvu: počítač podle stavu, hlava bez zadané výměny šedě
   const unknown = isCC(h) && b.head.some((x) => !x.cur);
   const lvl = bad ? "bad" : warn ? "warn" : unknown ? "none" : "ok";
+  const pLvl = bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok";
+  const hLvl = (x: (typeof b.head)[number]) => (!x.cur ? "none" : x.reasons.length ? "warn" : "ok");
   return (
     <section className={"panel " + lvl}>
       <button className="panel-h" onClick={toggle}>
-        <span className="ph-main">{lvl === "ok" ? "✓" : lvl === "none" ? "?" : "⚠"} {compName(h.serial)} {pp.est ? "~" : ""}{pp.pct} %{isCC(h) ? <> · Hlava 1 {headTxt(b.head[0])} · Hlava 2 {headTxt(b.head[1])}</> : null}</span>
+        <span className="ph-main">{lvl === "ok" ? "✓ " : lvl === "none" ? "" : "⚠ "}<span className={"c-" + pLvl}>{compName(h.serial)} {pp.est ? "~" : ""}{pp.pct} %</span>{isCC(h) ? <> · <span className={"c-" + hLvl(b.head[0])}>Hlava 1 {headTxt(b.head[0])}</span> · <span className={"c-" + hLvl(b.head[1])}>Hlava 2 {headTxt(b.head[1])}</span></> : null}</span>
         <span className="ph-sub">{lvl === "ok" ? "Baterie v pořádku" : lvl === "none" ? "Baterie v hlavě nezadané" : "Baterie – upozornění"}</span>
         <span className="ph-arrow">{open ? "▴" : "▾"}</span>
       </button>

@@ -138,7 +138,34 @@ async function metaOf(raw: RawDive): Promise<Meta> {
   const sum = summarize(d);
   // oranžová a červená varování (výchozí prahy) – pro tagy v seznamu ponorů
   const warns = diveWarnings(d, sum, DEFAULT_THRESHOLDS).filter((w) => w.level === "warn" || w.level === "bad").map((w) => ({ level: w.level as "warn" | "bad", title: w.title, text: w.text }));
-  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum, inj: injections(d).length, cells: cellsOfDive(d), v: META_V, prof, warns, cnum: raw.cnum };
+  const model = (/^(.*?)\[/.exec(raw.fn || "")?.[1] || "").trim() || undefined;
+  return { id: raw.id, num: d.h.num, start: d.h.start, h: d.h, sum, inj: injections(d).length, cells: cellsOfDive(d), v: META_V, prof, warns, cnum: raw.cnum, model };
+}
+
+/**
+ * Jednorázový převod: externí lahve zadané u ponoru (karty Diluent / O₂) → lahve v sekci Před a po ponoru;
+ * ruční spotřeba (l) se zruší – vypíšou se ponory, kde byla, aby šly doplnit tlaky.
+ */
+async function migrateGasNotes() {
+  const lb = structuredClone(st.lb);
+  let changed = false;
+  const manual: string[] = [];
+  for (const [id, n] of Object.entries(lb.notes)) {
+    const ext = (n.ext || []).filter((e) => e.gas === "dil" || e.gas === "o2");
+    if (!ext.length && !n.useManual) continue;
+    changed = true;
+    if (ext.length) {
+      const tanks = [...(n.prep?.tanks || [])];
+      for (const e of ext) tanks.push({ id: e.id, role: e.gas as "dil" | "o2", name: /^S\d+$/.test(e.kind) ? e.kind : "Jiná", vol: /^S\d+$/.test(e.kind) ? undefined : e.vol, gas: e.gas === "o2" ? "O₂" : "", bar: e.start, end: e.end });
+      n.prep = { ...(n.prep || {}), tanks };
+      n.ext = (n.ext || []).filter((e) => e.gas === "sup");
+    }
+    if (n.useManual) { if (n.useManual.dil != null || n.useManual.o2 != null) manual.push(myNum(id) ? `č. ${myNum(id)}` : id); delete n.useManual; }
+    n.updated = Date.now();
+  }
+  if (!changed) return;
+  await saveLb(lb);
+  if (manual.length) setTimeout(() => toast(`Ruční spotřeba plynu se už nepoužívá – byla u ponorů ${manual.slice(0, 10).join(", ")}${manual.length > 10 ? "…" : ""}. Případně doplň lahve v Před a po ponoru.`), 5000);
 }
 
 // ---------- start
@@ -150,6 +177,7 @@ export async function init() {
   for (const r of missing) { try { const m = await metaOf(r); fresh.push(m); await db.put("meta", m); } catch { /* nečitelný ponor přeskočit */ } }
   set({ ready: true, hidden: [], metas: sortMetas(fresh), lb: lb ? mergeLogbooks(emptyLogbook(), lb) : emptyLogbook() });
   await autoLinkDrafts();
+  await migrateGasNotes();
   await cleanupForeign();
   propagateExisting().catch(() => {});
   if (syncOn()) syncNow();
@@ -174,7 +202,8 @@ export const ownSerials = () => new Set([...ownMetas().map(serialHex).filter((x)
 function modelFor(ser: number): string {
   const hex = ser.toString(16).toUpperCase(), g = st.guest ?? st.temp; // i cizí log otevřený „jako můj“
   const gl = g ? (g.logs || [g]).find((l) => l.serial === hex) : undefined;
-  return gl?.model || st.lb.computers?.[hex]?.model || ownLb().computers?.[hex]?.model || tempSaved?.lb.computers?.[hex]?.model || "Počítač";
+  return gl?.model || st.lb.computers?.[hex]?.model || ownLb().computers?.[hex]?.model || tempSaved?.lb.computers?.[hex]?.model
+    || st.metas.find((m) => m.h.serial === ser && m.model)?.model || "Počítač";
 }
 /** Typ přístroje, zásobní plyn a poměr pSCR pro ponor: změna u ponoru → nastavení počítače → výchozí podle módu. */
 export function rigInfo(serial: number, diveId: string, h: Header, lb: Logbook = ownLb()): { rig?: Rig; supplyO2?: number; ratio: number; byDive: boolean } {
@@ -1074,7 +1103,7 @@ export async function linkDraft(draftId: string, diveId: string, auto = false) {
     note: [cur?.note, dr.note].filter(Boolean).join("\n"),
     rating: dr.rating || cur?.rating,
     weather: dr.weather || cur?.weather,
-    ext: cur?.ext || dr.ext, useManual: cur?.useManual || dr.useManual,
+    ext: cur?.ext || dr.ext,
     prep: cur?.prep || dr.prep,
     pos: cur?.pos || (dr.lat != null && dr.lon != null ? { lat: dr.lat, lon: dr.lon } : undefined),
     updated: Date.now(),

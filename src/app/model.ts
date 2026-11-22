@@ -16,7 +16,7 @@ export interface WeatherSnap { at: number; temp: number; wind: number; gust: num
 /** Externí lahev připojená během ponoru (Petrel její tlak neměří). */
 export interface ExtGas { id: string; /** sup = zásobní plyn přístroje bez vysílačů (pSCR, OC…) */ gas: "dil" | "o2" | "sup"; kind: string; vol: number; start?: number; end?: number }
 /** Offboard lahev z předponorové přípravy (bailout, offboard O₂…). */
-export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "other"; name: string; gas: string; bar?: number; /** tlak po ponoru */ end?: number; /** beze změny (lahev nepoužitá) – konec = začátek */ same?: boolean; /** objem (l); jinak z označení S80/S40… */ vol?: number }
+export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "suit" | "other"; name: string; gas: string; bar?: number; /** tlak po ponoru */ end?: number; /** beze změny (lahev nepoužitá) – konec = začátek */ same?: boolean; /** objem (l); jinak z označení S80/S40… */ vol?: number }
 /** Objem lahve (l) z ručního zadání nebo z označení (S80, S40, 12 l…). */
 export function tankVol(t: { vol?: number; name: string }): number | null {
   if (t.vol) return t.vol;
@@ -76,8 +76,8 @@ export interface Computer { id: string; model: string; buddyId?: string; primary
   /** scrubber bez časovače v logu: ruční datum naplnění (s, místní čas) a výdrž náplně (min) */ scrubFill?: number; scrubMin?: number; /** nepojmenované vysílače AI: který je diluent (druhý = O₂) */ aiDil?: "T1" | "T2";
   /** změny u jednotlivých ponorů */ dives?: Record<string, { rig?: Rig; supplyO2?: number }>; updated: number }
 
-export const META_V = 29;
-export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; cnum?: number; comp?: string; /** spojený ponor: všechny záznamy (jen v zobrazení) */ parts?: Meta[]; alt?: string; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
+export const META_V = 30;
+export interface Meta { id: string; num: number; start: number; h: Header; sum: Summary; inj: number; cells: CellDive; v: number; prof?: number[]; cnum?: number; /** model počítače z názvu souboru (Petrel 2…) */ model?: string; comp?: string; /** spojený ponor: všechny záznamy (jen v zobrazení) */ parts?: Meta[]; alt?: string; warns?: { level: "warn" | "bad"; title: string; text: string }[] }
 
 export const DEFAULT_ALL_TH = { ...DEFAULT_THRESHOLDS, ...DEFAULT_CELL_TH, headBatHours: 0, headBatMonths: 0 };
 export const emptyLogbook = (): Logbook => ({

@@ -1,7 +1,7 @@
 // Před a po ponoru (dřív „Předponorová příprava“): naměřené tlaky onboard lahví, offboard lahve (bailout, offboard O₂) a potvrzení kalibrace čidel.
 // Vyplňuje se typicky v rozpracovaném ponoru (večer před ponorem); po spárování s logem se tlaky onboard lahví porovnají s počítačem.
 import { useState } from "react";
-import { tankVol, uid, type Prep, type PrepTank } from "../app/model";
+import { tankMix, tankVol, uid, type Prep, type PrepTank } from "../app/model";
 import { saveSettings } from "../app/store";
 import { num, useStore } from "./common";
 
@@ -18,6 +18,55 @@ function BarInput({ value, onSave, placeholder }: { value?: number; onSave: (v?:
   const [t, setT] = useState(value != null ? String(value) : "");
   return <input className={"bar-in " + lvl(parseBar(t))} type="number" inputMode="numeric" value={t} placeholder={placeholder || "bar"}
     onChange={(e) => setT(e.target.value)} onBlur={() => { const v = parseBar(t); if (v !== value) onSave(v); }} />;
+}
+
+const TANKS = ["S40", "S80", "12 l", "3 l", "2,5 l"];
+const GASES = ["vzduch", "O₂", "EAN32", "EAN36", "EAN50", "TMX 21/35", "TMX 18/45", "TMX 15/55", "TMX 10/70", "Argon"];
+/** Plyn z poměru O₂/He: vzduch, O₂, EANxx nebo TMX a/b. */
+const gasName = (o2: number, he: number) => (he > 0 ? `TMX ${o2}/${he}` : o2 === 21 ? "vzduch" : o2 === 100 ? "O₂" : `EAN${o2}`);
+/** Stávající textový zápis plynu → položka seznamu (nebo null = jiný). */
+const gasKnown = (g: string) => { if (GASES.includes(g)) return g; if (/^argon$/i.test(g.trim())) return "Argon"; const m = tankMix(g); if (!m) return null; const [o, h] = m.split("/").map(Number); const n = gasName(o, h); return GASES.includes(n) ? n : null; };
+
+/** Řádek offboard lahve: role, lahev a plyn z nabídky; u „Jiná“ / „Jiný“ zadání, po vyplnění jen informační řádek. */
+function TankRow({ t, set, del }: { t: PrepTank; set: (p: Partial<PrepTank>) => void; del: () => void }) {
+  const known = TANKS.includes(t.name);
+  const v = tankVol(t);
+  const gk = gasKnown(t.gas);
+  const [editVol, setEditVol] = useState(!known && !v);
+  const [editGas, setEditGas] = useState(!gk && !t.gas);
+  const [o2, setO2] = useState(""), [he, setHe] = useState("");
+  const used = t.bar != null && (t.same ? t.bar : t.end) != null ? t.bar - (t.same ? t.bar : t.end)! : null;
+  return (
+    <div className="prep-tank">
+      <div className="pt-row">
+        <select value={t.role} onChange={(e) => set({ role: e.target.value as PrepTank["role"] })}>
+          <option value="bo">BO</option><option value="o2">O₂</option><option value="dil">Dil</option><option value="deco">Deko</option><option value="suit">Oblek</option><option value="other">Jiná</option>
+        </select>
+        <select value={known ? t.name : "Jiná"} onChange={(e) => { const x = e.target.value; if (x === "Jiná") { set({ name: "Jiná", vol: undefined }); setEditVol(true); } else { set({ name: x, vol: undefined }); setEditVol(false); } }}>
+          {TANKS.map((x) => <option key={x}>{x}</option>)}<option>Jiná</option>
+        </select>
+        <select value={gk ?? "_jiny"} onChange={(e) => { const x = e.target.value; if (x === "_jiny") { setEditGas(true); return; } setEditGas(false); set({ gas: x, ...(x === "Argon" ? { role: "suit" as const } : {}) }); }}>
+          {GASES.map((x) => <option key={x}>{x}</option>)}<option value="_jiny">Jiný</option>
+        </select>
+        <button className="btn small" aria-label="Odebrat" onClick={del}>✕</button>
+      </div>
+      {(editVol || editGas) && <div className="pt-row">
+        {editVol && <><input className="tank-vol" inputMode="decimal" placeholder="objem" defaultValue={v ?? ""} onBlur={(e) => { const x = parseFloat(e.target.value.replace(",", ".")); if (x > 0) { set({ name: "Jiná", vol: x }); setEditVol(false); } }} /><span className="small muted">l</span></>}
+        {editGas && <><input className="tank-vol" inputMode="numeric" placeholder="O₂ %" value={o2} onChange={(e) => setO2(e.target.value)} />
+          <input className="tank-vol" inputMode="numeric" placeholder="He %" value={he} onChange={(e) => setHe(e.target.value)} />
+          <button className="btn small" onClick={() => { const a = Math.round(+o2), h = Math.round(+he || 0); if (a > 0 && a <= 100 && h >= 0 && a + h <= 100) { set({ gas: gasName(a, h) }); setEditGas(false); } }}>OK</button></>}
+      </div>}
+      {(!known || !gk) && !editVol && !editGas && (
+        <div className="pt-info small muted" onClick={() => { if (!known) setEditVol(true); if (!gk) setEditGas(true); }}>{!known ? `Jiná ${v ? num(v, 1) + " l" : "?"}` : t.name}{!gk ? ` · ${t.gas || "plyn?"}` : ""} <span className="link">upravit</span></div>
+      )}
+      <div className="pt-row">
+        <span className="muted small">před</span><BarInput value={t.bar} onSave={(b) => set({ bar: b })} />
+        <span className="muted small">po</span>{t.same ? <span className="small">= {t.bar ?? "–"}</span> : <BarInput value={t.end} placeholder="bar" onSave={(b) => set({ end: b })} />}
+        <label className="small inline same"><input type="checkbox" checked={!!t.same} onChange={(e) => set({ same: e.target.checked, end: e.target.checked ? t.bar : undefined })} />beze změny</label>
+        <span className="muted small">{v ? `${num(v, 1)} l` : ""}{used != null && v ? ` · ${num(used * v, 0)} l` : ""}</span>
+      </div>
+    </div>
+  );
 }
 
 /** Krátké shrnutí pro sbalený stav. */
@@ -71,24 +120,7 @@ export function PrepCard({ prep, onChange, real, cc = true }: { prep?: Prep; onC
           {real && <p className="note">Reálný tlak = první údaj z počítače v ponoru.</p>}
         </>}
         <h3 className="subh">Offboard lahve</h3>
-        {tanks.map((t) => { const v = tankVol(t), used = t.bar != null && t.end != null ? t.bar - t.end : null; return (
-          <div key={t.id} className="prep-tank">
-            <div className="pt-row">
-              <select value={t.role} onChange={(e) => setTank(t.id, { role: e.target.value as PrepTank["role"] })}>
-                <option value="bo">BO</option><option value="o2">O₂</option><option value="dil">Dil</option><option value="deco">Deko</option><option value="other">Jiná</option>
-              </select>
-              <input className="tank-name" value={t.name} placeholder="S80" onChange={(e) => setTank(t.id, { name: e.target.value })} />
-              <input className="tank-gas" value={t.gas} placeholder="vzduch" onChange={(e) => setTank(t.id, { gas: e.target.value })} />
-              <button className="btn small" aria-label="Odebrat" onClick={() => upd({ tanks: tanks.filter((x) => x.id !== t.id) })}>✕</button>
-            </div>
-            <div className="pt-row">
-              <span className="muted small">před</span><BarInput value={t.bar} onSave={(b) => setTank(t.id, { bar: b })} />
-              <span className="muted small">po</span>{t.same ? <span className="small">= {t.bar ?? "–"}</span> : <BarInput value={t.end} placeholder="po ponoru" onSave={(b) => setTank(t.id, { end: b })} />}
-              <label className="small inline same"><input type="checkbox" checked={!!t.same} onChange={(e) => setTank(t.id, { same: e.target.checked, end: e.target.checked ? t.bar : undefined })} />beze změny</label>
-              <span className="muted small">{v ? `${num(v, 1)} l` : <input className="tank-vol" inputMode="decimal" placeholder="objem l" onBlur={(e) => { const x = parseFloat(e.target.value.replace(",", ".")); if (x > 0) setTank(t.id, { vol: x }); }} />}{used != null && v ? ` · ${num(used * v, 0)} l` : ""}</span>
-            </div>
-          </div>
-        ); })}
+        {tanks.map((t) => <TankRow key={t.id} t={t} set={(p) => setTank(t.id, p)} del={() => upd({ tanks: tanks.filter((x) => x.id !== t.id) })} />)}
         <div className="row">
           <button className="btn small" onClick={() => upd({ tanks: [...tanks, { id: uid(), role: tanks.length ? "o2" : "bo", name: tanks.length ? "S40" : "S80", gas: tanks.length ? "O₂" : "vzduch" }] })}>＋ Přidat lahev</button>
           {!tanks.length && lastTanks && <button className="btn small" onClick={() => upd({ tanks: lastTanks.map((t) => ({ ...t, id: uid(), bar: undefined })) })}>Lahve jako minule</button>}
