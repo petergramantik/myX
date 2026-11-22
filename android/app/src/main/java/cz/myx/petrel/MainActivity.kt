@@ -50,6 +50,7 @@ class MainActivity : Activity() {
     @Volatile private var stop = false
     @Volatile private var running = false
     private var socket: BluetoothSocket? = null
+    private var swCur: Shearwater? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,9 +74,13 @@ class MainActivity : Activity() {
         resend.isEnabled = lastFile() != null
         gap = Button(this).apply { text = "Ladicí: přečíst úsek před posledním ponorem"; setOnClickListener { if (!running) startGap() } }
         root.addView(gap)
+        root.addView(Button(this).apply { text = "Kopírovat výpis"; setOnClickListener {
+            getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("myX Petrel", "${status.text}\n${log.text}"))
+            android.widget.Toast.makeText(this@MainActivity, "Výpis zkopírován", android.widget.Toast.LENGTH_SHORT).show()
+        } })
         status = text("", 16f)
         root.addView(status)
-        log = text("", 11f).apply { typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.TOP }
+        log = text("", 11f).apply { typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.TOP; setTextIsSelectable(true) }
         root.addView(ScrollView(this).apply { addView(log) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
@@ -110,7 +115,15 @@ class MainActivity : Activity() {
     private fun add(s: String) = runOnUiThread { log.append("${SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(Date())} $s\n") }
     private fun setStatus(s: String) = runOnUiThread { status.text = s }
 
-    private fun cancel() { stop = true; setStatus("Ukončuji…"); try { socket?.close() } catch (_: Exception) {} }
+    /** Ukončí spojení s počítačem (příkaz ukončení, pak zavřít socket) – Upload log na Petrelu skončí. */
+    private fun closeSession() {
+        try { swCur?.shutdown(); add("Spojení ukončeno") } catch (e: Exception) { add("Ukončení spojení: ${e.message}") }
+        swCur = null
+        try { socket?.close() } catch (_: Exception) {}
+    }
+
+    // s otevřeným spojením jen nastavit stop – vlákno doběhne a ukončí spojení příkazem; při připojování zavřít socket
+    private fun cancel() { stop = true; setStatus("Ukončuji…"); if (swCur == null) try { socket?.close() } catch (_: Exception) {} }
 
     @SuppressLint("MissingPermission")
     private fun start() {
@@ -129,7 +142,7 @@ class MainActivity : Activity() {
                 add("Chyba: ${e.message}")
                 setStatus(if (stop) "Ukončeno." else "Chyba: ${e.message}")
             } finally {
-                try { socket?.close() } catch (_: Exception) {}
+                closeSession()
                 running = false
                 runOnUiThread { go.text = "Stáhnout" }
             }
@@ -218,22 +231,33 @@ class MainActivity : Activity() {
                 add("Úsek 0x${from.toString(16)}–0x${(from + len).toString(16)} ($len B, celkem ${last.addr - prev.end} B)")
                 if (len <= 0) throw Exception("Mezi ponory není žádný úsek")
                 val out = java.io.ByteArrayOutputStream()
-                var mode = "bez komprese"
-                try {
-                    var off = 0
+                var mode = ""
+                // pokusy: každý zapíše odpověď počítače, první úspěšný se uloží
+                fun tryRead(name: String, addr: Long, size: Int, comp: Boolean): Boolean {
+                    if (stop || out.size() > 0) return out.size() > 0
+                    return try {
+                        val c = sw.download(base + addr, size, comp) { b -> setStatus("$name: ${b / 1024} kB") }
+                        add("$name: OK, ${c.size} B")
+                        if (c.isNotEmpty()) { out.write(c); mode = name }
+                        c.isNotEmpty()
+                    } catch (x: Exception) { add("$name: ${x.message}"); false }
+                }
+                tryRead("úsek bez komprese", from, minOf(len, 0x8000), false)
+                tryRead("úsek s kompresí", from, len, true)
+                // kontrola, zda nekomprimované čtení jde aspoň od začátku ponoru (pro navazování stahování)
+                if (out.size() == 0) {
+                    try { val c = sw.download(base + last.addr, 0x600, false); add("začátek ponoru bez komprese: OK, ${c.size} B, ${Shearwater.hex(c.copyOfRange(0, minOf(64, c.size)))}") } catch (x: Exception) { add("začátek ponoru bez komprese: ${x.message}") }
+                    tryRead("32 kB před ponorem s kompresí", last.addr - 0x8000, 0x8000, true)
+                }
+                if (out.size() > 0 && mode == "úsek bez komprese" && len > 0x8000) {
+                    var off = out.size()
                     while (off < len && !stop) {
-                        val n = minOf(0x8000, len - off)
-                        val c = sw.download(base + from + off, n, false) { b -> setStatus("Čtu úsek ${(off + b) / 1024} / ${len / 1024} kB") }
+                        val c = try { sw.download(base + from + off, minOf(0x8000, len - off), false) { b -> setStatus("Čtu úsek ${(off + b) / 1024} / ${len / 1024} kB") } } catch (x: Exception) { add("Čtení přerušeno na $off B: ${x.message}"); break }
                         if (c.isEmpty()) break
                         out.write(c); off += c.size
                     }
-                } catch (x: Exception) {
-                    add("Čtení bez komprese: ${x.message} (přečteno ${out.size()} B) – zkouším s kompresí")
-                    if (out.size() == 0) {
-                        mode = "s kompresí"
-                        out.write(sw.download(base + from, len, true) { b -> setStatus("Čtu úsek (komprese) ${b / 1024} kB") })
-                    }
                 }
+                if (out.size() == 0) throw Exception("Úsek se nepodařilo přečíst – zkopíruj výpis a pošli ho")
                 val data = out.toByteArray()
                 add("Přečteno ${data.size} B ($mode); začátek: ${hex(data.copyOfRange(0, minOf(96, data.size)))}")
                 val dir = File(cacheDir, "out").apply { mkdirs() }
@@ -249,7 +273,7 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
                 add("Chyba: ${e.message}"); setStatus(if (stop) "Ukončeno." else "Chyba: ${e.message}")
             } finally {
-                try { socket?.close() } catch (_: Exception) {}
+                closeSession()
                 running = false
                 runOnUiThread { go.text = "Stáhnout" }
             }
@@ -270,7 +294,7 @@ class MainActivity : Activity() {
         }
         socket = s
         add("Připojeno")
-        return Shearwater(s.inputStream, s.outputStream) { stop }.also { it.purge() }
+        return Shearwater(s.inputStream, s.outputStream) { stop }.also { it.purge(); swCur = it }
     }
 
     private fun share(f: File, n: Int) {

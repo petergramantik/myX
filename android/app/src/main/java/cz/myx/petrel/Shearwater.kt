@@ -25,6 +25,9 @@ class Shearwater(private val inp: InputStream, private val out: OutputStream, pr
         const val MANIFEST_SIZE = 0x600
         const val DIVE_SIZE = 0xFFFFFF
         private val READ_ONLY = setOf(0x22, 0x35, 0x36, 0x37)
+        /** Ukončení spojení (jako libdivecomputer při zavření) – jediný povolený příkaz mimo čtení. */
+        private val SHUTDOWN = byteArrayOf(0x2E, 0x90.toByte(), 0x20, 0x00)
+        fun hex(b: ByteArray) = b.joinToString(" ") { "%02x".format(it.toInt() and 0xFF) }
         val MODELS = mapOf(2 to "Predator", 3 to "Petrel 2", 4 to "NERD", 5 to "Perdix", 6 to "Perdix AI", 7 to "NERD 2",
             8 to "Teric", 9 to "Peregrine", 10 to "Petrel 3", 11 to "Perdix 2", 12 to "Tern", 13 to "Peregrine TX", 14 to "Perdix 3")
 
@@ -91,6 +94,12 @@ class Shearwater(private val inp: InputStream, private val out: OutputStream, pr
         return p.copyOfRange(4, p.size)
     }
 
+    /** Ukončí spojení s počítačem (Petrel ukončí Upload log); odpověď se nečeká. */
+    fun shutdown() {
+        slipWrite(byteArrayOf(0xFF.toByte(), 0x01, (SHUTDOWN.size + 1).toByte(), 0x00) + SHUTDOWN)
+        try { slipRead(1000) } catch (_: Exception) {}
+    }
+
     fun rdbi(id: Int): ByteArray {
         val r = transfer(byteArrayOf(0x22, (id shr 8).toByte(), id.toByte()))
         if ((r[0].toInt() and 0xFF) == 0x7F) throw IOException("Počítač odmítl dotaz ${id.toString(16)}")
@@ -103,11 +112,11 @@ class Shearwater(private val inp: InputStream, private val out: OutputStream, pr
         val init = transfer(byteArrayOf(0x35, if (compressed) 0x10 else 0x00, 0x34,
             (addr shr 24).toByte(), (addr shr 16).toByte(), (addr shr 8).toByte(), addr.toByte(),
             (size shr 16).toByte(), (size shr 8).toByte(), size.toByte()))
-        if (init.size < 2 || (init[0].toInt() and 0xFF) != 0x75) throw IOException("Neočekávaná odpověď (upload init)")
+        if (init.size < 2 || (init[0].toInt() and 0xFF) != 0x75) throw IOException("Neočekávaná odpověď (upload init: ${hex(init)})")
         val out = ByteArrayOutputStream()
         var block = 1; var n = 0; var done = false
         val lre = Lre(out)
-        while (n < size && !done) {
+        try { while (n < size && !done) {
             if (cancelled()) throw Cancelled()
             val r = transfer(byteArrayOf(0x36, block.toByte()))
             if (r.size < 2 || (r[0].toInt() and 0xFF) != 0x76 || (r[1].toInt() and 0xFF) != (block and 0xFF)) throw IOException("Neočekávaná odpověď (blok $block)")
@@ -116,6 +125,10 @@ class Shearwater(private val inp: InputStream, private val out: OutputStream, pr
             if (compressed) done = lre.feed(data) else out.write(data)
             n += data.size; onBytes(n)
             block = (block + 1) and 0xFF
+        } } catch (e: IOException) {
+            // přerušené stahování: ukončit upload, ať počítač nezůstane v rozběhnutém přenosu
+            if (e !is Cancelled) try { transfer(byteArrayOf(0x37)) } catch (_: Exception) {}
+            throw e
         }
         val q = transfer(byteArrayOf(0x37))
         if ((q[0].toInt() and 0xFF) != 0x77) throw IOException("Neočekávaná odpověď (upload exit)")
