@@ -10,7 +10,7 @@ import { partIds, shareDives } from "./share";
 import { ask, askText, choose } from "../app/dialog";
 import { RIGS, hasDeco, isCC, pscrLoopPo2, supplyPo2, type Rig } from "../core/rig";
 import { compName, getState, rigChoices, rigInfo, setDiveRig, typeBreakdown } from "../app/store";
-import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, useBackLayer, useStore } from "./common";
+import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, tab, useBackLayer, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { co2BadRanges, co2Valid, dilVents, effortOf, gasDensity, workloadIndex, workloadSkip, type EffortBase } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
@@ -20,6 +20,9 @@ const C = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#fff176", "#ef5350"];
 
 const DL0 = { q: "", rate: "", tagF: [] as TagCat[], gasF: [] as string[], onlyCommon: true, bsel: [] as string[], noBuddy: false, pickMode: false, picked: [] as string[] };
 const dlMemo: typeof DL0 & { ctx: string | null; y: number } = { ...DL0, ctx: null, y: 0 };
+
+/** Seznam mých ponorů rovnou ve výběru ke sdílení (z DB → Můj log). */
+export function openDivesPick() { Object.assign(dlMemo, { ...DL0, ctx: "||", pickMode: true, picked: [] }); tab({ t: "dives" }); }
 
 export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) {
   const st = useStore();
@@ -488,7 +491,7 @@ export function GasChips({ mixes }: { mixes: string[] }) {
 
 const fmtL = (l: number) => `${Math.round(l)} l`;
 
-/** Osobní rychlost spotřeby O₂ (l/min) z ponorů se známou spotřebou: měřený tlak vlastní lahve nebo zadaná externí lahev. */
+/** Osobní rychlost spotřeby O₂ (l/min) z ponorů se známou spotřebou: měřený tlak on-board lahve nebo zadaná externí lahev. */
 export function personalO2Rate(metas: Meta[], notes: Record<string, DiveNote>, cylO2: number): { lo: number; hi: number; n: number } | null {
   const rates: number[] = [];
   for (const m of metas) {
@@ -497,7 +500,7 @@ export function personalO2Rate(metas: Meta[], notes: Record<string, DiveNote>, c
     const n = notes[m.id];
     const own = m.sum.o2Use.ok && !m.sum.o2Use.noisy ? m.sum.o2Use.bar * cylO2 : 0;
     const ext = prepExt("o2", m, n).reduce((a, e) => a + Math.max(0, e.start! - e.end!) * e.vol, 0);
-    // vlastní lahev musí být měřená celý ponor (bez externího plynu), nebo musí být zadaná externí lahev
+    // on-board lahev musí být měřená celý ponor (bez externího plynu), nebo musí být zadaná externí lahev
     if ((own && !m.sum.o2Use.ext.length) || ext) rates.push((own + ext) / min);
   }
   const ok = rates.filter((r) => r > 0.4 && r < 3);
@@ -505,10 +508,10 @@ export function personalO2Rate(metas: Meta[], notes: Record<string, DiveNote>, c
   return { lo: Math.min(...ok) * 0.95, hi: Math.max(...ok) * 1.05, n: ok.length };
 }
 
-/** Spotřeba plynu ponoru: vlastní lahev (z průběhu tlaku) + externí lahve, nebo ruční údaj. */
-function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol: number, rate?: { lo: number; hi: number; n: number } | null) {
+/** Spotřeba plynu ponoru: on-board lahev (z průběhu tlaku) + externí lahve, nebo ruční údaj. */
+export function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol: number, rate?: { lo: number; hi: number; n: number } | null) {
   const u = gas === "dil" ? meta.sum.dilUse : meta.sum.o2Use;
-  // externí (offboard) lahve se zadávají jen v sekci Před a po ponoru
+  // externí (off-board) lahve se zadávají jen v sekci Před a po ponoru
   const ext = prepExt(gas, meta, note);
   const extL = ext.reduce((a, e) => a + (e.start != null && e.end != null ? Math.max(0, e.start - e.end) * e.vol : 0), 0);
   const ownL = u.ok && !u.noisy ? u.bar * vol : null;
@@ -518,7 +521,7 @@ function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol
 }
 
 /**
- * Offboard lahve z předponorové přípravy jako externí plyn: O₂ lahve → O₂, Dil → diluent;
+ * Off-board lahve z předponorové přípravy jako externí plyn: O₂ lahve → O₂, Dil → diluent;
  * bailouty se stejným plynem jako diluent se počítají do diluentu jen při zjištěném externím diluentu.
  */
 function prepExt(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined): ExtGas[] {
@@ -545,7 +548,7 @@ function UseVal({ gas, meta, note }: { gas: "dil" | "o2"; meta: Meta; note?: Div
   const rate = gas === "o2" ? personalO2Rate(st.metas, st.lb.notes, st.lb.settings.cyl?.o2 ?? 3) : null;
   const g = gasUseOf(gas, meta, note, vol, rate);
   if (g.total != null) {
-    // velkým písmem bary (vlastní lahev + offboard), malým spotřeba v litrech
+    // velkým písmem bary (on-board lahev + off-board), malým spotřeba v litrech
     const bars = [g.u.ok && !g.u.noisy && g.ownL ? `${g.u.bar} bar` : "", ...g.ext.filter((e) => e.start != null && e.end != null).map((e) => `${Math.max(0, e.start! - e.end!)} bar ${e.kind}`)].filter(Boolean);
     const tk = note?.prep?.tanks || [], full = tk.length > 0 && tk.every((t) => t.bar != null && (t.same || t.end != null) && tankVol(t));
     return <span className="use">{bars.length ? bars.join(" + ") : fmtL(g.total)}<small>{full ? "skutečná · " : ""}{fmtL(g.total)} · {num(g.total / g.min, 1)} l/min</small></span>;
@@ -561,15 +564,15 @@ function GasUseCard({ meta, note }: { id: string; meta: Meta; note?: DiveNote })
   const row = (gas: "dil" | "o2", name: string) => {
     const g = gasUseOf(gas, meta, note, cyl[gas], gas === "o2" ? rate : null);
     const u = g.u;
-    // hlavní údaj: úbytek tlaku (vlastní lahev + offboard) větším písmem, litry menším pod ním
+    // hlavní údaj: úbytek tlaku (on-board lahev + off-board) větším písmem, litry menším pod ním
     const bars = [u.ok && !u.noisy ? `${u.bar} bar` : "", ...g.ext.map((e) => `${Math.max(0, e.start! - e.end!)} bar ${e.kind}`)].filter(Boolean);
     return (
       <div className="pcell ptile">
-        <div className="pcell-h"><b>{name}</b><span className="muted">vlastní lahev {num(cyl[gas], 1)} l</span></div>
+        <div className="pcell-h"><b>{name}</b><span className="muted">on-board lahev {num(cyl[gas], 1)} l</span></div>
         <div className="use-big">{bars.length ? bars.join(" + ") : "–"}</div>
         <small>{g.total != null ? `${fmtL(g.total)} · ${num(g.total / g.min, 1)} l/min` : gas === "o2" ? `odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (${g.personal ? "osobní" : "z doby ponoru"})` : "litry spočítám po zadání lahve"}</small>
-        {u.ok ? <small className="muted">Vlastní lahev {num(u.start ?? 0, 0)} → {num(u.end ?? 0, 0)} bar{u.noisy ? " · rozkmitaný tlak, spotřeba nespolehlivá" : ""}</small>
-          : <small className="muted">Vlastní lahev off – snímač ukazuje jen mezitlak (plyn z externí lahve).{!g.ext.length ? " Externí lahev zadej v sekci Před a po ponoru." : ""}</small>}
+        {u.ok ? <small className="muted">On-board lahev {num(u.start ?? 0, 0)} → {num(u.end ?? 0, 0)} bar{u.noisy ? " · rozkmitaný tlak, spotřeba nespolehlivá" : ""}</small>
+          : <small className="muted">On-board lahev off – snímač ukazuje jen mezitlak (plyn z externí lahve).{!g.ext.length ? " Externí lahev zadej v sekci Před a po ponoru." : ""}</small>}
         {u.ext.length > 0 && <small className="c-warn">Externí plyn nebo zavřená lahev nejspíš: {u.ext.map(([a, b]) => (a === b ? tpt(a * 60) : `${tpt(a * 60)}–${tpt(b * 60)}`)).join(", ")}</small>}
       </div>
     );
@@ -579,19 +582,19 @@ function GasUseCard({ meta, note }: { id: string; meta: Meta; note?: DiveNote })
       <AllTanks meta={meta} note={note} cyl={cyl} rate={rate} />
       {row("dil", "Diluent")}
       {row("o2", "O₂")}
-      <p className="note">Spotřeba z vlastní lahve = součet poklesů tlaku (malé nárůsty z ohřátí se odečtou, větší nárůst nebo mezitlak = externí plyn). Externí a doplňkové lahve zadáváš v sekci Před a po ponoru. Objemy vlastních lahví nastavíš v Nastavení.</p>
+      <p className="note">Spotřeba z on-board lahve = součet poklesů tlaku (malé nárůsty z ohřátí se odečtou, větší nárůst nebo mezitlak = externí plyn). Externí a doplňkové lahve zadáváš v sekci Před a po ponoru. Objemy on-board lahví nastavíš v Nastavení.</p>
     </Card>
   );
 }
 
-/** Všechny lahve ponoru (onboard + offboard z „Před a po ponoru“) a skutečná spotřeba O₂ a diluentu, když jsou všechny vyplněné. */
+/** Všechny lahve ponoru (on-board + off-board z „Před a po ponoru“) a skutečná spotřeba O₂ a diluentu, když jsou všechny vyplněné. */
 function AllTanks({ meta, note, cyl, rate }: { meta: Meta; note?: DiveNote; cyl: { dil: number; o2: number }; rate: { lo: number; hi: number; n: number } | null }) {
   const tanks = note?.prep?.tanks || [];
   if (!tanks.length && !note?.prep) return null;
   const dilIds = new Set(prepExt("dil", meta, note).map((e) => e.id)), o2Ids = new Set(prepExt("o2", meta, note).map((e) => e.id));
   const onb = (gas: "dil" | "o2", name: string) => {
     const u = gas === "dil" ? meta.sum.dilUse : meta.sum.o2Use;
-    return <tr key={gas}><td>{name} onboard</td><td>{num(cyl[gas], 1)} l</td><td>{u.ok ? `${num(u.start ?? 0, 0)} → ${num(u.end ?? 0, 0)}` : "off"}</td><td>{u.ok && !u.noisy ? `${u.bar} bar · ${fmtL(u.bar * cyl[gas])}` : "–"}</td></tr>;
+    return <tr key={gas}><td>{name} on-board</td><td>{num(cyl[gas], 1)} l</td><td>{u.ok ? `${num(u.start ?? 0, 0)} → ${num(u.end ?? 0, 0)}` : "off"}</td><td>{u.ok && !u.noisy ? `${u.bar} bar · ${fmtL(u.bar * cyl[gas])}` : "–"}</td></tr>;
   };
   const missing = tanks.filter((t) => t.bar == null || (!t.same && t.end == null) || !tankVol(t));
   const g = (gas: "dil" | "o2") => gasUseOf(gas, meta, note, cyl[gas], gas === "o2" ? rate : null);
@@ -1073,7 +1076,7 @@ function CompWarnCard({ d }: { d: Dive }) {
             <td>{w.how === "open" ? <span className="muted">nepotvrzeno</span> : `${w.how === "ack" ? "potvrzeno" : "zmizelo"} ${mmss(w.end!)} (${dur(w.end! - w.start)})`}</td></tr>)}</tbody>
         </table>
       ) : <p className="muted">Počítač v tomto ponoru nezapsal žádné varování.</p>}
-      {valve.length > 0 && <div className="valve-list">{valve.map((v, i) => <div key={i} className="small">Onboard {v.g} {v.kind === "close" ? "zavřena (přechod na externí)" : "otevřena"} v {mmss(v.t)} ({v.from} → {v.to} bar)</div>)}</div>}
+      {valve.length > 0 && <div className="valve-list">{valve.map((v, i) => <div key={i} className="small">On-board {v.g} {v.kind === "close" ? "zavřena (přechod na externí)" : "otevřena"} v {mmss(v.t)} ({v.from} → {v.to} bar)</div>)}</div>}
       <p className="note">Z událostí 0 (zobrazeno), 1 a 2 (potvrzeno / zmizelo). „Potvrzeno“ = pravé tlačítko na hlavní obrazovce. (P) pravděpodobný význam, (?) hypotéza.</p>
     </Card>
   );

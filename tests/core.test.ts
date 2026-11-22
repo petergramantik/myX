@@ -522,5 +522,19 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(x.id === "xccr" && x.bats.length === 2 && x.bats[0].role === "solenoid" && x.bats[0].type!.includes("18650") && f.bats[1].type!.includes("18500") && t.bats.length === 0, "Baterie v hlavě: X-CCR výchozí, #1 solenoid, FLEX2 18500, TP bez baterií");
 }
 
+{ // spotřeba plynu ve srovnání (z tlaku on-board lahví)
+  const f = Bun.file("/home/claude/data/sw.db");
+  if (await f.exists()) {
+    const { readShearwaterDb, decodeDive } = await import("../src/core/shearwater");
+    const raws = readShearwaterDb(new Uint8Array(await f.arrayBuffer()));
+    const d = await decodeDive(raws.at(-1)!);
+    const s1 = diveStats(d);
+    const rows = multiRows([s1, { ...s1, dilBar: null }]);
+    const r = rows.find((x) => x.key === "diluse")!;
+    // poslední ponor: O₂ zavřená (jen mezitlak) → bez spotřeby O₂, diluent z tlaku
+    ok(s1.o2Bar == null && s1.dilBar != null && s1.dilBar > 0 && r.muted === true && r.weight === 0 && r.vals[1] === "–", "Srovnání: spotřeba z tlaku (zavřená O₂ = –), chybějící údaj se nezapočítá");
+  }
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

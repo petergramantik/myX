@@ -126,7 +126,7 @@ export function dilVents(d: Dive): number[] {
   return out;
 }
 
-/** Spotřeba O₂ z tlaku onboard lahve v oknech 10 min (bar/min); null, kde lahev zavřená nebo skok tlaku. */
+/** Spotřeba O₂ z tlaku on-board lahve v oknech 10 min (bar/min); null, kde lahev zavřená nebo skok tlaku. */
 export function o2RateWindows(d: Dive, winS = 600): { from: number; to: number; rate: number }[] {
   const s = d.s, out: { from: number; to: number; rate: number }[] = [];
   const med = (a: number[]) => median(a);

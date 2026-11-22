@@ -1,5 +1,5 @@
-// Před a po ponoru (dřív „Předponorová příprava“): naměřené tlaky onboard lahví, offboard lahve (bailout, offboard O₂) a potvrzení kalibrace čidel.
-// Vyplňuje se typicky v rozpracovaném ponoru (večer před ponorem); po spárování s logem se tlaky onboard lahví porovnají s počítačem.
+// Před a po ponoru (dřív „Předponorová příprava“): naměřené tlaky on-board lahví, off-board lahve (bailout, off-board O₂) a potvrzení kalibrace čidel.
+// Vyplňuje se typicky v rozpracovaném ponoru (večer před ponorem); po spárování s logem se tlaky on-board lahví porovnají s počítačem.
 import { useState } from "react";
 import { tankMix, tankVol, uid, type Prep, type PrepTank } from "../app/model";
 import { saveSettings } from "../app/store";
@@ -27,7 +27,7 @@ const gasName = (o2: number, he: number) => (he > 0 ? `TMX ${o2}/${he}` : o2 ===
 /** Stávající textový zápis plynu → položka seznamu (nebo null = jiný). */
 const gasKnown = (g: string) => { if (GASES.includes(g)) return g; if (/^argon$/i.test(g.trim())) return "Argon"; const m = tankMix(g); if (!m) return null; const [o, h] = m.split("/").map(Number); const n = gasName(o, h); return GASES.includes(n) ? n : null; };
 
-/** Řádek offboard lahve: role, lahev a plyn z nabídky; u „Jiná“ / „Jiný“ zadání, po vyplnění jen informační řádek. */
+/** Řádek off-board lahve: role, lahev a plyn z nabídky; u „Jiná“ / „Jiný“ zadání, po vyplnění jen informační řádek. */
 function TankRow({ t, set, del }: { t: PrepTank; set: (p: Partial<PrepTank>) => void; del: () => void }) {
   const known = TANKS.includes(t.name);
   const v = tankVol(t);
@@ -75,7 +75,7 @@ function summary(p?: Prep): string {
   const parts: string[] = [];
   if (p.o2 != null) parts.push(`O₂ ${p.o2} bar`);
   if (p.dil != null) parts.push(`diluent ${p.dil} bar`);
-  if (p.tanks?.length) parts.push(`${p.tanks.length} ${p.tanks.length === 1 ? "offboard lahev" : p.tanks.length < 5 ? "offboard lahve" : "offboard lahví"}`);
+  if (p.tanks?.length) parts.push(`${p.tanks.length} ${p.tanks.length === 1 ? "off-board lahev" : p.tanks.length < 5 ? "off-board lahve" : "off-board lahví"}`);
   const cal = [p.o2Cal && "O₂", p.co2Cal && "CO₂"].filter(Boolean);
   if (cal.length) parts.push(`kalibrace ${cal.join(" + ")}`);
   return parts.join(" · ") || "nevyplněno";
@@ -114,12 +114,12 @@ export function PrepCard({ prep, onChange, real, cc = true }: { prep?: Prep; onC
       {!open && <p className={"small " + (worst || "muted")} onClick={() => setOpen(true)}>{summary(prep)}</p>}
       {open && <>
         {cc && <>
-          <h3 className="subh">Onboard lahve</h3>
+          <h3 className="subh">On-board lahve</h3>
           {onboard("o2", "O₂")}
           {onboard("dil", "Diluent")}
           {real && <p className="note">Reálný tlak = první údaj z počítače v ponoru.</p>}
         </>}
-        <h3 className="subh">Offboard lahve</h3>
+        <h3 className="subh">Off-board lahve</h3>
         {tanks.map((t) => <TankRow key={t.id} t={t} set={(p) => setTank(t.id, p)} del={() => upd({ tanks: tanks.filter((x) => x.id !== t.id) })} />)}
         <div className="row">
           <button className="btn small" onClick={() => upd({ tanks: [...tanks, { id: uid(), role: tanks.length ? "o2" : "bo", name: tanks.length ? "S40" : "S80", gas: tanks.length ? "O₂" : "vzduch" }] })}>＋ Přidat lahev</button>

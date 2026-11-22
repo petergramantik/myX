@@ -15,7 +15,7 @@ export type Rating = "up" | "down" | "problem";
 export interface WeatherSnap { at: number; temp: number; wind: number; gust: number; cloud: number; pressure: number; precip: number; code: number }
 /** Externí lahev připojená během ponoru (Petrel její tlak neměří). */
 export interface ExtGas { id: string; /** sup = zásobní plyn přístroje bez vysílačů (pSCR, OC…) */ gas: "dil" | "o2" | "sup"; kind: string; vol: number; start?: number; end?: number }
-/** Offboard lahev z předponorové přípravy (bailout, offboard O₂…). */
+/** Off-board lahev z předponorové přípravy (bailout, off-board O₂…). */
 export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "suit" | "other"; name: string; gas: string; bar?: number; /** tlak po ponoru */ end?: number; /** beze změny (lahev nepoužitá) – konec = začátek */ same?: boolean; /** objem (l); jinak z označení S80/S40… */ vol?: number }
 /** Objem lahve (l) z ručního zadání nebo z označení (S80, S40, 12 l…). */
 export function tankVol(t: { vol?: number; name: string }): number | null {
@@ -36,7 +36,7 @@ export function tankMix(g: string): string | null {
   m = /^(?:tmx|tx|trimix)?(\d+)\/(\d+)$/.exec(t); if (m) return `${+m[1]}/${+m[2]}`;
   return null;
 }
-/** Předponorová příprava: naměřené tlaky (bar) onboard lahví, offboard lahve a potvrzení kalibrace (ms). */
+/** Předponorová příprava: naměřené tlaky (bar) on-board lahví, off-board lahve a potvrzení kalibrace (ms). */
 export interface Prep { o2?: number; dil?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string } }
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
@@ -51,7 +51,7 @@ export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
 /** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
 export interface Co2Cal { date: string; gas: string }
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; /** poslední potvrzená kalibrace čidel O₂ (z přípravy) */ o2Cal?: { date: string } | null; motto?: boolean; cyl?: { dil: number; o2: number }; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; /** moje jméno ve sdíleném srovnání (místo „Já“) */ myName?: string; updated: number }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; /** poslední potvrzená kalibrace čidel O₂ (z přípravy) */ o2Cal?: { date: string } | null; motto?: boolean; cyl?: { dil: number; o2: number }; /** objemy on-board lahví parťáků (l) podle počítače – pro srovnání spotřeby */ cylOf?: Record<string, { o2?: number; dil?: number }>; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; /** moje jméno ve sdíleném srovnání (místo „Já“) */ myName?: string; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
@@ -81,11 +81,11 @@ export const META_V = 30;
 
 /** Model rebreatheru – kolik baterií má hlava, jakého typu a co napájí. */
 export type CcrModel = "xccr" | "flex2" | "fx" | "jj" | "tp" | "other";
-export interface HeadBat { pos: 1 | 2; role?: string; type?: string }
+export interface HeadBat { pos: 1 | 2; role?: string; /** krátce na dlaždici */ short?: string; type?: string }
 export const CCR_MODELS: { id: CcrModel; label: string; bats: HeadBat[]; note?: string }[] = [
-  { id: "xccr", label: "X-CCR (iQsub)", bats: [{ pos: 1, role: "solenoid", type: "Li-Ion 3,7 V 18650" }, { pos: 2, role: "HUD a výstup pO₂", type: "Li-Ion 3,7 V 18650" }] },
-  { id: "flex2", label: "FLEX2 (iQsub)", bats: [{ pos: 1, role: "solenoid", type: "Li-Ion 18500" }, { pos: 2, role: "HUD a výstup pO₂", type: "Li-Ion 18500" }] },
-  { id: "fx", label: "FX CCR (iQsub)", bats: [{ pos: 1, role: "elektronika, solenoid a HUD" }], note: "Bateriový kontejner na kabelu – typ baterií neznáme (?)." },
+  { id: "xccr", label: "X-CCR (iQsub)", bats: [{ pos: 1, role: "solenoid", type: "Li-Ion 3,7 V 18650" }, { pos: 2, role: "HUD a výstup pO₂", short: "HUD", type: "Li-Ion 3,7 V 18650" }] },
+  { id: "flex2", label: "FLEX2 (iQsub)", bats: [{ pos: 1, role: "solenoid", type: "Li-Ion 18500" }, { pos: 2, role: "HUD a výstup pO₂", short: "HUD", type: "Li-Ion 18500" }] },
+  { id: "fx", label: "FX CCR (iQsub)", bats: [{ pos: 1, role: "elektronika, solenoid a HUD", short: "vše" }], note: "Bateriový kontejner na kabelu – typ baterií neznáme (?)." },
   { id: "jj", label: "JJ-CCR", bats: [{ pos: 1 }, { pos: 2 }], note: "Typ a funkce baterií neznáme (?)." },
   { id: "tp", label: "Tres Presidentes (pSCR)", bats: [], note: "Bez elektroniky – žádné baterie v hlavě." },
   { id: "other", label: "Jiný", bats: [{ pos: 1 }, { pos: 2 }] },

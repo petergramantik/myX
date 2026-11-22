@@ -45,6 +45,9 @@ export function tab(s: Screen) {
   if (curD > 1) { pending = target; history.go(-(curD - 1)); return; }
   applyTab(target);
 }
+/** Hook před návratem o obrazovku zpět (from → to), např. zavření cizího logu otevřeného z mého ponoru. */
+const popHooks = new Set<(from: Screen, to: Screen) => void>();
+export const onBeforePop = (f: (from: Screen, to: Screen) => void) => { popHooks.add(f); return () => popHooks.delete(f); };
 export function back() { if (stack.length > 1 || layers.length) history.back(); }
 window.addEventListener("popstate", (e) => {
   const st = e.state as { d?: number; layer?: number } | null;
@@ -53,7 +56,7 @@ window.addEventListener("popstate", (e) => {
   curD = d;
   if (ignorePop > 0) { ignorePop--; return; }
   if (layers.length) { layers.pop()!.close(); return; }
-  if (stack.length > 1) { stack = stack.slice(0, -1); emit(); }
+  if (stack.length > 1) { const from = stack[stack.length - 1]; stack = stack.slice(0, -1); popHooks.forEach((f) => f(from, stack[stack.length - 1])); emit(); }
   // přistáli jsme na záznamu zaniklé vrstvy → přeskočit
   if (st?.layer && !layers.some((l) => l.id === st.layer)) { ignorePop++; history.back(); }
 });

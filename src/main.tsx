@@ -4,8 +4,9 @@ import { IS_DEV } from "./app/db";
 import { DialogHost } from "./ui/Dialog";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { init, locate, scheduleSync, syncNow, takeShared, toast } from "./app/store";
-import { back, go, tab, useBackLayer, useScreen, useStore, type Screen } from "./ui/common";
+import { init, locate, peekPop, scheduleSync, syncNow, takeShared, toast } from "./app/store";
+
+import { back, go, onBeforePop, tab, useBackLayer, useScreen, useStore, type Screen } from "./ui/common";
 import { OverviewScreen } from "./ui/Overview";
 import { DiveScreen, DivesScreen } from "./ui/Dives";
 import { BuddiesScreen, BuddyScreen, SiteScreen, SitesScreen } from "./ui/Sites";
@@ -116,6 +117,9 @@ function Body({ s }: { s: Screen }) {
 }
 
 const isTab = (s: Screen) => s.t !== "warn" && (s.t === "sites" || TABS.some(([t]) => t.t === s.t && !("site" in s && s.site) && !("buddy" in s && s.buddy)));
+
+// Zpět z ponoru parťáka (otevřeného z mého ponoru) zavře jeho log
+onBeforePop((from, to) => peekPop(from as { t: string; id?: string }, to as { t: string; id?: string }));
 
 function App() {
   const s = useScreen();

@@ -23,7 +23,7 @@ export function useBatteries() {
   const petrelAlerts = petrel.length ? alerts(petrel.map((m) => m.h), now, th, null, last ? st.lb.settings.batSwap?.[String(last.h.serial)] : null).filter((a) => a.kind === "battery") : [];
   const model = ccrModel(last ? computerCfg(last.h.serial)?.ccr : undefined);
   const solAlarm = (m: (typeof st.metas)[number]) => (m.warns || []).some((w) => w.title.startsWith("Porucha solenoidu"));
-  const head = model.bats.map(({ pos, role, type }) => {
+  const head = model.bats.map(({ pos, role, short, type }) => {
     const all = Object.values(st.lb.batteries).filter((b) => b.pos === pos).sort((a, b) => b.installed.localeCompare(a.installed));
     const cur = all.find((b) => !b.removed);
     const since = cur ? st.metas.filter((m) => m.start >= tsOf(cur.installed) - 12 * 3600) : [];
@@ -37,7 +37,7 @@ export function useBatteries() {
     const hit = solenoid ? (cur ? since : last ? [last] : []).filter(solAlarm) : [];
     const suspect = hit.length > 0;
     if (suspect) reasons.unshift(`Alarm „Porucha solenoidu / baterie v hlavě“ v ponoru ${fmtDate(hit[hit.length - 1].start)}${hit.length > 1 ? ` (celkem ${hit.length} ponorů)` : ""} – baterie solenoidu podezřelá (P)`);
-    return { pos, role, type, all, cur, dives: since.length, minutes, months, reasons, suspect };
+    return { pos, role, short: short || role, type, all, cur, dives: since.length, minutes, months, reasons, suspect };
   });
   const sw = last ? st.lb.settings.batSwap?.[String(last.h.serial)] : undefined;
   const swapped = !!(last && sw != null && sw > last.h.start);
@@ -71,7 +71,7 @@ export function BatteryTiles() {
           const lvl = x.suspect ? "bad" : x.reasons.length ? "warn" : x.cur ? "ok" : "none"; // bez zadané výměny šedě, ne zeleně
           return (
             <div key={x.pos} className={"celltile " + lvl} onClick={() => go({ t: "bats", pos: x.pos })}>
-              <div className="ct-h"><b>Hlava {x.pos}{x.role ? <small> · {x.role}</small> : null}</b><span className={"dot " + lvl} /></div>
+              <div className="ct-h"><b>Hlava {x.pos}{x.short ? <small> · {x.short}</small> : null}</b><span className={"dot " + lvl} /></div>
               {x.cur ? <>
                 <div className="ct-v">{num(x.minutes / 60, 1)} <small>h</small></div>
                 <div className="ct-u">pod vodou od výměny</div>
@@ -154,7 +154,7 @@ export function BatteriesScreen({ pos }: { pos?: number }) {
       {!b.head.length && <Card title="Baterie v hlavě"><p className="muted">{b.model.label}: {b.model.note || "bez baterií v hlavě"}</p></Card>}
       {pos && <button className="btn" onClick={() => go({ t: "bats" })}>Zobrazit všechny baterie</button>}
       <Card title="Baterie v hlavě">
-        <p className="note">Rebreather: <b>{b.model.label}</b> (změníš v Nastavení → Moje počítače → Rebreather).{b.model.note ? ` ${b.model.note}` : ""} Napětí baterií v hlavě Petrel ukazuje jen na info obrazovce, do logu ho neukládá – proto se evidují ručně. Z logu jde jen alarm „Porucha solenoidu / baterie v hlavě“, ten označí baterii solenoidu jako podezřelou. Hodiny a ponory od výměny se počítají z logbooku. Limity pro varování nastavíš v Nastavení (0 = vypnuto).</p>
+        <p className="note">Rebreather: <b>{b.model.label}</b> (změníš v DB → Databáze → Můj log → Akce → Rebreather).{b.model.note ? ` ${b.model.note}` : ""} Napětí baterií v hlavě Petrel ukazuje jen na info obrazovce, do logu ho neukládá – proto se evidují ručně. Z logu jde jen alarm „Porucha solenoidu / baterie v hlavě“, ten označí baterii solenoidu jako podezřelou. Hodiny a ponory od výměny se počítají z logbooku. Limity pro varování nastavíš v Nastavení (0 = vypnuto).</p>
       </Card>
     </div>
   );

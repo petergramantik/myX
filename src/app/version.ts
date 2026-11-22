@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42";
+export const APP_VERSION = "1.43-dev.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.43-dev.1", date: "2026-11-22", title: "Můj log, spotřeba ve srovnání, ponor parťáka (dev)", items: [
+    "DB → Databáze: první karta „Můj log“ – jméno (všude místo „Já“), období, počítače s Akcemi (přístroj, rebreather, vysílače, odebrat); Sdílet můj log: Vše nebo Vybrat ponory, malý odkaz na původní export Cloudu.",
+    "Srovnání: spotřeba O₂ a diluentu (bary, s objemem litry a l/min), diluent při sestupu, graf tlaků on-board lahví; objem lahve parťáka jde zadat ve srovnání.",
+    "Ponor z cizího logu v detailu ponoru: tlačítka Porovnat a Otevřít (jeho ponor jen ke čtení, Zpět vrátí k tvému).",
+    "Jednotné názvy On-board / Off-board lahev.",
+  ] },
   { version: "1.42", date: "2026-11-22", title: "Stahování přes Bluetooth, Před a po ponoru, další přístroje", items: [
     "Stažení ponorů přímo z počítače: Petrel 3 přes Bluetooth v Chrome na Androidu, Petrel 2 přes Android aplikaci „myX Petrel“ (Sdílet → myX). Jen čtecí příkazy, každý ponor se uloží hned, po přerušení spojení se myX znovu připojí a naváže, kde ponor přestal; duplicity s exportem Cloudu se poznají.",
     "Cizí počítač: ve výchozím stavu jen poslední ponor, uloží se do DB majitele nebo do nové DB přiřazené buddymu.",

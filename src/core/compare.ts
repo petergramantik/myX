@@ -2,7 +2,7 @@
 import { hasDeco, isCC } from "./rig";
 import { co2Valid } from "./effort";
 import type { Dive } from "./shearwater";
-import { atStop, tpt, dur, setpointChanges, o2Doses, summarize, cellSpread, type SpChange, type CellIssue } from "./analysis";
+import { atStop, tpt, dur, setpointChanges, o2Doses, summarize, cellSpread, pressureUse, dilDescent, type SpChange, type CellIssue } from "./analysis";
 import { co2Plausibility, effortOf } from "./effort";
 
 const amb = (d: Dive, i: number) => (d.h.surfP || 1013) / 1000 + d.s.depth[i] * ((d.h.salinity || 1000) / 1000) * 0.0981;
@@ -19,6 +19,7 @@ export interface DiveStats {
   dil: string; dosesMan: number; dosesSol: number; tempMin: number; btnN: number;
   inert: number; ambInt: number; po2Int: number; // bar·min
   densMax: number; dens52: number; vents: number; co2Bad: boolean; cellIssue: CellIssue;
+  /** spotřeba z tlaku on-board lahví (bar), null = tlak v logu není */ o2Bar: number | null; dilBar: number | null; dilDesc: number | null;
 }
 
 /** Metriky ponoru pro porovnání. Časově vážené průměry přes úseky ponoru (hloubka > 1,5 m). */
@@ -99,6 +100,7 @@ export function diveStats(d: Dive, dev: SpDev = SP_DEV): DiveStats {
     inert: ambI - po2I, ambInt: ambI, po2Int: po2I,
     cc: isCC(d.h), deco: hasDeco(d.h),
     densMax: ef.densMax, dens52: ef.densOver52, vents: ef.vents, co2Bad: co2Plausibility(d)?.ok === false, cellIssue: cellSpread(d)?.kind ?? "",
+    o2Bar: gasBar(d, s.o2p), dilBar: gasBar(d, s.dil), dilDesc: dilDescent(d),
   };
 }
 
@@ -107,7 +109,7 @@ const f1 = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLoc
 const spTxt = (c: SpChange | null) => (c ? `${tpt(c.t)}, ${f1(c.depth)} m` : "nepřepnuto");
 
 /** Porovnávané veličiny: hodnota (číslo pro výpočet rozdílu), text, měřítko „podstatného“ rozdílu a váha. */
-interface Metric { key: string; label: string; /** potřebuje čidla O₂ / výpočet dekomprese */ need?: "cc" | "deco"; v: (s: DiveStats) => number | null; txt: (s: DiveStats) => string; scale: number | ((xs: number[]) => number); w: number; cat?: boolean }
+interface Metric { /** chybějící údaj (–) nevstupuje do rozdílů */ opt?: boolean; key: string; label: string; /** potřebuje čidla O₂ / výpočet dekomprese */ need?: "cc" | "deco"; v: (s: DiveStats) => number | null; txt: (s: DiveStats) => string; scale: number | ((xs: number[]) => number); w: number; cat?: boolean }
 const METRICS: Metric[] = [
   { key: "tts", need: "deco", label: "Max. zbývající deko (TTS)", v: (s) => s.ttsMax, txt: (s) => `${s.ttsMax} min`, scale: 3, w: 1.5 },
   { key: "deco", need: "deco", label: "Na zastávkách", v: (s) => s.decoMin, txt: (s) => `${f1(s.decoMin, 0)} min`, scale: 2, w: 1 },
@@ -136,6 +138,9 @@ const METRICS: Metric[] = [
   { key: "cns", need: "deco", label: "CNS na konci", v: (s) => s.cnsEnd, txt: (s) => `${s.cnsEnd} %`, scale: 5, w: 0.5 },
   { key: "dens", label: "Hustota plynu max", v: (s) => s.densMax, txt: (s) => `${f1(s.densMax)} g/l`, scale: 0.5, w: 0.8 },
   { key: "dens52", label: "Nad 5,2 g/l", v: (s) => s.dens52, txt: (s) => `${f1(s.dens52, 0)} min`, scale: 5, w: 0.6 },
+  { key: "o2use", need: "cc", opt: true, label: "Spotřeba O₂ (tlak)", v: (s) => s.o2Bar, txt: (s) => (s.o2Bar != null ? `${f1(s.o2Bar, 0)} bar` : "–"), scale: 15, w: 0.8 },
+  { key: "diluse", need: "cc", opt: true, label: "Spotřeba diluentu (tlak)", v: (s) => s.dilBar, txt: (s) => (s.dilBar != null ? `${f1(s.dilBar, 0)} bar` : "–"), scale: 15, w: 0.6 },
+  { key: "dildesc", need: "cc", opt: true, label: "Diluent při sestupu", v: (s) => s.dilDesc, txt: (s) => (s.dilDesc != null ? `${f1(s.dilDesc, 0)} bar` : "–"), scale: 8, w: 0.4 },
   { key: "vents", need: "cc", label: "Proplach (doplnění diluentu)", v: (s) => s.vents, txt: (s) => `${s.vents}×`, scale: 3, w: 0.5 },
   { key: "dil", need: "cc", label: "Diluent", v: () => null, txt: (s) => s.dil, scale: 1, w: 2, cat: true },
   { key: "temp", label: "Min. teplota", v: (s) => s.tempMin, txt: (s) => `${s.tempMin} °C`, scale: 2, w: 0.3 },
@@ -143,6 +148,13 @@ const METRICS: Metric[] = [
 ];
 
 export interface MultiRow { key: string; label: string; vals: string[]; weight: number; hi: number; lo: number; muted?: boolean }
+/** Spotřeba z tlaku lahve (bar) – jen když log tlak má. */
+function gasBar(d: Dive, p: (number | null)[]): number | null {
+  if (!p.some((v) => v != null && v > 0)) return null;
+  const u = pressureUse(d.s.t, p, d.s.depth, d.h.diveTimeS);
+  return u.ok ? Math.round(u.bar * 10) / 10 : null;
+}
+
 /** Tabulka rozdílů pro 2 a více potápěčů, seřazená podle rozptylu; hi/lo = index nejvyšší a nejnižší hodnoty. */
 export function multiRows(st: DiveStats[]): MultiRow[] {
   return METRICS.filter((m) => !m.need || st.some((x) => x[m.need!])).map((m) => {
@@ -154,6 +166,7 @@ export function multiRows(st: DiveStats[]): MultiRow[] {
     if (m.cat) return { key: m.key, label: m.label, vals, weight: new Set(vals).size > 1 ? m.w : 0, hi: -1, lo: -1 };
     const xs = st.map(m.v);
     const ok = xs.filter((x): x is number => x != null);
+    if (m.opt && ok.length < xs.length) return { key: m.key, label: m.label, vals, weight: 0, hi: -1, lo: -1, muted: true };
     // chybějící hodnota (např. nepřepnutý SP) proti existující = výrazný rozdíl
     if (ok.length < xs.length) return { key: m.key, label: m.label, vals, weight: ok.length ? 3 * m.w : 0, hi: -1, lo: -1 };
     const scale = typeof m.scale === "function" ? m.scale(ok) : m.scale;

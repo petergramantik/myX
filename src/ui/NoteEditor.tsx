@@ -6,7 +6,7 @@ import { weatherText } from "../app/weather";
 import { PrepCard } from "./Prep";
 import { Card, Chip, Picker, RatingPicker, go, num, useStore } from "./common";
 
-export function NoteEditor({ note, onChange, pos, real, cc }: { note: DiveNote; onChange: (p: Partial<DiveNote>) => void; pos?: { lat?: number; lon?: number }; /** tlaky onboard lahví z počítače (u spárovaného ponoru) */ real?: { dil: number | null; o2: number | null }; cc?: boolean }) {
+export function NoteEditor({ note, onChange, pos, real, cc }: { note: DiveNote; onChange: (p: Partial<DiveNote>) => void; pos?: { lat?: number; lon?: number }; /** tlaky on-board lahví z počítače (u spárovaného ponoru) */ real?: { dil: number | null; o2: number | null }; cc?: boolean }) {
   const st = useStore();
   const lb = st.lb;
   const [text, setText] = useState(note.note);

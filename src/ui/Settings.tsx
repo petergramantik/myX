@@ -8,6 +8,9 @@ import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerNa
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
 import { IS_DEV, copyProdToDev, devCopiedAt } from "../app/db";
+import { lastExport } from "../app/store";
+import { shareDb, shareDives } from "./share";
+import { openDivesPick } from "./Dives";
 import { computerCfg, openTempOwn, ownHidden, ownLb, rigChoices, setAiDil, setComputerRig, typeBreakdown } from "../app/store";
 import type { Rig } from "../core/rig";
 import { Card, KV, fmtDate, go, tab, useBackLayer, useStore } from "./common";
@@ -29,12 +32,13 @@ export function SettingsScreen() {
       </Sec>
 
       <Sec title="Výbava">
-        <label>Diluent – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
-        <label>O₂ – objem onboard lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
+        <label>Diluent – objem on-board lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
+        <label>O₂ – objem on-board lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
         <p className="note">Externí lahve (S80 = 11,1 l, S40 = 5,7 l) se zadávají u ponoru v kartě Spotřeba plynu.</p>
         <label>Spojit záznamy s povrchovým intervalem do (minuty, 0 = vypnuto)<input inputMode="decimal" defaultValue={st.lb.settings.segGap ?? 30} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v >= 0) saveSettings({ segGap: v }); }} /></label>
         <p className="note">Víc záznamů počítače jako jeden ponor (bazén, krátký suchý přechod). Záznamy se stejným číslem ponoru v Shearwater Cloudu se spojují vždy; v detailu ponoru jdou části ručně oddělit nebo spojit.</p>
-        <OwnComputers />
+        <p className="note">Moje počítače (přístroj, rebreather, vysílače) nastavíš v DB → Databáze → Můj log.</p>
+        <button className="btn" onClick={() => tab({ t: "hub", sub: "db" })}>Moje počítače ›</button>
         <AliasCard kind="buddy" id={ME} title="Moje aliasy" />
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
           <input type="date" value={manual ? new Date(manual * 1000).toISOString().slice(0, 10) : ""} onChange={(e) => saveSettings({ manualFill: e.target.value ? Date.parse(e.target.value + "T12:00:00Z") / 1000 : null })} />
@@ -47,7 +51,7 @@ export function SettingsScreen() {
       </Sec>
 
       <Sec title="Sdílení"><ShareInner />
-        <label>Moje jméno ve sdíleném srovnání (místo „Já“)<input defaultValue={st.lb.settings.myName || ""} placeholder="např. Peter" onBlur={(e) => saveSettings({ myName: e.target.value.trim() || undefined })} /></label>
+        <p className="note">Své jméno a sdílení svého logu najdeš v DB → Databáze → Můj log.</p>
       </Sec>
 
       <Sec title="Upozornění">
@@ -134,25 +138,56 @@ export function SettingsScreen() {
   );
 }
 
-/** Moje počítače (víc po výměně počítače); odebrání vrátí ponory zpět mimo můj logbook. */
-function OwnComputers() {
-  useStore();
+/** Můj log v DB: jméno, období, počítače s akcemi a sdílení – stejné rozložení jako karty logů ostatních. */
+export function MyLogCard() {
+  const st = useStore();
   const cs = ownComputers();
-  if (!cs.length) return null;
+  const [actFor, setActFor] = useState<string | null>(null);
+  useBackLayer(actFor != null, () => setActFor(null));
+  const [common, setCommon] = useState(0);
+  const [last, setLast] = useState<Awaited<ReturnType<typeof lastExport>>>();
+  useEffect(() => { lastExport().then(setLast); }, []);
+  useEffect(() => { guestIndexLoad().then((ix) => setCommon(ownMetas().filter((m) => ix.some((g) => nearestPair(g.metas, m).length)).length)); }, [st.metas.length, st.guestRev]);
+  if (st.guest) return null;
+  const all = [...ownMetas(), ...ownHidden()];
+  const from = all.length ? Math.min(...all.map((m) => m.start)) : 0, to = all.length ? Math.max(...all.map((m) => m.start)) : 0;
+  const share = async () => {
+    const k = await choose("Sdílet můj log", [
+      { key: "all", label: `Vše (${all.length} ponorů)`, note: "všechny ponory z myX včetně stažených přes Bluetooth, s lokalitami a parťáky", primary: true },
+      { key: "pick", label: "Vybrat ponory", note: "seznam ponorů ve výběru" },
+    ]);
+    if (k === "all") await shareDives(all);
+    else if (k === "pick") openDivesPick();
+  };
   return (
-    <div className="own-comps">
-      <h3 className="subh">Moje počítače</h3>
-      {cs.map((c) => (
-        <div key={c.serial} className="row between">
-          <span className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)} · přístroj {rigLabel(parseInt(c.serial, 16))}</span>
-          <button className="btn small" onClick={() => editRig(parseInt(c.serial, 16), majorityMode([...ownMetas(), ...ownHidden()].filter((m) => m.h.serial === parseInt(c.serial, 16))))}>Přístroj</button>
-          <button className="btn small" onClick={() => editCcr(parseInt(c.serial, 16))}>Rebreather: {ccrModel(computerCfg(parseInt(c.serial, 16))?.ccr).label}</button>
-          {aiUnnamed(parseInt(c.serial, 16)) && <button className="btn small" onClick={() => editAi(parseInt(c.serial, 16))}>Vysílače: {aiLabel(parseInt(c.serial, 16))}</button>}
-          {cs.length > 1 && <button className="btn small" onClick={async () => { if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako cizí log a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
-        </div>
-      ))}
-      <p className="note">Další svůj počítač přidáš v DB → Databáze u jeho logu volbou „To je můj počítač“, nebo při prvním importu.</p>
-    </div>
+    <section className="card logtile mine">
+      <div className="lt-h"><b>Můj log</b><span className="pill info">můj</span></div>
+      <label className="lt-name">Moje jméno (místo „Já“)<input defaultValue={st.lb.settings.myName || ""} placeholder="např. Peter" onBlur={(e) => saveSettings({ myName: e.target.value.trim() || undefined })} /></label>
+      <div className="small muted">{all.length} ponorů{all.length ? ` · ${fmtDate(from)} – ${fmtDate(to)}` : ""} · {common} společných s ostatními</div>
+      {cs.map((c) => {
+        const ser = parseInt(c.serial, 16), ms = all.filter((m) => m.h.serial === ser), tb = typeBreakdown(ms);
+        return (
+          <div key={c.serial} className="lt-comp">
+            <div className="lt-comp-h">
+              <div className="small">{c.model} {c.serial} · {c.count} ponorů · {fmtDate(c.from)} – {fmtDate(c.to)}</div>
+              {tb.text && <div className="small muted">{tb.text} · přístroj {rigLabel(ser)} · {ccrModel(computerCfg(ser)?.ccr).label}</div>}
+              <button className={"btn small act" + (actFor === c.serial ? " on" : "")} onClick={() => setActFor(actFor === c.serial ? null : c.serial)}>Akce ▾</button>
+            </div>
+            {actFor === c.serial && <div className="actmenu">
+              <button onClick={() => { setActFor(null); editRig(ser, majorityMode(ms)); }}>Přístroj: {rigLabel(ser)}</button>
+              <button onClick={() => { setActFor(null); editCcr(ser); }}>Rebreather: {ccrModel(computerCfg(ser)?.ccr).label}</button>
+              {aiUnnamed(ser) && <button onClick={() => { setActFor(null); editAi(ser); }}>Vysílače: {aiLabel(ser)}</button>}
+              {cs.length > 1 && <button className="danger" onClick={async () => { setActFor(null); if (await ask(`Odebrat počítač ${c.serial} z tvých? Jeho ${c.count} ponorů se smaže z tvého logbooku (i s poznámkami). Znovu ho můžeš načíst jako cizí log a přidat přes „To je můj počítač“.`)) toast(`Odebráno ponorů: ${await removeOwnComputer(c.serial)}`); }}>Odebrat</button>}
+            </div>}
+          </div>
+        );
+      })}
+      <div className="row">
+        <button className="btn primary" disabled={!all.length} onClick={share}>Sdílet můj log</button>
+      </div>
+      {last && <p className="note"><a onClick={() => shareDb(last.data, last.name, "Můj log")}>Poslat původní export Cloudu</a> (pro Shearwater Cloud; import {new Date(last.at).toLocaleDateString("cs-CZ")}, {last.count} ponorů)</p>}
+      <p className="note">Další svůj počítač přidáš u jeho logu níže volbou „To je můj počítač“, nebo při prvním importu.</p>
+    </section>
   );
 }
 
@@ -259,7 +294,7 @@ export function GuestCard() {
                   {multi && k > 0 && l.serial && <button onClick={() => { setActFor(null); setPrimaryComputer(l.serial!); }}>Nastavit jako hlavní</button>}
                   <button onClick={async () => {
                     setActFor(null);
-                    if (!await ask(`Počítač ${compLabel(l)} je tvůj (např. po výměně počítače)?\n\nJeho ${g.counts[l.id]} ponorů se přesune k tvým ponorům, převezmou se lokality a parťáci z jeho Cloudu a cizí log zmizí. Odebrat ho jde později v Nastavení → Výbava.`)) return;
+                    if (!await ask(`Počítač ${compLabel(l)} je tvůj (např. po výměně počítače)?\n\nJeho ${g.counts[l.id]} ponorů se přesune k tvým ponorům, převezmou se lokality a parťáci z jeho Cloudu a cizí log zmizí. Odebrat ho jde později v DB → Můj log → Akce.`)) return;
                     setMoving(l.id);
                     try { toast(`Přesunuto k tvým ponorům: ${await adoptGuestAsOwn(l)}`); } catch (e) { toast((e as Error).message); }
                     finally { setMoving(null); }

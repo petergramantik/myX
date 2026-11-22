@@ -279,7 +279,7 @@ export function typeBreakdown(metas: Meta[], lb: Logbook = ownLb()): { text: str
 function informTypes(metas: Meta[], model?: string) {
   const sers = [...new Set(metas.map((m) => m.h.serial))];
   const parts = sers.map((ser) => `${model || modelFor(ser)}: ${typeBreakdown(metas.filter((m) => m.h.serial === ser)).text}`);
-  if (parts.length) setTimeout(() => toast(`${parts.join(" · ")}. Typ přístroje změníš v Nastavení u počítače nebo u ponoru.`), 4000); // po hlášce o importu
+  if (parts.length) setTimeout(() => toast(`${parts.join(" · ")}. Typ přístroje změníš v DB u počítače (Akce) nebo u ponoru.`), 4000); // po hlášce o importu
 }
 
 /** Název počítače pro zobrazení: model, u dvou stejných modelů pořadí („Petrel 2 (druhý)“). */
@@ -554,7 +554,7 @@ function withAliases(g: Logbook, mine: Logbook): Logbook {
     Object.fromEntries(Object.entries(items).map(([k, v]) => {
       const a = mine.aliases?.[aliasKey(kind, v.name)];
       // orig = jméno, jak ho má zapsané majitel logu (pro B&L cizího logu)
-      if (a?.targetId === ME) return [k, { ...v, name: "Já", orig: v.name }];
+      if (a?.targetId === ME) return [k, { ...v, name: mine.settings.myName || "Já", orig: v.name }];
       const t = a ? my[a.targetId] : undefined;
       return [k, t ? { ...v, name: t.name, orig: v.name } : v];
     }));
@@ -1031,6 +1031,17 @@ export function closeTempOwn() {
   set({ temp: null, lb: tempSaved.lb }); set({ metas: tempSaved.metas, hidden: tempSaved.hidden });
   tempSaved = null;
   db.setMemOnly(false);
+}
+/** Ponor parťáka otevřený z detailu mého ponoru: Zpět na můj ponor cizí log zase zavře. */
+let peek: { mine: string; guest: string } | null = null;
+export async function openBuddyDive(log: GuestLog, mineId: string, guestId: string) {
+  await openGuest(log);
+  if (st.guest) peek = { mine: mineId, guest: guestId };
+}
+/** Volá navigace před návratem zpět: z ponoru parťáka na můj ponor → zavřít cizí log. */
+export function peekPop(from: { t: string; id?: string }, to: { t: string; id?: string }) {
+  if (!peek || !st.guest) { peek = null; return; }
+  if (to?.t === "dive" && to.id === peek.mine) { peek = null; closeGuest(); }
 }
 export function closeGuest() {
   if (!own) return;

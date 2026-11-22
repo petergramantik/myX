@@ -15,7 +15,7 @@ export interface Summary {
 
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
 
-/** Spotřeba z vlastní lahve odvozená z průběhu tlaku. */
+/** Spotřeba z on-board lahve odvozená z průběhu tlaku. */
 export interface GasUse {
   ok: boolean;            // tlak lahve je k dispozici (ne jen mezitlak)
   start: number | null; end: number | null;
@@ -33,13 +33,13 @@ export function pressureUse(t: number[], p: (number | null)[], depth: number[], 
   return pressureAnalysis(t, p, diveS).use;
 }
 
-/** Zavření / otevření onboard lahve během ponoru (prudký pád na mezitlak externí lahve a zpět). */
+/** Zavření / otevření on-board lahve během ponoru (prudký pád na mezitlak externí lahve a zpět). */
 export interface ValveEvent { t: number; kind: "close" | "open"; from: number; to: number }
 
 /**
- * Rozbor tlaku lahve: spotřeba jen z postupného poklesu v době, kdy byla onboard lahev otevřená.
+ * Rozbor tlaku lahve: spotřeba jen z postupného poklesu v době, kdy byla on-board lahev otevřená.
  * Prudké změny (> 15 bar/min) jsou zavření / otevření ventilu nebo odvzdušnění, ne spotřeba.
- * Hodnoty pod 20 bar = mezitlak externí lahve (onboard zavřená).
+ * Hodnoty pod 20 bar = mezitlak externí lahve (on-board zavřená).
  */
 export function pressureAnalysis(t: number[], p: (number | null)[], diveS: number): { use: GasUse; valve: ValveEvent[]; dips: number[] } {
   // 0 = vysílač zatím neposlal údaj (po zapnutí) – vynechat
@@ -86,7 +86,7 @@ export function pressureAnalysis(t: number[], p: (number | null)[], diveS: numbe
   sm.forEach((v, k) => {
     if (v == null) { if (raw[k] < MIN_BAR) { extIdx.push(k); if (ref != null) closedAt = ref; ref = null; } else if (jump[k] < 0 && ref != null) closedAt = ref; return; }
     if (ref == null) {
-      // znovuotevření onboard lahve: tlak se vrátí k poslední hodnotě – nic se nepočítá
+      // znovuotevření on-board lahve: tlak se vrátí k poslední hodnotě – nic se nepočítá
       if (closedAt != null && v - closedAt > EXT_RISE + 5) { rise += v - closedAt; extIdx.push(k); }
       ref = v; closedAt = null; return;
     }
@@ -604,7 +604,7 @@ export function resolutionSteps(d: Dive, from: number, to: number | null, kind: 
     else if (kind === "po2low") out.push({ t: x.t, x: `vstřik solenoidu (+${nf(x.rise)} bar) (P)` });
   }
   if (acts && kind !== "cell") for (const t of dilVents(d)) if (inW(t)) out.push({ t, x: "doplnění diluentu (ADV, proplach) (P)" });
-  if (acts && kind !== "cell") for (const [arr, g] of [[s.o2p, "O₂"], [s.dil, "diluent"]] as const) for (const v of pressureAnalysis(s.t, arr, d.h.diveTimeS).valve) if (inW(v.t)) out.push({ t: v.t, x: `onboard ${g} ${v.kind === "open" ? "otevřena" : "zavřena – přechod na externí"} (${v.from} → ${v.to} bar)` });
+  if (acts && kind !== "cell") for (const [arr, g] of [[s.o2p, "O₂"], [s.dil, "diluent"]] as const) for (const v of pressureAnalysis(s.t, arr, d.h.diveTimeS).valve) if (inW(v.t)) out.push({ t: v.t, x: `on-board ${g} ${v.kind === "open" ? "otevřena" : "zavřena – přechod na externí"} (${v.from} → ${v.to} bar)` });
   if (acts) for (let i = 1; i < s.t.length; i++) if (inW(s.t[i]) && s.sp[i - 1] >= 0.3 && s.sp[i] < 0.05 && s.depth[i] > 2) { out.push({ t: s.t[i], x: "přechod na OC (P)" }); break; }
   if (!alarmKind && to != null && to < d.h.diveTimeS && Math.abs(to - acked) > 2) {
     const i = at(to);
@@ -783,13 +783,13 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
     const before = Math.max(0, ...(arr.filter((x, k) => x != null && d.s.t[k] >= w.start - 180 && d.s.t[k] <= w.start) as number[]));
     const now = med(w.start - 5, w.start + 15);
     if (now != null && now >= 3 && now < 20 && !(settled != null && settled < 3)) {
-      // v okamžiku varování byl v okruhu mezitlak – externí lahev nebo zavřená onboard lahev
-      out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(now)} bar je mezitlak externí lahve (onboard zavřená)${settled != null && settled >= 20 ? `, později ${Math.round(settled)} bar – onboard otevřena` : ""}.` });
+      // v okamžiku varování byl v okruhu mezitlak – externí lahev nebo zavřená on-board lahev
+      out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(now)} bar je mezitlak externí lahve (on-board zavřená)${settled != null && settled >= 20 ? `, později ${Math.round(settled)} bar – on-board otevřena` : ""}.` });
     } else if (settled != null && settled >= 3 && settled < 20) {
       if (before >= 50) out.push({ level: "info", title: `Přechod na externí lahev (${gas})`, text: `V ${tpt(w.start)} (${Math.round(before)} → ${Math.round(settled)} bar), varování ${ackTxt(w)}.` });
       else out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(settled)} bar je mezitlak externí lahve – očekávané.` });
     } else if (settled != null && settled < 3) out.push({ level: "warn", title: `Nízký tlak ${gas} (0 bar)`, text: withSteps(`Varování v ${mmss(w.start)} – tlak spadl k nule a neustálil se na mezitlaku externí lahve. Zdroj odpojený nebo prázdný? ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
-    else out.push({ level: "warn", title: `Nízký tlak ${gas}${settled != null ? ` (${Math.round(settled)} bar)` : ""}`, text: withSteps(`Onboard lahev – varování v ${tpt(w.start)} (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
+    else out.push({ level: "warn", title: `Nízký tlak ${gas}${settled != null ? ` (${Math.round(settled)} bar)` : ""}`, text: withSteps(`On-board lahev – varování v ${tpt(w.start)} (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
   }
   const outW = cws.find((w) => w.kind === "cellout"), outA = d.alarms.find((a) => a.label.startsWith("Vyřazené čidlo"));
   if (cc && (outW || outA)) {

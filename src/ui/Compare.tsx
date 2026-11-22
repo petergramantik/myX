@@ -3,9 +3,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { setpointChanges } from "../core/analysis";
 import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag, type MultiRow } from "../core/compare";
-import { buddyDivesFor, guestIndexLoad, lastExport, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, saveSettings, toast } from "../app/store";
-import { GuestCard } from "./Settings";
-import { shareDb } from "./share";
+import { buddyDivesFor, openBuddyDive, guestIndexLoad, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, saveSettings, toast } from "../app/store";
+import { GuestCard, MyLogCard } from "./Settings";
+import { gasUseOf } from "./Dives";
 import { dur } from "../core/analysis";
 import { askText } from "../app/dialog";
 import { compareHtml, shareHtml } from "./cmpExport";
@@ -24,9 +24,12 @@ export function BuddyDivesCard({ meta }: { meta: Meta }) {
   return (
     <Card title={list.length > 1 ? "Ponory ostatních" : "Ponor z cizího logu"} right={list.length > 1 ? <a onClick={() => go({ t: "cmp", id: meta.id, other: list.map((x) => x.meta.id).join(",") })}>Srovnat všechny ›</a> : undefined}>
       {list.map((x) => (
-        <div key={x.meta.id} className="kvline link" onClick={() => go({ t: "cmp", id: meta.id, other: x.meta.id })}>
+        <div key={x.meta.id} className="buddy-dive">
           <span><b>{x.owner || x.log.model || "Cizí log"}</b> · začátek {fmtDateTime(x.meta.start).split(" ").pop()} · {Math.round(x.meta.h.diveTimeS / 60)} min · {x.meta.h.maxDepth.toLocaleString("cs-CZ")} m</span>
-          <span className="muted">Porovnat ›</span>
+          <div className="row">
+            <button className="btn small primary" onClick={() => go({ t: "cmp", id: meta.id, other: x.meta.id })}>Porovnat</button>
+            <button className="btn small" onClick={async () => { await openBuddyDive(x.log, meta.id, x.meta.id); go({ t: "dive", id: x.meta.id }); }}>Otevřít</button>
+          </div>
         </div>
       ))}
     </Card>
@@ -68,7 +71,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
         const m = [...g.metas, ...g.alts].find((q) => q.id === x);
         return (ownerName(g.log) || g.log.model || "parťák") + (same && m?.comp ? ` (${m.comp})` : "");
       };
-      setNames([st0.guest ? nm(id) || "parťák" : "Já", ...ids.map((x) => nm(x) || "parťák")]);
+      setNames([st0.guest ? nm(id) || "parťák" : st0.lb.settings.myName || "Já", ...ids.map((x) => nm(x) || "parťák")]);
       setTwoComp(same);
     });
   }, [id, other]);
@@ -152,6 +155,11 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
         <LineChart t={T} series={ser(inertCum, "", "bar·min")} />
         <p className="note">∫ (okolní tlak − pO₂) dt – čím vyšší, tím víc inertního plynu a delší dekomprese.</p>
       </Card>
+      {S.some((x) => x.o2Bar != null || x.dilBar != null) && <GasCompare D={D} N={N} C={C} S={S} mine={!st0.guest && sel[0] === 0 ? 0 : -1} mineId={id} />}
+      {D.some((d) => d.s.o2p.some((v) => v != null && v > 0) || d.s.dil.some((v) => v != null && v > 0)) && <Card title="Tlak on-board lahví">
+        <LineChart t={T} series={[...ser((d) => d.s.o2p, "O₂", "bar"), ...ser((d) => d.s.dil, "Diluent", "bar", "4 3", 1.5)]} />
+        <p className="note">Plná čára O₂, čárkovaně diluent. Tlak z DiveCAN nebo z vysílačů.</p>
+      </Card>}
       {hasCo2 && <Card title="CO₂"><LineChart t={T} series={ser((d) => d.s.co2, "CO₂", "mbar")} /></Card>}
       <Card title="Rozdíly (od největšího)">
         {D.length > 2 && <p className="note cmp-legend"><span className="hi">▲ nejvyšší</span> <span className="lo">▼ nejnižší</span> hodnota u výrazných rozdílů</p>}
@@ -165,6 +173,47 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
         </div>
       </Card>
     </div>
+  );
+}
+
+/** Spotřeba plynu potápěčů: bary z logu, litry a l/min s objemem lahve (můj z Nastavení, parťáka zadaný tady). */
+function GasCompare({ D, N, C, S, mine, mineId }: { D: Dive[]; N: string[]; C: string[]; S: ReturnType<typeof diveStats>[]; mine: number; mineId: string }) {
+  const st = useStore();
+  const meta = mine >= 0 ? st.metas.find((m) => m.id === mineId) : undefined;
+  // můj ponor: skutečná spotřeba včetně off-board lahví ze sekce Před a po ponoru
+  const real = (g: "o2" | "dil") => (meta ? gasUseOf(g, meta, st.lb.notes[mineId], st.lb.settings.cyl?.[g] ?? 3) : null);
+  const hex = (d: Dive) => d.h.serial.toString(16).toUpperCase();
+  const volOf = (k: number, g: "o2" | "dil"): number | null => k === mine ? (st.lb.settings.cyl?.[g] ?? 3) : st.lb.settings.cylOf?.[hex(D[k])]?.[g] ?? null;
+  const setVol = (k: number, g: "o2" | "dil", v: string) => {
+    const x = parseFloat(v.replace(",", ".")), cur = { ...(st.lb.settings.cylOf || {}) }, h = hex(D[k]);
+    cur[h] = { ...(cur[h] || {}), [g]: x > 0 ? x : undefined };
+    saveSettings({ cylOf: cur });
+  };
+  const n1 = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 1 });
+  const cell = (k: number, g: "o2" | "dil") => {
+    const bar = g === "o2" ? S[k].o2Bar : S[k].dilBar, vol = volOf(k, g);
+    const r = k === mine ? real(g) : null, min = D[k].h.diveTimeS / 60;
+    if (r && r.extL > 0 && r.total != null) return <td><b>{Math.round(r.total)} l</b><br /><small>{bar != null ? `on-board ${n1(bar)} bar + ` : ""}off-board {Math.round(r.extL)} l{g === "o2" ? ` · ${n1(r.total / min)} l/min` : ""} · skutečná</small></td>;
+    if (bar == null) return <td className="muted">–</td>;
+    const l = vol ? bar * vol : null;
+    return <td><b>{n1(bar)} bar</b>{l != null && <><br /><small>{Math.round(l)} l{g === "o2" ? ` · ${n1(l / (D[k].h.diveTimeS / 60))} l/min` : ""}</small></>}</td>;
+  };
+  return (
+    <Card title="Spotřeba plynu">
+      <table className="kv"><thead><tr><th></th><th>O₂</th><th>Diluent</th><th>sestup</th></tr></thead>
+        <tbody>{D.map((d, k) => (
+          <tr key={k}><td style={{ color: C[k] }}>{N[k]}</td>{cell(k, "o2")}{cell(k, "dil")}<td>{S[k].dilDesc != null ? `${n1(S[k].dilDesc!)} bar` : "–"}</td></tr>
+        ))}</tbody>
+      </table>
+      {D.map((d, k) => k === mine ? null : (
+        <div key={k} className="volrow small">
+          <span style={{ color: C[k] }}>{N[k]}</span><span>objem O₂</span>
+          <input className="num-s" inputMode="decimal" defaultValue={volOf(k, "o2") ?? ""} placeholder="l" onBlur={(e) => setVol(k, "o2", e.target.value)} /><span>diluent</span>
+          <input className="num-s" inputMode="decimal" defaultValue={volOf(k, "dil") ?? ""} placeholder="l" onBlur={(e) => setVol(k, "dil", e.target.value)} /><span>l</span>
+        </div>
+      ))}
+      <p className="note">Spotřeba z poklesu tlaku on-board lahví v logu (bez úseků s externím plynem). Litry = bary × objem lahve; tvůj objem je z Nastavení → Výbava, u parťáka ho zadej – zapamatuje se pro jeho počítač. U tvého ponoru se započítají i off-board lahve z „Před a po ponoru“ (skutečná spotřeba). Spotřeba O₂ v l/min nezávisí na hloubce, porovnává zátěž (metabolismus). „sestup“ = diluent doplněný při sestupu.</p>
+    </Card>
   );
 }
 
@@ -203,7 +252,7 @@ export function CompareHub({ sub = "cmp", who }: { sub?: "cmp" | "db"; who?: str
         <button className={sub === "cmp" ? "on" : ""} onClick={() => tab({ t: "hub", sub: "cmp" })}>Srovnání</button>
         <button className={sub === "db" ? "on" : ""} onClick={() => tab({ t: "hub", sub: "db" })}>Databáze</button>
       </div>
-      {sub === "db" ? <><GuestCard /><ShareMine /></>
+      {sub === "db" ? <><MyLogCard /><GuestCard /></>
         : st.guest ? <p className="muted">Zavři prohlížený cizí log – společné ponory se hledají k tvým ponorům.</p>
         : <CommonList who={who} />}
     </div>
@@ -274,17 +323,3 @@ export function CommonRow({ r }: { r: Common }) {
   );
 }
 
-/** Sdílení mého logu: původní export Shearwater Cloud z posledního importu. */
-function ShareMine() {
-  const [last, setLast] = useState<Awaited<ReturnType<typeof lastExport>>>();
-  useEffect(() => { lastExport().then(setLast); }, []);
-  const share = async () => { if (last) await shareDb(last.data, last.name, "Můj log"); };
-  return (
-    <Card title="Sdílet můj log">
-      {last ? <>
-        <button className="btn primary" onClick={share}>Sdílet můj log</button>
-        <p className="note">Původní export Shearwater Cloud z posledního importu ({new Date(last.at).toLocaleDateString("cs-CZ")}, {last.count} ponorů). Parťák ho otevře v myX i ve Shearwater Cloud. Lokality a poznámky z myX v něm nejsou.</p>
-      </> : <p className="muted">Zatím tu není žádný import. Po příštím načtení exportu ze Shearwater Cloud půjde sdílet.</p>}
-    </Card>
-  );
-}
