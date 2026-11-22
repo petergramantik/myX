@@ -236,19 +236,29 @@ class MainActivity : Activity() {
                 fun tryRead(name: String, addr: Long, size: Int, comp: Boolean): Boolean {
                     if (stop || out.size() > 0) return out.size() > 0
                     return try {
-                        val c = sw.download(base + addr, size, comp) { b -> setStatus("$name: ${b / 1024} kB") }
+                        val c = sw.download(base + addr, size, comp) { b -> setStatus("$name: ${b / 1024} kB"); if (b > len * 2 + 65536) throw java.io.IOException("úsek delší než čekáno – ukončeno na $b B") }
                         add("$name: OK, ${c.size} B")
                         if (c.isNotEmpty()) { out.write(c); mode = name }
                         c.isNotEmpty()
                     } catch (x: Exception) { add("$name: ${x.message}"); false }
                 }
-                tryRead("úsek bez komprese", from, minOf(len, 0x8000), false)
-                tryRead("úsek s kompresí", from, len, true)
-                // kontrola, zda nekomprimované čtení jde aspoň od začátku ponoru (pro navazování stahování)
-                if (out.size() == 0) {
-                    try { val c = sw.download(base + last.addr, 0x600, false); add("začátek ponoru bez komprese: OK, ${c.size} B, ${Shearwater.hex(c.copyOfRange(0, minOf(64, c.size)))}") } catch (x: Exception) { add("začátek ponoru bez komprese: ${x.message}") }
-                    tryRead("32 kB před ponorem s kompresí", last.addr - 0x8000, 0x8000, true)
+                // test, co Petrel povolí (odpověď 7f 35 31 = mimo rozsah): adresa × velikost × komprese
+                val D = Shearwater.DIVE_SIZE
+                fun probe(name: String, addr: Long, size: Int, comp: Boolean) {
+                    if (stop) return
+                    try {
+                        var n = 0
+                        sw.download(base + addr, size, comp) { b -> n = b; if (b > 4096) throw java.io.IOException("stačí (${b} B)") }
+                        add("$name: OK celé ($n B)")
+                    } catch (x: Exception) { add("$name: ${x.message}") }
                 }
+                probe("A ponor+komprese+0x8000", last.addr, 0x8000, true)
+                probe("B ponor+bez komprese+0xFFFFFF", last.addr, D, false)
+                probe("C úsek+komprese+0xFFFFFF", from, D, true)
+                probe("D úsek+bez komprese+0xFFFFFF", from, D, false)
+                probe("E předposlední ponor+komprese+0xFFFFFF", prev.addr, D, true)
+                // úsek celý, když C prošlo: s kompresí až do konce proudu (nejvýš délka úseku × 2)
+                tryRead("úsek s kompresí (celý)", from, D, true)
                 if (out.size() > 0 && mode == "úsek bez komprese" && len > 0x8000) {
                     var off = out.size()
                     while (off < len && !stop) {
