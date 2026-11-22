@@ -1205,13 +1205,14 @@ export async function saveSettings(p: Partial<Logbook["settings"]>) {
 }
 
 // ---------- poloha
-export function locate(): Promise<Pos | null> {
+/** Zjistí polohu; fresh = nepoužít polohu uloženou v telefonu z posledních 2 min. */
+export function locate(fresh = false): Promise<Pos | null> {
   return new Promise((res) => {
     if (!navigator.geolocation) { set({ posErr: "Telefon neposkytuje polohu" }); return res(null); }
     navigator.geolocation.getCurrentPosition(
       (p) => { const pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, at: Date.now() }; set({ pos, posErr: null }); followDrafts(pos); res(pos); },
       (e) => { set({ posErr: e.code === 1 ? "Přístup k poloze není povolený" : "Polohu se nepodařilo zjistit" }); res(null); },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 120000 },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: fresh ? 0 : 120000 },
     );
   });
 }

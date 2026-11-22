@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.14";
+export const APP_VERSION = "1.42-dev.15";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.15", date: "2026-11-22", title: "Tlačítko ＋ a rozpracovaný ponor (dev)", items: [
+    "Horní ＋ při existujícím rozpracovaném ponoru (posledních 48 h): 1. stisk aktualizuje jeho polohu a počasí (📍), další ho otevře (E). Nový ponor pak jen tlačítkem Nový ponor na Přehledu.",
+    "Ruční aktualizace polohy bere vždy čerstvou polohu z GPS.",
+  ] },
   { version: "1.42-dev.14", date: "2026-11-22", title: "Poloha a počasí rozpracovaného ponoru (dev)", items: [
     "Rozpracovaný ponor přesune polohu na místo, kde myX otevřeš (se zvolenou lokalitou až u ní); tlačítko „Aktualizovat polohu a počasí“.",
     "Po spárování s logem se počasí načte pro čas začátku ponoru na lokalitě – ne z doby přípravy.",

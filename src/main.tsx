@@ -13,7 +13,7 @@ import { AboutScreen, SettingsScreen } from "./ui/Settings";
 import { DraftScreen } from "./ui/Draft";
 import { CellsScreen } from "./ui/Cells";
 import { BatteriesScreen } from "./ui/Batteries";
-import { closeGuest, closeTempOwn, openTempOwn, createDraft, guestIndexLoad, logName, myDisplayName, openGuest, ownerName, type GuestLog } from "./app/store";
+import { closeGuest, closeTempOwn, openTempOwn, createDraft, localNow, moveDraft, guestIndexLoad, logName, myDisplayName, openGuest, ownerName, type GuestLog } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
 import { Co2Screen } from "./ui/Cells";
 import { CompareHub, CompareScreen } from "./ui/Compare";
@@ -135,6 +135,7 @@ function App() {
     });
   }, []);
   const [busy, setBusy] = useState(false);
+  const [movedAt, setMovedAt] = useState<Record<string, number>>({});
   const w = useWarnings();
   const [anim, setAnim] = useState("");
   const touch = useRef<{ x: number; y: number } | null>(null);
@@ -148,7 +149,18 @@ function App() {
     if (dx > 0 && s.t === "home") { setAnim("from-left"); go({ t: "warn" }); }
     else if (dx < 0 && s.t === "warn") { setAnim("from-right"); back(); }
   };
-  const newDive = async () => { if (busy) return; setBusy(true); try { const id = await createDraft(); go({ t: "draft", id }); } finally { setBusy(false); } };
+  // horní ＋: bez rozpracovaného ponoru založí nový; jinak 1. stisk aktualizuje polohu posledního rozpracovaného (📍), další ho otevře (E)
+  const active = Object.values(st.lb.drafts).filter((d) => !d.diveId && localNow() - d.created <= 48 * 3600).sort((a, b) => b.created - a.created)[0];
+  const moved = active && movedAt[active.id] && Date.now() - movedAt[active.id] < 30 * 60000;
+  const newDive = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (!active) { const id = await createDraft(); go({ t: "draft", id }); }
+      else if (!moved) { const p = await locate(true); if (p) { await moveDraft(active.id, p); toast("Poloha a počasí rozpracovaného ponoru aktualizovány"); } else toast("Polohu se nepodařilo zjistit"); setMovedAt({ ...movedAt, [active.id]: Date.now() }); }
+      else go({ t: "draft", id: active.id });
+    } finally { setBusy(false); }
+  };
   return (
     <div className="app">
       <DialogHost />
@@ -160,7 +172,9 @@ function App() {
         <button className={"warnbtn " + (w.worst || "none")} onClick={() => (s.t === "warn" ? back() : (setAnim("from-left"), go({ t: "warn" })))} aria-label="Varování">
           ⚠{w.count > 0 && <span>{w.count}</span>}
         </button>
-        {!st.guest && <button className={"plus" + (busy ? " busy" : "")} onClick={newDive} aria-label="Nový ponor">＋</button>}
+        {!st.guest && <button className={"plus" + (busy ? " busy" : "")} onClick={newDive} aria-label={!active ? "Nový ponor" : moved ? "Upravit rozpracovaný ponor" : "Aktualizovat polohu rozpracovaného ponoru"}>
+          ＋{active && <span className="plus-badge">{moved ? "E" : "📍"}</span>}
+        </button>}
       </header>
       {st.temp && !st.guest && (
         <div className="guestbar tempbar">

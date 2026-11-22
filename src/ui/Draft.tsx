@@ -12,7 +12,7 @@ export function DraftScreen({ id }: { id: string }) {
   return (
     <div className="screen">
       <p className="muted center">Založeno {fmtDateTime(dr.created)}{dr.lat != null ? ` · poloha ${dr.lat.toFixed(4)}, ${dr.lon!.toFixed(4)}` : " · bez polohy"}</p>
-      <div className="center"><button className="btn small" onClick={async () => { const p = await locate(); if (p) { await moveDraft(id, p); toast("Poloha a počasí aktualizovány"); } else toast("Polohu se nepodařilo zjistit"); }}>Aktualizovat polohu a počasí</button></div>
+      <div className="center"><button className="btn small" onClick={async () => { const p = await locate(true); if (p) { await moveDraft(id, p); toast("Poloha a počasí aktualizovány"); } else toast("Polohu se nepodařilo zjistit"); }}>Aktualizovat polohu a počasí</button></div>
       <NoteEditor note={dr} pos={{ lat: dr.lat, lon: dr.lon }} onChange={(p) => updateDraft(id, p)} />
       <Card title="Data z počítače">
         {cands.length === 0 && sameDay.length === 0 && <p className="muted">Po importu logu se ponor spáruje automaticky podle času (začátek ponoru 3 h před až 48 h po založení; když se najde víc ponorů, vybereš sám).</p>}
