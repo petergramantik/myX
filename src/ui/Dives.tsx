@@ -526,7 +526,7 @@ function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined, vol
  * bailouty se stejným plynem jako diluent se počítají do diluentu jen při zjištěném externím diluentu.
  */
 function prepExt(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined): ExtGas[] {
-  const tanks = (note?.prep?.tanks || []).filter((t) => t.bar != null && t.end != null && tankVol(t));
+  const tanks = (note?.prep?.tanks || []).map((t) => (t.same ? { ...t, end: t.bar } : t)).filter((t) => t.bar != null && t.end != null && tankVol(t));
   const dilMix = meta.sum.gases.map((g) => g.mix).find((m) => m !== "100/0");
   const pick = tanks.filter((t) => gas === "o2" ? t.role === "o2" : t.role === "dil" || (t.role === "bo" && extDetected(meta.sum.dilUse) && (tankMix(t.gas) ?? dilMix) === dilMix));
   return pick.map((t) => ({ id: t.id, gas, kind: t.name, vol: tankVol(t)!, start: t.bar, end: t.end }));
@@ -552,7 +552,8 @@ function UseVal({ gas, meta, note }: { gas: "dil" | "o2"; meta: Meta; note?: Div
   if (g.total != null) {
     // velkým písmem bary (vlastní lahev + offboard), malým spotřeba v litrech
     const bars = [g.u.ok && !g.u.noisy && g.ownL ? `${g.u.bar} bar` : "", ...g.ext.filter((e) => e.start != null && e.end != null).map((e) => `${Math.max(0, e.start! - e.end!)} bar ${e.kind}`)].filter(Boolean);
-    return <span className="use">{bars.length ? bars.join(" + ") : fmtL(g.total)}<small>{fmtL(g.total)} · {num(g.total / g.min, 1)} l/min</small></span>;
+    const tk = note?.prep?.tanks || [], full = tk.length > 0 && tk.every((t) => t.bar != null && (t.same || t.end != null) && tankVol(t));
+    return <span className="use">{bars.length ? bars.join(" + ") : fmtL(g.total)}<small>{full ? "skutečná · " : ""}{fmtL(g.total)} · {num(g.total / g.min, 1)} l/min</small></span>;
   }
   if (gas === "o2") return <span className="use">~{Math.round(g.metab[0])}–{Math.round(g.metab[1])} l<small>{g.u.noisy ? "tlak nespolehlivý · " : ""}{g.personal ? "osobní odhad" : "odhad z doby"}</small></span>;
   return <span className="use">–<small>{g.u.noisy ? "tlak nespolehlivý" : "zadej tlak externí lahve"}</small></span>;
@@ -577,7 +578,7 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
             ? ` Do té doby osobní odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (tvoje spotřeba ${num(rate.lo, 2)}–${num(rate.hi, 2)} l/min z ${rate.n} ponorů se známou spotřebou).`
             : ` Do té doby obecný metabolický odhad ${Math.round(g.metab[0])}–${Math.round(g.metab[1])} l (0,8–1,5 l/min; osobní odhad bude po 2 ponorech se známou spotřebou O₂).`) : ""}</>}</small>
         {u.ext.length > 0 && <small className="c-warn">Externí plyn nebo zavřená lahev nejspíš: {u.ext.map(([a, b]) => (a === b ? tpt(a * 60) : `${tpt(a * 60)}–${tpt(b * 60)}`)).join(", ")}</small>}
-        {prepExt(gas, meta, note).length > 0 ? <small>Offboard lahve z předponorové přípravy: {prepExt(gas, meta, note).map((e) => `${e.kind} ${e.start} → ${e.end} bar (${fmtL(Math.max(0, e.start! - e.end!) * e.vol)})`).join(", ")}</small> : (() => {
+        {prepExt(gas, meta, note).length > 0 ? <small>Offboard lahve (Před a po ponoru): {prepExt(gas, meta, note).map((e) => `${e.kind} ${e.start} → ${e.end} bar (${fmtL(Math.max(0, e.start! - e.end!) * e.vol)})`).join(", ")}</small> : (() => {
           const mine = ext.filter((e) => e.gas === gas);
           const kind = gas === "dil" ? "S80" : "S40";
           const virt: ExtGas | null = !mine.length && extDetected(u) ? { id: "auto-" + gas, gas, kind, vol: EXT_KINDS[kind] } : null;
@@ -603,10 +604,40 @@ function GasUseCard({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
   };
   return (
     <Card title="Spotřeba plynu">
+      <AllTanks meta={meta} note={note} cyl={cyl} rate={rate} />
       {row("dil", "Diluent")}
       {row("o2", "O₂")}
       <p className="note">Spotřeba z vlastní lahve = součet poklesů tlaku (malé nárůsty z ohřátí se odečtou, větší nárůst nebo mezitlak = externí plyn). Externí lahev Petrel neměří – zadej typ a tlak start/end. Ruční údaj má přednost. Objemy vlastních lahví nastavíš v Nastavení.</p>
     </Card>
+  );
+}
+
+/** Všechny lahve ponoru (onboard + offboard z „Před a po ponoru“) a skutečná spotřeba O₂ a diluentu, když jsou všechny vyplněné. */
+function AllTanks({ meta, note, cyl, rate }: { meta: Meta; note?: DiveNote; cyl: { dil: number; o2: number }; rate: { lo: number; hi: number; n: number } | null }) {
+  const tanks = note?.prep?.tanks || [];
+  if (!tanks.length && !note?.prep) return null;
+  const dilIds = new Set(prepExt("dil", meta, note).map((e) => e.id)), o2Ids = new Set(prepExt("o2", meta, note).map((e) => e.id));
+  const onb = (gas: "dil" | "o2", name: string) => {
+    const u = gas === "dil" ? meta.sum.dilUse : meta.sum.o2Use;
+    return <tr key={gas}><td>{name} onboard</td><td>{num(cyl[gas], 1)} l</td><td>{u.ok ? `${num(u.start ?? 0, 0)} → ${num(u.end ?? 0, 0)}` : "zavřená / externí"}</td><td>{u.ok && !u.noisy ? `${u.bar} bar · ${fmtL(u.bar * cyl[gas])}` : "–"}</td><td>{gas === "o2" ? "O₂" : "diluent"}</td></tr>;
+  };
+  const missing = tanks.filter((t) => t.bar == null || (!t.same && t.end == null) || !tankVol(t));
+  const g = (gas: "dil" | "o2") => gasUseOf(gas, meta, note, cyl[gas], gas === "o2" ? rate : null);
+  const role: Record<string, string> = { bo: "BO", o2: "O₂", dil: "Dil", deco: "Deko", other: "Jiná" };
+  return (
+    <div className="all-tanks">
+      <table className="small">
+        <thead><tr><th>Lahev</th><th>Objem</th><th>Tlak</th><th>Úbytek</th><th>Počítá se do</th></tr></thead>
+        <tbody>
+          {onb("o2", "O₂")}{onb("dil", "Diluent")}
+          {tanks.map((t) => { const v = tankVol(t), end = t.same ? t.bar : t.end, used = t.bar != null && end != null ? Math.max(0, t.bar - end) : null;
+            return <tr key={t.id}><td>{role[t.role]} {t.name} <span className="muted">{t.gas}</span></td><td>{v ? `${num(v, 1)} l` : "?"}</td><td>{t.bar ?? "–"} → {t.same ? "beze změny" : end ?? "–"}</td>
+              <td>{used != null ? `${used} bar${v ? ` · ${fmtL(used * v)}` : ""}` : "–"}</td><td>{o2Ids.has(t.id) ? "O₂" : dilIds.has(t.id) ? "diluent" : "jen informativně"}</td></tr>; })}
+        </tbody>
+      </table>
+      {missing.length ? <p className="note c-warn">Skutečnou spotřebu spočítám po vyplnění všech lahví – chybí {missing.map((t) => `${role[t.role]} ${t.name}: ${t.bar == null ? "tlak před" : !tankVol(t) ? "objem" : "tlak po ponoru (nebo beze změny)"}`).join(", ")}.</p>
+        : <p className="real-use"><b>Skutečná spotřeba:</b> O₂ {g("o2").total != null ? fmtL(g("o2").total!) : "–"} · diluent {g("dil").total != null ? fmtL(g("dil").total!) : "–"}</p>}
+    </div>
   );
 }
 

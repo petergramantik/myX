@@ -85,7 +85,9 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
   const pinch = useRef<{ d0: number; c0: number; win: [number, number] } | null>(null);
   const lastTap = useRef(0);
   useEffect(() => setHover(null), [t]);
-  useEffect(() => { if (focusT == null || !t.length) return; const i = t.findIndex((x) => x >= focusT); setHover(i < 0 ? t.length - 1 : i); }, [focusT]);
+  // posun na událost: posuvník krátce a výrazně zapulzuje, ať je vidět, kde událost začíná
+  const [pulse, setPulse] = useState(0);
+  useEffect(() => { if (focusT == null || !t.length) return; const i = t.findIndex((x) => x >= focusT); setHover(i < 0 ? t.length - 1 : i); setPulse((p) => p + 1); }, [focusT]);
   // posuvník u okraje přiblíženého grafu plynule posouvá výřez (−1 vlevo, 1 vpravo)
   const [edge, setEdge] = useState(0);
   const live = useRef<{ setZ: (f: (z: [number, number] | null) => [number, number] | null) => void; T0: number; T1: number } | null>(null);
@@ -274,6 +276,7 @@ export function LineChart({ t, series: series0, height = 190, invert, zero, mark
         {placed.map((p, i) => <line key={"p" + i} x1={p.x} x2={p.x} y1={4 + p.row * 11 + 9} y2={height - m.b} stroke={p.color} strokeWidth={1} strokeDasharray={p.dash} opacity={0.85} />)}
         {strip?.map((g, i) => <rect key={"s" + i} x={X(g.from)} width={Math.max(1, X(g.to) - X(g.from))} y={height - m.b - 5} height={4} fill={g.color} opacity={0.85} />)}
         {hover != null && <line x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref" />}
+        {hover != null && pulse > 0 && <line key={pulse} x1={hx} x2={hx} y1={m.t} y2={height - m.b} className="ref-pulse" />}
         </g>
         {/* popisky značek mimo ořez – na okraji se posunou dovnitř grafu */}
         {placed.map((p, i) => <text key={"pl" + i} x={p.lx} y={4 + p.row * 11 + 8} fill={p.color} className="strip-l">{p.label}</text>)}

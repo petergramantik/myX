@@ -1,7 +1,7 @@
 import { dur } from "../core/analysis";
 import { ask, askText } from "../app/dialog";
 import { useEffect, useState } from "react";
-import { ME, adoptForeign, aliasesFor, logName, removeAlias, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
+import { ME, myNum, adoptForeign, aliasesFor, logName, removeAlias, ownMetas, clockDrift, foreignNames, getState, guestLogs, mergeInto, openGuest, ownLb, remove, toast, upsertBuddy, upsertSite, locate, type GuestLog } from "../app/store";
 import { distKm, norm, siteCoords } from "../app/model";
 import { loadSpDetail, loadSpList, parseSpRef, searchSp, spUrl, type SpListItem } from "../app/sp";
 import { BLSwitch, Card, ClearInput, KV, Picker, back, fmtDate, go, num, tab, useStore } from "./common";
@@ -115,7 +115,18 @@ export function SiteScreen({ id }: { id: string }) {
           ["Vzdálenost", st.pos && c ? `${num(distKm(st.pos, c), 1)} km` : "–"],
         ]} />
         <div className="row">
-          <button className="btn" onClick={async () => { const p = await locate(); if (p) { await upsertSite({ ...s, lat: p.lat, lon: p.lon }); toast("Poloha uložena"); } }}>Nastavit podle mé polohy</button>
+          <button className="btn" onClick={async () => { const p = await locate(true); if (p) { await upsertSite({ ...s, lat: p.lat, lon: p.lon }); toast("Poloha uložena"); } }}>Nastavit podle mé polohy</button>
+          <button className="btn" onClick={async () => {
+            // ruční zadání, např. vložením z Map Google / Mapy.com („49.12345, 16.45678“)
+            const v = await askText("Souřadnice (zeměpisná šířka, délka), např. 49.12345, 16.45678", c ? `${c.lat.toFixed(5)}, ${c.lon.toFixed(5)}` : "");
+            if (v == null) return;
+            const m = /(-?\d+(?:[.,]\d+)?)\s*°?\s*[NS]?\s*[,;\s]\s*(-?\d+(?:[.,]\d+)?)/i.exec(v.trim());
+            const lat = m ? +m[1].replace(",", ".") : NaN, lon = m ? +m[2].replace(",", ".") : NaN;
+            if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) { toast("Souřadnice nejdou přečíst – zadej např. 49.12345, 16.45678"); return; }
+            await upsertSite({ ...s, lat, lon }); toast("Poloha uložena");
+          }}>Zadat souřadnice</button>
+          {!c && (() => { const m = [...dives].reverse().find((x) => my.lb.notes[x.id]?.pos); const ps = m && my.lb.notes[m.id].pos!;
+            return ps ? <button className="btn" onClick={async () => { await upsertSite({ ...s, lat: ps.lat, lon: ps.lon }); toast("Poloha uložena"); }}>Použít polohu z ponoru č. {myNum(m!.id)}</button> : null; })()}
         </div>
       </Card>
 

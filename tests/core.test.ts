@@ -486,5 +486,11 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(isHiddenW("Problém s čidlem 1", k) && isHiddenW("Čidlo 1 rozjeté", k) && !isHiddenW("Alarm CO₂", k) && isHiddenW("Alarm CO₂ – 2×", ["c:CO₂"]), "Skrytí upozornění: titul, kategorie a vyprázdněný tag");
 }
 
+{ // čas stisku tlačítka po hodině ponoru (hodiny v záznamu jen mm:ss)
+  const { buttonTime } = await import("../src/core/shearwater");
+  const start = 20 * 60 + 23; // ponor začal v xx:20:23
+  ok(buttonTime(39, 50, start, 1235) === 1167 && buttonTime(39, 5, start, 4790) === 4722 && buttonTime(19, 41, start, 35) === -42, "Tlačítka: hodina podle pozice v logu (78′42″ ne 18′42″)");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

@@ -1076,6 +1076,7 @@ export async function linkDraft(draftId: string, diveId: string, auto = false) {
     weather: dr.weather || cur?.weather,
     ext: cur?.ext || dr.ext, useManual: cur?.useManual || dr.useManual,
     prep: cur?.prep || dr.prep,
+    pos: cur?.pos || (dr.lat != null && dr.lon != null ? { lat: dr.lat, lon: dr.lon } : undefined),
     updated: Date.now(),
   };
   delete lb.drafts[draftId];
@@ -1091,11 +1092,21 @@ export async function linkDraft(draftId: string, diveId: string, auto = false) {
   }).catch(() => {});
 }
 
+/** Lokalita bez polohy převezme polohu z místa ponoru (rozpracovaný ponor aktualizovaný na místě). */
+async function siteFromPos(siteId: string, pos: { lat: number; lon: number }) {
+  const site = st.lb.sites[siteId];
+  if (!site || siteCoords(site)) return;
+  await upsertSite({ ...site, lat: pos.lat, lon: pos.lon });
+  toast(`Poloha uložena k lokalitě ${site.name} (změníš ji u lokality)`);
+}
+
 /** Aktualizuje polohu (a počasí) rozpracovaného ponoru; bez zvolené lokality navrhne nejbližší do 2 km. */
-export async function moveDraft(id: string, pos: Pos) {
+export async function moveDraft(id: string, pos: Pos, toSite = false) {
   const dr = st.lb.drafts[id]; if (!dr) return;
   const near = nearestSite(pos);
   updateDraft(id, { lat: pos.lat, lon: pos.lon, siteId: dr.siteId || (near && near.km <= 2 ? near.site.id : undefined) });
+  // ruční aktualizace na místě (＋📍, tlačítko) uloží polohu i k lokalitě bez polohy; automatický posun ne (mohl by být cestou)
+  if (toSite && dr.siteId) await siteFromPos(dr.siteId, pos);
   try {
     const w = await loadWeather(pos.lat, pos.lon);
     if (st.lb.drafts[id]) updateDraft(id, { weather: { at: Date.now(), temp: w.now.temp, wind: w.now.wind, gust: w.now.gust, cloud: w.now.cloud, pressure: w.now.pressure, precip: w.now.precip, code: w.now.code } });

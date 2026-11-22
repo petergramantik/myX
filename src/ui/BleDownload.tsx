@@ -36,7 +36,7 @@ export function BleDownload() {
     <div className="ble">
       {busy ? <button className="btn danger" onClick={() => { stop.current = true; setProg({ phase: "Ukončuji…" }); }}>Ukončit stahování</button>
         : <button className="btn primary" onClick={run}>Stáhnout z počítače (Bluetooth)</button>}
-      {!busy && !err && !log.length && <p className="note">Na Petrelu otevři Upload log (Bluetooth), pak klepni a vyber počítač.</p>}
+      {!busy && !err && !log.length && <p className="note">Na Petrelu otevři Upload log (Bluetooth), pak klepni a vyber počítač. Petrel 2 přes prohlížeč nejde – použij aplikaci <a href="https://github.com/petergramantik/myX/releases" target="_blank" rel="noreferrer">myX Petrel</a> a stažený soubor načti tlačítkem Importovat.</p>}
       {busy && prog && <p className="muted small">{prog.phase}{prog.of ? ` ${prog.dive}/${prog.of}` : ""}{prog.bytes ? ` · ${Math.round(prog.bytes / 1024)} kB` : ""}</p>}
       {err && <p className="c-bad small">{err}</p>}
       {log.length > 0 && !busy && (

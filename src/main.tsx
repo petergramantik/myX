@@ -157,7 +157,7 @@ function App() {
     setBusy(true);
     try {
       if (!active) { const id = await createDraft(); go({ t: "draft", id }); }
-      else if (!moved) { const p = await locate(true); if (p) { await moveDraft(active.id, p); toast("Poloha a počasí rozpracovaného ponoru aktualizovány"); } else toast("Polohu se nepodařilo zjistit"); setMovedAt({ ...movedAt, [active.id]: Date.now() }); }
+      else if (!moved) { const p = await locate(true); if (p) { await moveDraft(active.id, p, true); toast("Poloha a počasí rozpracovaného ponoru aktualizovány"); } else toast("Polohu se nepodařilo zjistit"); setMovedAt({ ...movedAt, [active.id]: Date.now() }); }
       else go({ t: "draft", id: active.id });
     } finally { setBusy(false); }
   };

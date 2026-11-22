@@ -36,6 +36,15 @@ export function readCloudDetails(buf: Uint8Array): Map<string, CloudDetail> {
   return out;
 }
 
+/** Čas stisku tlačítka od začátku ponoru: hodiny v záznamu jsou jen mm:ss, hodinu určí čas posledního vzorku před záznamem (zápis se zpožděním do ~2 min). */
+export function buttonTime(mm: number, ss: number, startClock: number, tSample: number): number {
+  let tt = (mm * 60 + ss) - startClock;
+  const lim = tSample + 120;
+  while (tt + 3600 <= lim) tt += 3600;
+  while (tt > lim) tt -= 3600;
+  return tt;
+}
+
 /** Stisk tlačítka na počítači (záznam 0x51): čas od začátku ponoru podle hodin v záznamu. */
 export interface Button { t: number; btn: number; from: number; to: number; clock: string }
 
@@ -234,9 +243,9 @@ export async function decodeDive(raw: { id: string; blob: Uint8Array }, opts: De
       for (let k = 0; k < 32; k += 8) {
         if (r[k] !== 0x51 || !r[k + 1]) continue;
         const mm = r[k + 6], ss = r[k + 7];
-        let tt = (mm * 60 + ss) - startClock;
-        const prev = buttons.length ? buttons[buttons.length - 1].t : -600;
-        while (tt < prev - 600) tt += 3600;
+        // hodiny v záznamu jsou jen minuta:sekunda (přetečou po hodině) – správnou hodinu určí pozice záznamu v logu:
+        // záznam se zapíše po stisku se zpožděním (~1–2 min), tedy nejpozději krátce po čase posledního vzorku
+        const tt = buttonTime(mm, ss, startClock, Math.max(n - 1, 0) * rateS);
         buttons.push({ t: tt, btn: r[k + 1], from: (r[k + 2] << 8) | r[k + 3], to: (r[k + 4] << 8) | r[k + 5], clock: `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}` });
       }
     } else if (t >= 0x70 && t <= 0x75) {

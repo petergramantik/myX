@@ -61,7 +61,7 @@ export function BatteryTiles() {
           <div className={"ct-l " + pLvl}>{pLvl === "ok" ? "V pořádku" : pLvl === "warn" ? "Varování" : "Vyměnit"}</div>
         </div>
         {!b.guest && isCC(h) && b.head.map((x) => {
-          const lvl = x.reasons.length ? "warn" : x.cur ? "ok" : "info";
+          const lvl = x.reasons.length ? "warn" : x.cur ? "ok" : "none"; // bez zadané výměny šedě, ne zeleně
           return (
             <div key={x.pos} className={"celltile " + lvl} onClick={() => go({ t: "bats", pos: x.pos })}>
               <div className="ct-h"><b>Hlava {x.pos}</b><span className={"dot " + lvl} /></div>
@@ -69,7 +69,7 @@ export function BatteryTiles() {
                 <div className="ct-v">{num(x.minutes / 60, 1)} <small>h</small></div>
                 <div className="ct-u">pod vodou od výměny</div>
               </> : <><div className="ct-v">–</div><div className="ct-u">výměna nezadaná</div></>}
-              <div className={"ct-l " + lvl}>{lvl === "ok" ? "V pořádku" : lvl === "warn" ? "Vyměnit" : "Zadat"}</div>
+              <div className={"ct-l " + lvl}>{lvl === "ok" ? "V pořádku" : lvl === "warn" ? "Vyměnit" : "Nezadáno"}</div>
             </div>
           );
         })}
@@ -92,12 +92,14 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
   const headTxt = (x: (typeof b.head)[number]) => !x.cur ? "–" : b.th.headBatHours > 0 ? `${Math.max(0, Math.round(100 - (x.minutes / 60 / b.th.headBatHours) * 100))} %` : `${num(x.minutes / 60, 1)} h`;
   const bad = b.petrelAlerts.some((a) => a.level === "bad");
   const warn = b.petrelAlerts.length > 0 || b.head.some((x) => x.reasons.length);
-  const lvl = bad ? "bad" : warn ? "warn" : "ok";
+  // baterie v hlavě bez zadané výměny: stav nejde potvrdit → šedě, ne zelená fajfka
+  const unknown = isCC(h) && b.head.some((x) => !x.cur);
+  const lvl = bad ? "bad" : warn ? "warn" : unknown ? "none" : "ok";
   return (
     <section className={"panel " + lvl}>
       <button className="panel-h" onClick={toggle}>
-        <span className="ph-main">{lvl === "ok" ? "✓" : "⚠"} {compName(h.serial)} {pp.est ? "~" : ""}{pp.pct} %{isCC(h) ? <> · Hlava 1 {headTxt(b.head[0])} · Hlava 2 {headTxt(b.head[1])}</> : null}</span>
-        <span className="ph-sub">{lvl === "ok" ? "Baterie v pořádku" : "Baterie – upozornění"}</span>
+        <span className="ph-main">{lvl === "ok" ? "✓" : lvl === "none" ? "?" : "⚠"} {compName(h.serial)} {pp.est ? "~" : ""}{pp.pct} %{isCC(h) ? <> · Hlava 1 {headTxt(b.head[0])} · Hlava 2 {headTxt(b.head[1])}</> : null}</span>
+        <span className="ph-sub">{lvl === "ok" ? "Baterie v pořádku" : lvl === "none" ? "Baterie v hlavě nezadané" : "Baterie – upozornění"}</span>
         <span className="ph-arrow">{open ? "▴" : "▾"}</span>
       </button>
       {open && (

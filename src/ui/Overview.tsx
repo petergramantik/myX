@@ -88,7 +88,7 @@ function ManualScrubTile() {
     <section className={"card scrub " + lvl}>
       <h2>Scrubber <small className="muted">{compName(last.h.serial)} · {ri.rig} · ručně</small></h2>
       <div className="sc-two">
-        <div onClick={setLim}><b className={"c-" + timeLvl}>{left != null ? hm(left) : used != null ? hm(used) : "–"}</b><small>{left != null ? "zbývá" : used != null ? "použito (zadej výdrž ›)" : "zbývá"}</small></div>
+        <div onClick={setLim}><b className={"c-" + timeLvl}>{left != null ? hm(left) : used != null ? hm(used) : "–"}</b><small>{left != null && lim ? `zbývá ${Math.round((left / lim) * 100)} %` : left != null ? "zbývá" : used != null ? "použito (zadej výdrž ›)" : "zbývá"}</small></div>
         <div className="r" onClick={setFill}><b className={"c-" + (old ? "warn" : "ok")}>{days != null ? `${days} dní` : "–"}</b><small>stáří</small></div>
       </div>
       {left != null && lim ? <div className={"sc-bar " + timeLvl}><i style={{ width: `${Math.round((left / lim) * 100)}%` }} /></div> : null}
@@ -107,7 +107,7 @@ function ScrubberTile() {
     <section className={"card scrub " + lvl}>
       <h2>Scrubber</h2>
       <div className="sc-two">
-        <div><b className={"c-" + timeLvl}>{hm(sc.left)}</b><small>zbývá</small></div>
+        <div><b className={"c-" + timeLvl}>{hm(sc.left)}</b><small>zbývá {Math.round(sc.pct)} %</small></div>
         <div className="r"><b className={"c-" + ageLvl}>{sc.days != null ? `${sc.days} dní` : "–"}</b><small>stáří</small></div>
       </div>
       <div className={"sc-bar " + timeLvl}><i style={{ width: `${sc.pct}%` }} /></div>

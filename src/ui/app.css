@@ -506,3 +506,12 @@ label.inline input[type=checkbox] { width: auto; padding: 0; }
 .alert-hide { display: block; margin-top: 8px; font-size: 12px; opacity: .8; }
 .hidden-w { margin: 4px 0 10px; }
 .hidden-w .hw-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; }
+/* neznámý stav (např. baterie v hlavě bez zadané výměny) – šedě */
+.ct-l.none { color: var(--muted, #8a97a8); } .dot.none { background: #5b6878; } .panel.none .ph-main { color: var(--muted, #8a97a8); }
+/* zapulzování posuvníku po skoku na událost */
+.ref-pulse { stroke: #ffd54f; stroke-width: 5; opacity: 0; pointer-events: none; animation: refpulse 1.1s ease-out 1; }
+@keyframes refpulse { 0%, 30%, 60% { opacity: .95; stroke-width: 6; } 15%, 45%, 75% { opacity: .15; stroke-width: 3; } 100% { opacity: 0; stroke-width: 2; } }
+.all-tanks table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+.all-tanks th, .all-tanks td { text-align: left; padding: 3px 4px; border-bottom: 1px solid rgba(255,255,255,.06); vertical-align: top; }
+.all-tanks .real-use { margin: 6px 0 10px; }
+.prep .same { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }

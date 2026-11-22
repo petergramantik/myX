@@ -1,4 +1,4 @@
-// Předponorová příprava: naměřené tlaky onboard lahví, offboard lahve (bailout, offboard O₂) a potvrzení kalibrace čidel.
+// Před a po ponoru (dřív „Předponorová příprava“): naměřené tlaky onboard lahví, offboard lahve (bailout, offboard O₂) a potvrzení kalibrace čidel.
 // Vyplňuje se typicky v rozpracovaném ponoru (večer před ponorem); po spárování s logem se tlaky onboard lahví porovnají s počítačem.
 import { useState } from "react";
 import { tankVol, uid, type Prep, type PrepTank } from "../app/model";
@@ -60,7 +60,7 @@ export function PrepCard({ prep, onChange, real, cc = true }: { prep?: Prep; onC
   return (
     <section className="card prep">
       <div className="card-h" onClick={() => setOpen(!open)}>
-        <h2>{open ? "▾" : "▸"} Předponorová příprava</h2>
+        <h2>{open ? "▾" : "▸"} Před a po ponoru</h2>
       </div>
       {!open && <p className={"small " + (worst || "muted")} onClick={() => setOpen(true)}>{summary(prep)}</p>}
       {open && <>
@@ -83,7 +83,8 @@ export function PrepCard({ prep, onChange, real, cc = true }: { prep?: Prep; onC
             </div>
             <div className="pt-row">
               <span className="muted small">před</span><BarInput value={t.bar} onSave={(b) => setTank(t.id, { bar: b })} />
-              <span className="muted small">po</span><BarInput value={t.end} placeholder="po ponoru" onSave={(b) => setTank(t.id, { end: b })} />
+              <span className="muted small">po</span>{t.same ? <span className="small">= {t.bar ?? "–"}</span> : <BarInput value={t.end} placeholder="po ponoru" onSave={(b) => setTank(t.id, { end: b })} />}
+              <label className="small inline same"><input type="checkbox" checked={!!t.same} onChange={(e) => setTank(t.id, { same: e.target.checked, end: e.target.checked ? t.bar : undefined })} />beze změny</label>
               <span className="muted small">{v ? `${num(v, 1)} l` : <input className="tank-vol" inputMode="decimal" placeholder="objem l" onBlur={(e) => { const x = parseFloat(e.target.value.replace(",", ".")); if (x > 0) setTank(t.id, { vol: x }); }} />}{used != null && v ? ` · ${num(used * v, 0)} l` : ""}</span>
             </div>
           </div>

@@ -16,7 +16,7 @@ export interface WeatherSnap { at: number; temp: number; wind: number; gust: num
 /** Externí lahev připojená během ponoru (Petrel její tlak neměří). */
 export interface ExtGas { id: string; /** sup = zásobní plyn přístroje bez vysílačů (pSCR, OC…) */ gas: "dil" | "o2" | "sup"; kind: string; vol: number; start?: number; end?: number }
 /** Offboard lahev z předponorové přípravy (bailout, offboard O₂…). */
-export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "other"; name: string; gas: string; bar?: number; /** tlak po ponoru */ end?: number; /** objem (l); jinak z označení S80/S40… */ vol?: number }
+export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "other"; name: string; gas: string; bar?: number; /** tlak po ponoru */ end?: number; /** beze změny (lahev nepoužitá) – konec = začátek */ same?: boolean; /** objem (l); jinak z označení S80/S40… */ vol?: number }
 /** Objem lahve (l) z ručního zadání nebo z označení (S80, S40, 12 l…). */
 export function tankVol(t: { vol?: number; name: string }): number | null {
   if (t.vol) return t.vol;
@@ -40,7 +40,7 @@ export function tankMix(g: string): string | null {
 export interface Prep { o2?: number; dil?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string } }
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
-  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; updated: number;
+  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** poloha z rozpracovaného ponoru (místo ponoru) */ pos?: { lat: number; lon: number }; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; updated: number;
 }
 /** Ponor založený na lokalitě před stažením logu; po importu se spáruje s ponorem z počítače. */
 export interface Draft extends DiveNote { id: string; created: number; lat?: number; lon?: number; diveId?: string }

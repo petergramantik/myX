@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.20";
+export const APP_VERSION = "1.42-dev.21";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.21", date: "2026-11-22", title: "Před a po ponoru, lokality, opravy (dev)", items: [
+    "Sekce „Před a po ponoru“ (dřív Předponorová příprava): u offboard lahví „beze změny“; ve Spotřebě plynu všechny lahve a po vyplnění skutečná spotřeba O₂ a diluentu (i v kostce).",
+    "Oprava: stisky tlačítek po první hodině ponoru se řadily o hodinu dřív – přepnutí SP na konci dlouhých ponorů se hlásilo jako nepotvrzené.",
+    "Lokalita: ruční zadání souřadnic, poloha z ponoru; ruční aktualizace polohy rozpracovaného ponoru ji uloží i k lokalitě bez polohy.",
+    "Scrubber na Přehledu s procenty; baterie v hlavě bez zadané výměny šedě, ne zeleně; posuvník v grafu po skoku na událost zapulzuje; při sdílení ponoru krátký návod pro příjemce.",
+  ] },
   { version: "1.42-dev.20", date: "2026-11-22", title: "Offboard lahve, skrytí upozornění (dev)", items: [
     "Předponorová příprava: offboard lahve s tlakem před i po ponoru a objemem; skutečná spotřeba O₂ a diluentu v kostce (bary + litry), bailout jako externí diluent.",
     "Zavřená onboard lahev (jen středotlak) se v přípravě ukáže jako „bez změny“.",
