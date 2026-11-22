@@ -137,6 +137,42 @@ class Shearwater(private val inp: InputStream, private val out: OutputStream, pr
         return res
     }
 
+    /**
+     * Ladicí: stáhne ponor s kompresí a po značce konce (LRE 0) žádá o další bloky – zda Petrel pošle i paměť za koncem ponoru.
+     * Vrací (nativní ponor, surová data bloků za koncem). Konec: prázdný blok, odmítnutí, nebo limit maxExtra bajtů.
+     */
+    fun downloadBeyond(addr: Long, maxExtra: Int, log: (String) -> Unit, onBytes: (Int) -> Unit): Pair<ByteArray, ByteArray> {
+        val init = transfer(byteArrayOf(0x35, 0x10, 0x34, (addr shr 24).toByte(), (addr shr 16).toByte(), (addr shr 8).toByte(), addr.toByte(),
+            (DIVE_SIZE shr 16).toByte(), (DIVE_SIZE shr 8).toByte(), DIVE_SIZE.toByte()))
+        if (init.size < 2 || (init[0].toInt() and 0xFF) != 0x75) throw IOException("Neočekávaná odpověď (upload init: ${hex(init)})")
+        val dive = ByteArrayOutputStream(); val extra = ByteArrayOutputStream()
+        val lre = Lre(dive)
+        var block = 1; var n = 0; var done = false; var after = 0; var why = "limit"
+        while (true) {
+            if (cancelled()) throw Cancelled()
+            val r = try { transfer(byteArrayOf(0x36, block.toByte())) } catch (e: IOException) { why = "chyba: ${e.message}"; break }
+            if ((r[0].toInt() and 0xFF) == 0x7F) { why = "odmítnuto: ${hex(r)}"; break }
+            if (r.size < 2 || (r[0].toInt() and 0xFF) != 0x76) { why = "neočekávaná odpověď: ${hex(r.copyOfRange(0, minOf(16, r.size)))}"; break }
+            val data = r.copyOfRange(2, r.size)
+            if (data.isEmpty()) { why = "prázdný blok $block"; break }
+            if (!done) {
+                done = lre.feed(data)
+                if (done) log("Značka konce ponoru v bloku $block (${n + data.size} B komprimovaně, ${dive.size()} B ponor) – žádám dál")
+            } else {
+                if (after < 3) log("Blok za koncem $block (${data.size} B): ${hex(data.copyOfRange(0, minOf(48, data.size)))}")
+                extra.write(data); after++
+                if (extra.size() >= maxExtra) break
+            }
+            n += data.size; onBytes(n)
+            block = (block + 1) and 0xFF
+        }
+        log("Konec proudu: $why; bloků za koncem $after, ${extra.size()} B")
+        try { val q = transfer(byteArrayOf(0x37)); log("Ukončení přenosu: ${hex(q)}") } catch (e: Exception) { log("Ukončení přenosu: ${e.message}") }
+        val res = dive.toByteArray()
+        for (i in 32 until res.size) res[i] = (res[i].toInt() xor res[i - 32].toInt()).toByte()
+        return res to extra.toByteArray()
+    }
+
     /** LRE: 9bitové hodnoty – bit 0x100 = bajt, jinak počet nul, 0 = konec. */
     private class Lre(val out: ByteArrayOutputStream) {
         fun feed(d: ByteArray): Boolean {

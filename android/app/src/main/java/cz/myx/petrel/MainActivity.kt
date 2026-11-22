@@ -72,7 +72,7 @@ class MainActivity : Activity() {
         resend = Button(this).apply { text = "Poslat znovu do myX"; setOnClickListener { lastFile()?.let { share(it, prefs.getInt("lastN", 0)) } } }
         root.addView(resend)
         resend.isEnabled = lastFile() != null
-        gap = Button(this).apply { text = "Ladicí: přečíst úsek před posledním ponorem"; setOnClickListener { if (!running) startGap() } }
+        gap = Button(this).apply { text = "Ladicí: číst za konec ponoru"; setOnClickListener { if (!running) startGap() } }
         root.addView(gap)
         root.addView(Button(this).apply { text = "Kopírovat výpis"; setOnClickListener {
             getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("myX Petrel", "${status.text}\n${log.text}"))
@@ -230,52 +230,23 @@ class MainActivity : Activity() {
                 val len = (last.addr - prev.end).coerceIn(0L, 0x80000L).toInt()
                 add("Úsek 0x${from.toString(16)}–0x${(from + len).toString(16)} ($len B, celkem ${last.addr - prev.end} B)")
                 if (len <= 0) throw Exception("Mezi ponory není žádný úsek")
-                val out = java.io.ByteArrayOutputStream()
-                var mode = ""
-                // pokusy: každý zapíše odpověď počítače, první úspěšný se uloží
-                fun tryRead(name: String, addr: Long, size: Int, comp: Boolean): Boolean {
-                    if (stop || out.size() > 0) return out.size() > 0
-                    return try {
-                        val c = sw.download(base + addr, size, comp) { b -> setStatus("$name: ${b / 1024} kB"); if (b > len * 2 + 65536) throw java.io.IOException("úsek delší než čekáno – ukončeno na $b B") }
-                        add("$name: OK, ${c.size} B")
-                        if (c.isNotEmpty()) { out.write(c); mode = name }
-                        c.isNotEmpty()
-                    } catch (x: Exception) { add("$name: ${x.message}"); false }
-                }
-                // test, co Petrel povolí (odpověď 7f 35 31 = mimo rozsah): adresa × velikost × komprese
-                val D = Shearwater.DIVE_SIZE
-                fun probe(name: String, addr: Long, size: Int, comp: Boolean) {
-                    if (stop) return
-                    try {
-                        var n = 0
-                        sw.download(base + addr, size, comp) { b -> n = b; if (b > 4096) throw java.io.IOException("stačí (${b} B)") }
-                        add("$name: OK celé ($n B)")
-                    } catch (x: Exception) { add("$name: ${x.message}") }
-                }
-                probe("A ponor+komprese+0x8000", last.addr, 0x8000, true)
-                probe("B ponor+bez komprese+0xFFFFFF", last.addr, D, false)
-                probe("C úsek+komprese+0xFFFFFF", from, D, true)
-                probe("D úsek+bez komprese+0xFFFFFF", from, D, false)
-                probe("E předposlední ponor+komprese+0xFFFFFF", prev.addr, D, true)
-                // úsek celý, když C prošlo: s kompresí až do konce proudu (nejvýš délka úseku × 2)
-                tryRead("úsek s kompresí (celý)", from, D, true)
-                if (out.size() > 0 && mode == "úsek bez komprese" && len > 0x8000) {
-                    var off = out.size()
-                    while (off < len && !stop) {
-                        val c = try { sw.download(base + from + off, minOf(0x8000, len - off), false) { b -> setStatus("Čtu úsek ${(off + b) / 1024} / ${len / 1024} kB") } } catch (x: Exception) { add("Čtení přerušeno na $off B: ${x.message}"); break }
-                        if (c.isEmpty()) break
-                        out.write(c); off += c.size
-                    }
-                }
-                if (out.size() == 0) throw Exception("Úsek se nepodařilo přečíst – zkopíruj výpis a pošli ho")
-                val data = out.toByteArray()
-                add("Přečteno ${data.size} B ($mode); začátek: ${hex(data.copyOfRange(0, minOf(96, data.size)))}")
+                // čtení předposledního ponoru a pokračování za jeho koncem (= úsek mezi ponory), potom totéž za posledním ponorem
                 val dir = File(cacheDir, "out").apply { mkdirs() }
-                val bin = File(dir, "petrel-$serial-usek.bin").apply { writeBytes(data) }
+                val files = ArrayList<File>()
+                for ((name, e) in listOf("predposledni" to prev, "posledni" to last)) {
+                    if (stop) break
+                    add("— $name ponor: čtu za konec —")
+                    val (dive, extra) = try {
+                        sw.downloadBeyond(base + e.addr, 0x80000, { m -> add(m) }) { b -> setStatus("$name: ${b / 1024} kB") }
+                    } catch (x: Exception) { add("$name: ${x.message}"); break }
+                    add("$name: ponor ${dive.size} B, celý ${Shearwater.complete(dive)}, za koncem ${extra.size} B")
+                    if (extra.isNotEmpty()) files.add(File(dir, "petrel-$serial-$name-za-koncem.bin").apply { writeBytes(extra) })
+                }
                 val txt = File(dir, "petrel-$serial-usek.txt").apply { writeText(log.text.toString()) }
-                setStatus("Hotovo – pošli oba soubory")
+                files.add(txt)
+                setStatus(if (files.size > 1) "Za koncem ponoru jsou data – pošli soubory" else "Za koncem ponoru nic – zkopíruj výpis")
                 runOnUiThread {
-                    val uris = arrayListOf(FileProvider.getUriForFile(this, "cz.myx.petrel.files", bin), FileProvider.getUriForFile(this, "cz.myx.petrel.files", txt))
+                    val uris = ArrayList(files.map { FileProvider.getUriForFile(this, "cz.myx.petrel.files", it) })
                     startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND_MULTIPLE).apply {
                         type = "*/*"; putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }, "Poslat ladicí úsek"))
