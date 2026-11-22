@@ -492,3 +492,6 @@ label.inline input[type=checkbox] { width: auto; padding: 0; }
 .prep input.bar-in.c-warn { color: var(--warn); border-color: var(--warn); } .prep input.bar-in.c-bad { color: #ff6e66; border-color: #ff6e66; }
 .prep-row select { width: auto; flex: 1; min-width: 0; }
 .prep-row .btn.small { white-space: nowrap; }
+.ble { margin-bottom: 10px; }
+.ble-log pre { white-space: pre-wrap; font-size: 11px; max-height: 260px; overflow: auto; text-align: left; }
+.ble-log { text-align: left; margin: 6px 0; }

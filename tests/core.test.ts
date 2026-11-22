@@ -432,5 +432,45 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(dilDescent({ s: { depth, dil: dil.map(() => null) } } as unknown as Parameters<typeof dilDescent>[0]) === null, "Sestup: bez tlaků null");
 }
 
+{ // Bluetooth protokol Shearwater: SLIP, LRE+XOR, manifest, obal ponoru, simulované stažení
+  const P = await import("../src/core/swproto");
+  // SLIP: escapování a rámce V1 s hlavičkou
+  const data = Uint8Array.from([0xff, 0x01, 0x04, 0x00, 0xc0, 0xdb, 0x22, ...Array(30).fill(7)]);
+  const fr = P.slipFrames(data, 1);
+  ok(fr.every((f) => f.length <= 20) && fr[1][1] === 1 && P.slipFrames(Uint8Array.from([0x22, 0x80, 0x10]), 1).length === 1, "SLIP V1: rámce po 20 B s hlavičkou");
+  const rd = new P.SlipReader(1); fr.forEach((f) => rd.push(f));
+  ok(rd.packets.length === 1 && rd.packets[0].join() === data.join(), "SLIP V1: zpětné složení paketu");
+  ok(P.unwrapResponse(Uint8Array.from([1, 0xff, 3, 0, 9, 8]), 1).join() === "9,8", "Odpověď 01 FF: délka");
+  // LRE kompresor pro test (9bitové hodnoty, běhy nul, 0 = konec) + XOR
+  const lreEnc = (d: Uint8Array) => { const vals: number[] = []; for (let i = 0; i < d.length;) { if (d[i] === 0) { let n = 0; while (i < d.length && d[i] === 0 && n < 255) { n++; i++; } vals.push(n); } else vals.push(0x100 | d[i++]); } vals.push(0);
+    while ((vals.length * 9) % 8) vals.push(0); const bits = vals.map((v) => v.toString(2).padStart(9, "0")).join(""); const out = new Uint8Array(bits.length / 8); for (let i = 0; i < out.length; i++) out[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2); return out; };
+  const xorEnc = (d: Uint8Array) => { const o = d.slice(); for (let i = o.length - 1; i >= 32; i--) o[i] ^= d[i - 32]; return o; };
+  // skutečný ponor z mého logu, pokud je k dispozici (repo dat neobsahuje)
+  const f = Bun.file("/home/claude/data/sw.db");
+  if (await f.exists()) {
+    const { readShearwaterDb, decodeDive, gunzip } = await import("../src/core/shearwater");
+    const raw = readShearwaterDb(new Uint8Array(await f.arrayBuffer())).at(-1)!;
+    const native = await gunzip(raw.blob.subarray(4), raw.blob[0] | (raw.blob[1] << 8) | (raw.blob[2] << 16));
+    const comp = lreEnc(xorEnc(native));
+    // simulovaný počítač: manifest se 2 ponory, druhý stáhnout
+    const man = new Uint8Array(0x600); const start = (native[12 + native.indexOf(0x10)] << 24) >>> 0;
+    const rec = (i: number, fp: number, addr: number) => { man.set([0xa5, 0xc4], i * 32); man.set([fp >>> 24, (fp >> 16) & 255, (fp >> 8) & 255, fp & 255], i * 32 + 4); man.set([addr >>> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255], i * 32 + 20); };
+    const o10 = native.findIndex((_, i) => i % 32 === 0 && native[i] === 0x10); const fp = ((native[o10 + 12] << 24) | (native[o10 + 13] << 16) | (native[o10 + 14] << 8) | native[o10 + 15]) >>> 0;
+    rec(0, 111, 0x100); rec(1, fp, 0x2000);
+    let src = new Uint8Array(0), pos = 0, blk = 0;
+    const tx: import("../src/core/swproto").Transfer = async (q) => {
+      if (q[0] === 0x35) { const addr = ((q[3] << 24) | (q[4] << 16) | (q[5] << 8) | q[6]) >>> 0; src = addr === P.MANIFEST_ADDR ? man : addr === 0x80002000 ? comp : new Uint8Array(0); pos = 0; blk = 0; return Uint8Array.from([0x75, 0x10, 0xfe]); }
+      if (q[0] === 0x36) { blk++; const chunk = src.subarray(pos, pos + 0xf9 - ((0xf9) % 9)); pos += chunk.length; return Uint8Array.from([0x76, q[1], ...chunk]); }
+      return Uint8Array.from([0x77, 0]);
+    };
+    const m = P.parseManifest(await P.download(tx, 1, P.MANIFEST_ADDR, P.MANIFEST_SIZE, false));
+    ok(m.dives.length === 2 && m.dives[1].fp === fp && m.dives[1].addr === 0x2000 && !m.full, "Manifest: 2 ponory, otisk = začátek ponoru");
+    const got = await P.download(tx, 1, 0x80000000 + 0x2000, P.DIVE_SIZE, true);
+    ok(got.length >= native.length && got.subarray(0, native.length).join() === native.join(), "Stažení: LRE + XOR vrátí nativní data");
+    const d1 = await decodeDive(raw), d2 = await decodeDive({ id: "ble", blob: await P.wrapBlob(got) });
+    ok(d2.h.start === d1.h.start && d2.h.start === fp && d2.s.depth.length === d1.s.depth.length && d2.h.serial === d1.h.serial, "Obal ponoru: dekodér přečte stažený ponor stejně jako z Cloudu");
+  }
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

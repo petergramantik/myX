@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.11";
+export const APP_VERSION = "1.42-dev.12";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.12", date: "2026-11-22", title: "Stažení z počítače přes Bluetooth (dev)", items: [
+    "Na Přehledu „Stáhnout z počítače (Bluetooth)“ – nové ponory přímo z Petrelu 2 / Petrelu 3 (Chrome na Androidu); zkušební verze s ladicím výpisem.",
+    "Stejný ponor z Bluetooth a z exportu Cloudu se nenačte dvakrát (počítač + čas začátku).",
+    "Historie čidel: konec platnosti staršího čidla = vyjmutí, jinak instalace dalšího čidla na pozici.",
+  ] },
   { version: "1.42-dev.11", date: "2026-11-21", title: "Výběr čidla ze seznamu (dev)", items: [
     "Při zadání čidla nabídka dříve zadaných čidel (výrobce + model) – jedním klepnutím vyplní obě pole i životnost; pole Typ přejmenováno na Model.",
   ] },

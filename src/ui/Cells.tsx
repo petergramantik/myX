@@ -311,6 +311,8 @@ function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnTyp
   // formulář otevřený z dotazu na výměnu: ukázat ho (bývá pod grafem mimo obrazovku)
   useEffect(() => { if (install) { setEdit({ pos, installed: install, lifeM: 12, maker: cur?.maker || "", type: cur?.type }); setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); } }, [install]);
   const hist = c.cells.filter((x) => x.pos === pos).sort((a, b) => b.installed.localeCompare(a.installed));
+  // konec platnosti: vyjmutí, jinak instalace dalšího čidla na stejné pozici
+  const endOf = (h: Cell) => h.removed || c.cells.filter((x) => x.pos === h.pos && x.id !== h.id && x.installed > h.installed).map((x) => x.installed).sort()[0];
   const s = c.status[pos - 1];
   const xs = c.ccr.map(({ i }) => i + 1);
   const ys = c.ccr.map(({ m }) => m.cells.mvBar[pos - 1]);
@@ -337,7 +339,7 @@ function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnTyp
           <tbody>{hist.map((h) => (
             <tr key={h.id} onClick={() => setEdit({ ...h })}>
               <td>{h.maker || "?"}{h.type ? ` ${h.type}` : ""}{h.sn ? <><br /><small>S/N {h.sn}</small></> : null}{h.made ? <><br /><small>výroba {fmtIso(h.made)}</small></> : null}</td>
-              <td>{fmtIso(h.installed)} → {h.removed ? fmtIso(h.removed) : "dosud"}{h.reason ? <><br /><small>{h.reason}</small></> : null}</td>
+              <td>{fmtIso(h.installed)} → {endOf(h) ? fmtIso(endOf(h)!) : "dosud"}{h.reason ? <><br /><small>{h.reason}</small></> : null}</td>
             </tr>
           ))}</tbody>
         </table>

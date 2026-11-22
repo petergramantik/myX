@@ -362,6 +362,22 @@ async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promis
   const upd: Meta[] = [];
   for (const m of st.metas) { const n = cnums.get(m.id); if (n != null && m.cnum !== n) { const raw = await db.get<RawDive>("raw", m.id); if (raw) { await db.put("raw", { ...raw, cnum: n }); } const mm = { ...m, cnum: n }; await db.put("meta", mm); upd.push(mm); } }
   if (upd.length) set({ metas: st.metas.map((m) => upd.find((x) => x.id === m.id) || m) });
+  return addRaws(raws, cnums);
+}
+
+/** Stažení z počítače přes Bluetooth: uloží nové ponory jako vlastní. */
+export async function importBle(raws: RawDive[]): Promise<number> { return raws.length ? addRaws(raws) : 0; }
+/** Začátky už uložených vlastních ponorů daného počítače (aby se stahovaly jen nové). */
+export function knownStarts(serial: number): Set<number> {
+  return new Set([...st.metas, ...(st.hidden || [])].filter((m) => m.h.serial === serial).map((m) => m.h.start));
+}
+
+/** Klíč ponoru nezávislý na zdroji (Cloud / Bluetooth): sériové číslo počítače + začátek. */
+const diveKey = (m: { h: { serial: number; start: number } }) => `${m.h.serial}:${m.h.start}`;
+
+/** Uloží nové ponory (z importu Cloudu nebo z Bluetooth); duplicity podle id i podle počítače a začátku. */
+async function addRaws(raws: RawDive[], cnums: Map<string, number> = new Map()): Promise<number> {
+  const have = new Set(st.metas.map((m) => m.id)), keys = new Set([...st.metas, ...(st.hidden || [])].map(diveKey));
   const added: Meta[] = [];
   const skipped: string[] = [];
   for (const r of raws) {
@@ -371,6 +387,8 @@ async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promis
       const ph = await peekHeader(r.blob);
       const raw: RawDive = { ...r, num: ph.num, start: ph.start, blob: r.blob.slice(), cnum: cnums.get(r.id) };
       const m = await metaOf(raw);
+      if (keys.has(diveKey(m))) continue; // stejný ponor už je (z jiného zdroje)
+      keys.add(diveKey(m));
       await db.put("raw", raw);
       await db.put("meta", m);
       added.push(m);
@@ -1045,6 +1063,8 @@ export async function saveCell(c: Partial<Cell> & { pos: 1 | 2 | 3; installed: s
   delete (cell as { photos?: unknown }).photos;
   // nové čidlo na pozici uzavře to dosavadní
   if (!c.id) for (const o of Object.values(lb.cells)) if (o.pos === cell.pos && !o.removed && o.installed <= cell.installed) lb.cells[o.id] = { ...o, removed: cell.installed, reason: o.reason || "Výměna", updated: Date.now() };
+  // zadané starší čidlo (na pozici už je novější): jeho konec = instalace toho novějšího
+  if (!c.id && !cell.removed) { const later = Object.values(lb.cells).filter((o) => o.pos === cell.pos && o.installed > cell.installed).map((o) => o.installed).sort()[0]; if (later) cell.removed = later; }
   lb.cells[cell.id] = cell;
   await saveLb(lb);
   return cell;

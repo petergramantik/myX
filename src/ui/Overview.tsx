@@ -8,6 +8,7 @@ import { CellTiles, useCells } from "./Cells";
 import { hasExt } from "./Dives";
 import type { Meta } from "../app/model";
 import { BatteryTiles, useBatteries } from "./Batteries";
+import { BleDownload } from "./BleDownload";
 
 export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }: { label?: string }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -226,7 +227,7 @@ export function OverviewScreen() {
           ]} />
         </Card>
       )}
-      <div className="center"><ImportButton /></div>
+      <div className="center"><BleDownload /><ImportButton /></div>
 
       <Card title="Kde jsem" onTitle={egg.tap} id="where">
         {egg.text && <div className="egg"><span>{egg.text}</span><button className="egg-x" aria-label="Zavřít" onClick={egg.close}>✕</button></div>}
