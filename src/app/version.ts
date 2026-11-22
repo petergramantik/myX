@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.16";
+export const APP_VERSION = "1.42-dev.17";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.17", date: "2026-11-22", title: "Bluetooth: Petrel 2 (dev)", items: [
+    "Stahování přes Bluetooth zkouší i starší sériovou službu Stollmann Terminal I/O (pravděpodobně Petrel 2).",
+  ] },
   { version: "1.42-dev.16", date: "2026-11-22", title: "Bluetooth: Petrel 2 (dev)", items: [
     "Stahování přes Bluetooth zkouší i sériovou službu Terminal I/O (starší modul Petrelu 2) a do ladicího výpisu vypíše všechny služby počítače.",
   ] },

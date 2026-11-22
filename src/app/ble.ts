@@ -20,10 +20,12 @@ interface Session { tx: (req: Uint8Array) => Promise<Uint8Array>; proto: Proto; 
 
 // Další možné „sériové“ služby BLE (Petrel 2 má starší modul – pravděpodobně Telit/Stollmann Terminal I/O)
 const TIO = "0000fefb-0000-1000-8000-00805f9b34fb";
+/** Starší Terminal I/O (Stollmann BlueMod, ASCII „STMTERIOSERV1000“) – mají ho OSTC a nejspíš Petrel 2. */
+const TIO_OLD = "53544d54-4552-494f-5345-525631303030";
 const TIO_DATA_RX = "00000001-0000-1000-8000-008025000000", TIO_DATA_TX = "00000002-0000-1000-8000-008025000000";
 const TIO_CRED_RX = "00000003-0000-1000-8000-008025000000", TIO_CRED_TX = "00000004-0000-1000-8000-008025000000";
 const UBLOX = "2456e1b9-26e2-8f83-e744-f34f01e9d701", NORDIC = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-export const BLE_SERVICES = [SW_SERVICE, SW_SERVICE_V2, TIO, UBLOX, NORDIC];
+export const BLE_SERVICES = [SW_SERVICE, SW_SERVICE_V2, TIO, TIO_OLD, UBLOX, NORDIC];
 
 const props = (c: Char) => Object.entries(c.properties).filter(([, v]) => v === true).map(([k]) => k).join(",");
 
@@ -31,14 +33,14 @@ const props = (c: Char) => Object.entries(c.properties).filter(([, v]) => v === 
 async function openSession(device: any, log: (s: string) => void, first: boolean): Promise<Session> {
   const gatt = await device.gatt.connect();
   // všechny dostupné služby – do ladicího výpisu
-  const svcs: any[] = await gatt.getPrimaryServices().catch(() => []);
+  const svcs: any[] = await gatt.getPrimaryServices().catch((e: Error) => { if (first) log(`Služby: ${e.message}`); return []; });
   const chars = new Map<string, Char[]>();
   for (const sv of svcs) { const cs: Char[] = await sv.getCharacteristics().catch(() => []); chars.set(sv.uuid, cs); if (first) log(`Služba ${sv.uuid}: ${cs.map((c) => `${c.uuid.slice(0, 8)}[${props(c)}]`).join(" ")}`); }
   const pick = BLE_SERVICES.find((u) => chars.has(u)) ?? [...chars.keys()].find((u) => { const cs = chars.get(u)!; return cs.some((c) => c.properties.write || c.properties.writeWithoutResponse) && cs.some((c) => c.properties.notify || c.properties.indicate); });
   if (!pick) throw new Error(`Počítač nemá známou službu Bluetooth (nalezeno ${svcs.length} služeb) – pošli prosím ladicí výpis`);
   const cs = chars.get(pick)!;
   const proto: Proto = pick === SW_SERVICE_V2 ? 2 : 1;
-  const tio = pick === TIO;
+  const tio = pick === TIO || pick === TIO_OLD;
   if (first) log(`Používám službu ${pick}${tio ? " (Terminal I/O)" : ""}, protokol V${proto}`);
   const byId = (u: string) => cs.find((c) => c.uuid === u);
   const wr = tio ? byId(TIO_DATA_RX) : cs.find((c) => c.properties.writeWithoutResponse || c.properties.write);
