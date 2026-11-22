@@ -33,7 +33,12 @@ const props = (c: Char) => Object.entries(c.properties).filter(([, v]) => v === 
 async function openSession(device: any, log: (s: string) => void, first: boolean): Promise<Session> {
   const gatt = await device.gatt.connect();
   // všechny dostupné služby – do ladicího výpisu
-  const svcs: any[] = await gatt.getPrimaryServices().catch((e: Error) => { if (first) log(`Služby: ${e.message}`); return []; });
+  // Petrel zveřejní služby až chvíli po připojení (a po spárování) – zkusit několikrát
+  let svcs: any[] = [];
+  for (let k = 0; k < 4 && !svcs.length; k++) {
+    if (k) await sleep(1500);
+    svcs = await gatt.getPrimaryServices().catch((e: Error) => { if (first) log(`Služby (pokus ${k + 1}): ${e.message}`); return []; });
+  }
   const chars = new Map<string, Char[]>();
   for (const sv of svcs) { const cs: Char[] = await sv.getCharacteristics().catch(() => []); chars.set(sv.uuid, cs); if (first) log(`Služba ${sv.uuid}: ${cs.map((c) => `${c.uuid.slice(0, 8)}[${props(c)}]`).join(" ")}`); }
   const pick = BLE_SERVICES.find((u) => chars.has(u)) ?? [...chars.keys()].find((u) => { const cs = chars.get(u)!; return cs.some((c) => c.properties.write || c.properties.writeWithoutResponse) && cs.some((c) => c.properties.notify || c.properties.indicate); });
