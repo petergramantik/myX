@@ -34,7 +34,7 @@ export function BleDownload() {
   };
   return (
     <div className="ble">
-      {busy ? <button className="btn danger" onClick={() => { stop.current = true; setProg({ phase: "Ukončuji…" }); }}>Ukončit stahování</button>
+      {busy ? <button className="btn danger" disabled={stop.current} onClick={() => { stop.current = true; setProg({ phase: "Dokončuji ponor, pak skončím…" }); }}>{stop.current ? "Dokončuji ponor…" : "Ukončit stahování"}</button>
         : <button className="btn primary" onClick={run}>Stáhnout z počítače (Bluetooth)</button>}
       {!busy && !err && !log.length && <p className="note">Na Petrelu otevři Upload log (Bluetooth), pak klepni a vyber počítač. Petrel 2 přes prohlížeč nejde – použij aplikaci <a href="https://github.com/petergramantik/myX/releases" target="_blank" rel="noreferrer">myX Petrel</a> a na konci vyber Sdílet → myX (nebo soubor načti tlačítkem Importovat).</p>}
       {busy && prog && <p className="muted small">{prog.phase}{prog.of ? ` ${prog.dive}/${prog.of}` : ""}{prog.bytes ? ` · ${Math.round(prog.bytes / 1024)} kB` : ""}</p>}

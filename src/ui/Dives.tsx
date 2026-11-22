@@ -5,7 +5,7 @@ import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, neare
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
 import { TAG_ORDER, diveTagsOf, isHiddenW, tagCat, withEmptiedCats, type DiveTag, type TagCat } from "../core/tags";
-import { norm, tankMix, tankVol, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
+import { CO2_SUSPECT, norm, tankMix, tankVol, uid, type DiveNote, type ExtGas, type Meta } from "../app/model";
 import { partIds, shareDives } from "./share";
 import { ask, askText, choose } from "../app/dialog";
 import { RIGS, hasDeco, isCC, pscrLoopPo2, supplyPo2, type Rig } from "../core/rig";
@@ -18,7 +18,7 @@ import { ChartDefs, LineChart, TissueMap, ZoomCtx } from "./Chart";
 
 const C = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#fff176", "#ef5350"];
 
-const DL0 = { q: "", rate: "", tagF: [] as TagCat[], gasF: [] as string[], onlyCommon: true, bsel: [] as string[], noBuddy: false, pickMode: false, picked: [] as string[] };
+const DL0 = { q: "", rate: "", tagF: [] as TagCat[], gasF: [] as string[], onlyCommon: true, bsel: [] as string[], noBuddy: false, pickMode: false, picked: [] as string[], sort: "date" as "date" | "depth-" | "depth+" | "dur-" | "dur+" | "site" };
 const dlMemo: typeof DL0 & { ctx: string | null; y: number } = { ...DL0, ctx: null, y: 0 };
 
 /** Seznam mých ponorů rovnou ve výběru ke sdílení (z DB → Můj log). */
@@ -44,6 +44,8 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
   const [noBuddy, setNoBuddy] = mem("noBuddy");
   const [moreB, setMoreB] = useState(false);
   const [pickMode, setPickMode] = mem("pickMode");
+  const [sort, setSort0] = useState<typeof DL0.sort>(() => { try { return (localStorage.getItem("myx-sort") as typeof DL0.sort) || "date"; } catch { return "date"; } });
+  const setSort = (v: typeof DL0.sort) => { setSort0(v); try { localStorage.setItem("myx-sort", v); } catch { /* */ } };
   const [picked, setPicked] = mem("picked");
   const endPick = () => { setPickMode(false); setPicked([]); };
   useBackLayer(pickMode, endPick);
@@ -77,9 +79,20 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
     return n.split(" ").every((w) => txt.includes(w));
   };
   const vm = viewMetas();
-  const rows = vm.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse()
+  const rows0 = vm.map((m, i) => ({ m, no: i + 1, note: lb.notes[m.id] })).reverse()
     .filter(({ m, note }) => match(note, m.start) && (!st.guest || !onlyCommon || common(m)) && (!noBuddy || (!note?.buddyIds.length && !cmp.has(m.id))) && (!tagF.length || diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => tagF.includes(t.cat)))
       && (!gasF.length || gasCats(m).some((g) => gasF.includes(g))));
+  // řazení v plném zobrazení: hloubka a doba v obou směrech, lokalita abecedně (uvnitř od nejnovějších), bez lokality na konec
+  const siteName = (r: (typeof rows0)[number]) => (r.note?.siteId ? lb.sites[r.note.siteId]?.name : sugSite.get(r.m.id)?.name) || "";
+  const rows = compact || sort === "date" ? rows0 : [...rows0].sort((a, b) => {
+    switch (sort) {
+      case "depth-": return b.m.h.maxDepth - a.m.h.maxDepth;
+      case "depth+": return a.m.h.maxDepth - b.m.h.maxDepth;
+      case "dur-": return b.m.h.diveTimeS - a.m.h.diveTimeS;
+      case "dur+": return a.m.h.diveTimeS - b.m.h.diveTimeS;
+      default: { const x = siteName(a), y = siteName(b); if (!x !== !y) return x ? -1 : 1; return x.localeCompare(y, "cs") || b.m.start - a.m.start; }
+    }
+  });
   // dostupné filtry: kategorie plynů a problémů, které se v ponorech vyskytují
   const gasAll = GAS_CATS.filter((g) => vm.some((m) => gasCats(m).includes(g)));
   const tagAll = TAG_ORDER.filter((c) => vm.some((m) => diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === c)));
@@ -123,6 +136,12 @@ export function DivesScreen({ site, buddy }: { site?: string; buddy?: string }) 
           <span className="cf-group">{tagAll.map((c) => { const y = vm.filter((m) => diveTagsOfMeta(st.metas, m, lb.settings.th).some((t) => t.cat === c)).length; return <span key={c} className="cf-col"><button className={"tag cf" + (tagF.includes(c) ? " on" : "")} onClick={() => tog(tagF, c, setTagF)}>{c === "ČIDLO" ? "ČIDLA" : c}</button>{tagF.includes(c) && <small>{tagF.length > 1 ? `${rows.length}/${y}` : y}</small>}</span>; })}</span>
         </div>}
       </>)}
+      {!compact && <div className="seg filter sort-row">
+        <button className={sort === "date" ? "on" : ""} onClick={() => setSort("date")}>Datum</button>
+        <button className={sort.startsWith("depth") ? "on" : ""} onClick={() => setSort(sort === "depth-" ? "depth+" : "depth-")}>Hloubka {sort === "depth+" ? "↑" : "↓"}</button>
+        <button className={sort.startsWith("dur") ? "on" : ""} onClick={() => setSort(sort === "dur-" ? "dur+" : "dur-")}>Doba {sort === "dur+" ? "↑" : "↓"}</button>
+        <button className={sort === "site" ? "on" : ""} onClick={() => setSort("site")}>Lokalita</button>
+      </div>}
       {drafts.map((d) => (
         <div key={d.id} className="dive-row draft" onClick={() => go({ t: "draft", id: d.id })}>
           <div className="dr-main"><b>{d.siteId ? lb.sites[d.siteId]?.name : "bez lokality"}</b><small>{fmtDate(d.created)} · čeká na data z počítače</small></div>
@@ -429,6 +448,28 @@ function ChartEvents({ warns, keys, focus }: { warns: Alert[]; keys: string[]; f
 }
 
 /** CO₂ ve smyčce (hlavní údaj) se zátěží a hustotou plynu (doplňkově, pravá osa). */
+/** Ruční posouzení CO₂ ponoru: porucha čidla (ze statistik ven, upozornění CO₂ skrytá) / skutečné CO₂ (i nad 20 mbar). */
+function Co2Verdict({ d }: { d: Dive }) {
+  const st = useStore();
+  if (st.guest) return null;
+  const note = st.lb.notes[d.id] || { buddyIds: [], note: "", updated: 0 };
+  const max = Math.max(0, ...d.s.co2.filter((v): v is number => v != null));
+  const set = (v: "fault" | "real" | undefined) => {
+    const hide = (note.hideW || []).filter((k) => k !== "c:CO₂");
+    setNote(d.id, { co2: v, hideW: v === "fault" ? [...hide, "c:CO₂"] : hide });
+  };
+  return (
+    <div className="co2v">
+      <small className="muted">CO₂ v tomto ponoru:{max > CO2_SUSPECT && !note.co2 ? ` maximum ${num(max, 1)} mbar je nad ${CO2_SUSPECT} mbar – nejspíš porucha čidla (?).` : ""}</small>
+      <div className="row">
+        <button className={"btn small" + (note.co2 === "fault" ? " on" : "")} onClick={() => set(note.co2 === "fault" ? undefined : "fault")}>Porucha čidla CO₂{note.co2 === "fault" ? " ✓" : ""}</button>
+        <button className={"btn small" + (note.co2 === "real" ? " on" : "")} onClick={() => set(note.co2 === "real" ? undefined : "real")}>Skutečné CO₂{note.co2 === "real" ? " ✓" : ""}</button>
+      </div>
+      {note.co2 === "fault" && <small className="muted">Ponor se nezapočítává do statistik CO₂ a jeho upozornění CO₂ jsou skrytá.</small>}
+    </div>
+  );
+}
+
 function Co2Card({ d, focusT, warns, focus }: { d: Dive; focusT?: number; warns: Alert[]; focus?: ChartFocus | null }) {
   const s = d.s, cc = isCC(d.h); // bez čidel O₂ se zátěž z poklesu pO₂ spočítat nedá
   const base = useEffortBase();
@@ -470,6 +511,7 @@ function Co2Card({ d, focusT, warns, focus }: { d: Dive; focusT?: number; warns:
         extra={[...(cc ? [{ label: "Zátěž", values: wTxt }] : []), ...(hasCo2 ? [{ label: "Surová hodnota CO₂", values: s.co2raw }] : [])]} />
       <ChartEvents warns={warns} keys={["co2", "effort"]} focus={focus} />
       <Desc k="co2"><p className="note">{hasCo2 ? <><b>CO₂</b> ve smyčce (levá osa, mbar) je hlavní údaj. </> : null}{cc ? <><b>Zátěž</b> (pravá osa) = rychlost poklesu pO₂ opravená o změnu tlaku, úměrná spotřebě O₂, tedy námaze; 1 = tvoje obvyklá úroveň (medián z tvých ponorů, zvlášť pro nízký a vysoký setpoint). Počítá se z 3min okna bez rušených vzorků (klesání, hladina, přepnutí SP a ruční dávka O₂ do ustálení pO₂, 90 s po doplnění diluentu). Při úvodním sestupu chybí vždy – ADV přidává diluent. Mezery do 3 min jsou přemostěné tečkovaně (dopočteno), delší zůstávají prázdné; důvod v pruhu pod grafem. Oranžově = zvýšená zátěž (nad 2× aspoň 3 min{ef2.high.some((h) => h.o2 != null) ? ", potvrzená spotřebou O₂ z lahve" : ""}). </> : null} <b>Hustota plynu</b> (pravá osa, g/l, čárkovaně): nad 5,2 g/l roste dechová práce a riziko hromadění CO₂, nad 6,2 g/l výrazně; max. {num(ef.densMax, 1)} g/l, nad 5,2 g/l {Math.round(ef.densOver52)} min. Fialové čárky dole = doplnění diluentu – ADV, proplach smyčky nebo masky ({vents.length}×).</p></Desc>
+      {hasCo2 && <Co2Verdict d={d} />}
     </Card>
   );
 }

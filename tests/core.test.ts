@@ -488,6 +488,14 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
     const got2 = await P.downloadDive(tx2, 1, 0x80002000, ds);
     const end = P.nativeEnd(native);
     ok(err.includes("disconnected") && part > 0 && part % 32 === 0 && ds.resumed === true && got2.length === end && got2.join() === native.subarray(0, end).join(), "Bluetooth: po přerušení naváže a složí stejný ponor");
+    // ztracená odpověď na blok: stejný blok se vyžádá znovu (K6)
+    let lost = 1, blkSeen = 0;
+    const txLoss: import("../src/core/swproto").Transfer = async (q) => {
+      if (q[0] === 0x36 && ++blkSeen === 5 && lost-- > 0) throw new Error("Počítač neodpovídá (časový limit)");
+      return tx(q);
+    };
+    const got4 = await P.download(txLoss, 1, 0x80002000, P.DIVE_SIZE, true);
+    ok(lost === 0 && got4.subarray(0, native.length).join() === native.join(), "Bluetooth: ztracená odpověď – blok se vyžádá znovu a ponor je celý");
     // počítač nekomprimované čtení odmítne → stáhne celý znovu
     const ds2: import("../src/core/swproto").DiveState = { have: native.slice(0, 320) };
     const txNo: import("../src/core/swproto").Transfer = async (q) => (q[1] === 0 && q[0] === 0x35 ? Uint8Array.from([0x7f, 0x35, 0x22]) : tx2(q));

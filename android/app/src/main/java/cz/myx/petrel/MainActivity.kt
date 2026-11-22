@@ -42,7 +42,8 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var go: Button
     private lateinit var resend: Button
-    private lateinit var gap: Button
+    private lateinit var saveDb: Button
+    @Volatile private var hardStop = false
     private val prefs by lazy { getSharedPreferences("petrel", MODE_PRIVATE) }
     private lateinit var devs: Spinner
     private lateinit var count: RadioGroup
@@ -63,8 +64,10 @@ class MainActivity : Activity() {
         devs = Spinner(this)
         root.addView(devs)
         count = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
-        listOf("Poslední ponor", "Posledních 5 ponorů", "Všechny ponory").forEachIndexed { i, s ->
-            count.addView(RadioButton(this).apply { text = s; id = 100 + i; setTextColor(Color.rgb(220, 230, 240)); isChecked = i == prefs.getInt("count", 0) })
+        // volba počtu: 0 = 1, 1 = 5, 2 = 10, 3 = vše (starší uložená 2 = vše)
+        val saved = prefs.getInt("count2", if (prefs.getInt("count", 0) == 2) 3 else prefs.getInt("count", 0))
+        listOf("Poslední ponor", "Posledních 5 ponorů", "Posledních 10 ponorů", "Všechny ponory").forEachIndexed { i, s ->
+            count.addView(RadioButton(this).apply { text = s; id = 100 + i; setTextColor(Color.rgb(220, 230, 240)); isChecked = i == saved })
         }
         root.addView(count)
         go = Button(this).apply { text = "Stáhnout"; setOnClickListener { if (running) cancel() else start() } }
@@ -72,8 +75,9 @@ class MainActivity : Activity() {
         resend = Button(this).apply { text = "Poslat znovu do myX"; setOnClickListener { lastFile()?.let { share(it, prefs.getInt("lastN", 0)) } } }
         root.addView(resend)
         resend.isEnabled = lastFile() != null
-        gap = Button(this).apply { text = "Ladicí: číst za konec ponoru"; setOnClickListener { if (!running) startGap() } }
-        root.addView(gap)
+        saveDb = Button(this).apply { text = "Uložit jako .db"; setOnClickListener { lastFile()?.let { askSaveDb(it) } } }
+        root.addView(saveDb)
+        saveDb.isEnabled = lastFile() != null
         root.addView(Button(this).apply { text = "Kopírovat výpis"; setOnClickListener {
             getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("myX Petrel", "${status.text}\n${log.text}"))
             android.widget.Toast.makeText(this@MainActivity, "Výpis zkopírován", android.widget.Toast.LENGTH_SHORT).show()
@@ -123,20 +127,24 @@ class MainActivity : Activity() {
     }
 
     // s otevřeným spojením jen nastavit stop – vlákno doběhne a ukončí spojení příkazem; při připojování zavřít socket
-    private fun cancel() { stop = true; setStatus("Ukončuji…"); if (swCur == null) try { socket?.close() } catch (_: Exception) {} }
+    private fun cancel() {
+        if (!stop) { stop = true; setStatus("Dokončuji ponor, pak skončím…"); runOnUiThread { go.text = "Ukončit hned" }; if (swCur == null) { hardStop = true; try { socket?.close() } catch (_: Exception) {} }; return }
+        // druhé klepnutí: ukončit hned (přerušený přenos může na Petrelu vyžadovat restart Bluetooth)
+        hardStop = true; setStatus("Ukončuji hned…")
+    }
 
     @SuppressLint("MissingPermission")
     private fun start() {
         val dev = devices.getOrNull(devs.selectedItemPosition) ?: return
-        val limit = when (count.checkedRadioButtonId) { 100 -> 1; 101 -> 5; else -> Int.MAX_VALUE }
-        prefs.edit().putString("dev", dev.address).putInt("count", count.checkedRadioButtonId - 100).apply()
-        stop = false; running = true; go.text = "Ukončit"; log.text = ""
+        val limit = when (count.checkedRadioButtonId) { 100 -> 1; 101 -> 5; 102 -> 10; else -> Int.MAX_VALUE }
+        prefs.edit().putString("dev", dev.address).putInt("count2", count.checkedRadioButtonId - 100).apply()
+        stop = false; hardStop = false; running = true; go.text = "Ukončit"; log.text = ""
         Thread {
             try {
                 val res = run(dev, limit)
                 if (res != null) {
                     prefs.edit().putString("lastFile", res.first.absolutePath).putInt("lastN", res.second).apply()
-                    runOnUiThread { resend.isEnabled = true; share(res.first, res.second) }
+                    runOnUiThread { resend.isEnabled = true; saveDb.isEnabled = true; share(res.first, res.second) }
                 }
             } catch (e: Exception) {
                 add("Chyba: ${e.message}")
@@ -179,7 +187,7 @@ class MainActivity : Activity() {
                     d = sw.download(base + e.addr, Shearwater.DIVE_SIZE, true) { b -> got = b; setStatus("Stahuji ponor ${k + 1}/${todo.size} · ${b / 1024} kB") }
                     break
                 } catch (x: Exception) {
-                    if (stop) { add("Ukončeno uprostřed ponoru ${k + 1}"); break }
+                    if (hardStop) { add("Ukončeno uprostřed ponoru ${k + 1}"); break }
                     // přerušení: zapsat kdy a kolik, znovu se připojit (max. 3×) a ponor stáhnout znovu
                     add("Přerušeno po ${(System.currentTimeMillis() - t0) / 1000} s, ${got / 1024} kB: ${x.message}")
                     if (attempt == 3) break
@@ -187,7 +195,7 @@ class MainActivity : Activity() {
                     try { Thread.sleep(1500); sw = connect(dev) } catch (y: Exception) { add("Znovu připojit nešlo: ${y.message}") }
                 }
             }
-            if (d == null) { if (arr.length() == 0 && !stop) throw Exception("Ponor se nepodařilo stáhnout"); break }
+            if (d == null) { if (arr.length() == 0 && !hardStop) throw Exception("Ponor se nepodařilo stáhnout"); break }
             if (!Shearwater.complete(d)) { add("Ponor ${k + 1} se nestáhl celý – vynechán"); continue }
             var num = 0
             var i = 0
@@ -201,64 +209,6 @@ class MainActivity : Activity() {
         f.writeText(JSONObject().put("myxbt", 1).put("serial", serial).put("model", model).put("firmware", fw).put("dives", arr).toString())
         setStatus("Staženo ${arr.length()} ${if (arr.length() == 1) "ponor" else "ponorů"}${if (stop) " (ukončeno)" else ""} – vyber myX")
         return f to arr.length()
-    }
-
-    /**
-     * Ladicí čtení (jen čtení paměti): úsek mezi koncem předposledního a začátkem posledního ponoru – zda Petrel
-     * ukládá i dobu na hladině mimo ponor. Výsledek: .bin (surová data) + .txt (výpis) ke sdílení.
-     */
-    @SuppressLint("MissingPermission")
-    private fun startGap() {
-        val dev = devices.getOrNull(devs.selectedItemPosition) ?: return
-        stop = false; running = true; go.text = "Ukončit"; log.text = ""
-        Thread {
-            try {
-                setStatus("Připojuji ${dev.name}…")
-                val sw = connect(dev)
-                val serial = String(sw.rdbi(Shearwater.ID_SERIAL)).trim().uppercase()
-                val lu = sw.rdbi(Shearwater.ID_LOGUPLOAD)
-                val base = ((lu[1].toLong() and 0xFF) shl 24) or ((lu[2].toLong() and 0xFF) shl 16) or ((lu[3].toLong() and 0xFF) shl 8) or (lu[4].toLong() and 0xFF)
-                add("S/N $serial, log 0x${base.toString(16)}")
-                setStatus("Čtu seznam ponorů…")
-                val list = sw.manifest().sortedByDescending { it.fp }
-                fun hex(b: ByteArray) = b.joinToString(" ") { "%02x".format(it.toInt() and 0xFF) }
-                for (e in list.take(3)) add("Ponor ${Date(e.fp * 1000)}: 0x${e.addr.toString(16)}–0x${e.end.toString(16)}\n  ${hex(e.raw)}")
-                if (list.size < 2) throw Exception("V počítači musí být aspoň 2 ponory")
-                val last = list[0]
-                val prev = list[1]
-                val from = prev.end
-                val len = (last.addr - prev.end).coerceIn(0L, 0x80000L).toInt()
-                add("Úsek 0x${from.toString(16)}–0x${(from + len).toString(16)} ($len B, celkem ${last.addr - prev.end} B)")
-                if (len <= 0) throw Exception("Mezi ponory není žádný úsek")
-                // čtení předposledního ponoru a pokračování za jeho koncem (= úsek mezi ponory), potom totéž za posledním ponorem
-                val dir = File(cacheDir, "out").apply { mkdirs() }
-                val files = ArrayList<File>()
-                for ((name, e) in listOf("predposledni" to prev, "posledni" to last)) {
-                    if (stop) break
-                    add("— $name ponor: čtu za konec —")
-                    val (dive, extra) = try {
-                        sw.downloadBeyond(base + e.addr, 0x80000, { m -> add(m) }) { b -> setStatus("$name: ${b / 1024} kB") }
-                    } catch (x: Exception) { add("$name: ${x.message}"); break }
-                    add("$name: ponor ${dive.size} B, celý ${Shearwater.complete(dive)}, za koncem ${extra.size} B")
-                    if (extra.isNotEmpty()) files.add(File(dir, "petrel-$serial-$name-za-koncem.bin").apply { writeBytes(extra) })
-                }
-                val txt = File(dir, "petrel-$serial-usek.txt").apply { writeText(log.text.toString()) }
-                files.add(txt)
-                setStatus(if (files.size > 1) "Za koncem ponoru jsou data – pošli soubory" else "Za koncem ponoru nic – zkopíruj výpis")
-                runOnUiThread {
-                    val uris = ArrayList(files.map { FileProvider.getUriForFile(this, "cz.myx.petrel.files", it) })
-                    startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                        type = "*/*"; putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }, "Poslat ladicí úsek"))
-                }
-            } catch (e: Exception) {
-                add("Chyba: ${e.message}"); setStatus(if (stop) "Ukončeno." else "Chyba: ${e.message}")
-            } finally {
-                closeSession()
-                running = false
-                runOnUiThread { go.text = "Stáhnout" }
-            }
-        }.start()
     }
 
     /** Připojí sériový port počítače (SPP, při neúspěchu RFCOMM kanál 5 – Petrel 2). */
@@ -275,7 +225,61 @@ class MainActivity : Activity() {
         }
         socket = s
         add("Připojeno")
-        return Shearwater(s.inputStream, s.outputStream) { stop }.also { it.purge(); swCur = it }
+        return Shearwater(s.inputStream, s.outputStream, { hardStop }) { m -> add(m) }.also { it.purge(); swCur = it }
+    }
+
+    private var pendingDb: File? = null
+
+    /** Uložení stažených ponorů jako .db (formát sdílení myX: log_data s nativními daty v obalu jako Shearwater Cloud). */
+    private fun askSaveDb(src: File) {
+        val j = JSONObject(src.readText())
+        val serial = j.getString("serial")
+        val db = File(cacheDir, "out/myX_Petrel_$serial.db")
+        try { buildDb(j, db) } catch (e: Exception) { setStatus("Uložení .db selhalo: ${e.message}"); return }
+        pendingDb = db
+        val day = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+        startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE); type = "application/octet-stream"
+            putExtra(Intent.EXTRA_TITLE, "myX_${j.optString("model", "Petrel").replace(" ", "")}_${day}_${j.getJSONArray("dives").length()}.db")
+        }, 7)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data
+        if (requestCode != 7 || resultCode != RESULT_OK || uri == null) return
+        try {
+            contentResolver.openOutputStream(uri)?.use { o -> pendingDb?.inputStream()?.use { it.copyTo(o) } }
+            setStatus("Uloženo jako .db – v myX ho načteš tlačítkem Importovat")
+        } catch (e: Exception) { setStatus("Uložení selhalo: ${e.message}") }
+    }
+
+    private fun buildDb(j: JSONObject, f: File) {
+        f.parentFile?.mkdirs(); f.delete()
+        val serial = j.getString("serial"); val model = j.optString("model", "Petrel")
+        val db = android.database.sqlite.SQLiteDatabase.openDatabase(f.path, null, android.database.sqlite.SQLiteDatabase.CREATE_IF_NECESSARY or android.database.sqlite.SQLiteDatabase.NO_LOCALIZED_COLLATORS)
+        try {
+            // jeden soubor bez WAL deníku (čte ho jednoduchá čtečka v myX)
+            db.disableWriteAheadLogging()
+            db.rawQuery("PRAGMA journal_mode=DELETE", null).use { it.moveToFirst() }
+            db.execSQL("CREATE TABLE log_data (log_id TEXT, file_name TEXT, data_bytes_1 BLOB)")
+            db.execSQL("CREATE TABLE dive_details (DiveId TEXT, DiveNumber INTEGER, Site TEXT, Buddy TEXT, Notes TEXT)")
+            val dives = j.getJSONArray("dives")
+            val fmt = SimpleDateFormat("yyyy-M-d", Locale.ROOT).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+            for (k in 0 until dives.length()) {
+                val d = dives.getJSONObject(k)
+                val nat = Base64.decode(d.getString("data"), Base64.DEFAULT)
+                val gz = java.io.ByteArrayOutputStream().also { b -> java.util.zip.GZIPOutputStream(b).use { it.write(nat) } }.toByteArray()
+                val blob = ByteArray(4 + gz.size)
+                blob[0] = nat.size.toByte(); blob[1] = (nat.size shr 8).toByte(); blob[2] = (nat.size shr 16).toByte(); blob[3] = (nat.size shr 24).toByte()
+                System.arraycopy(gz, 0, blob, 4, gz.size)
+                val fp = d.getLong("fp"); val num = d.optInt("num", 0)
+                val id = "ble-${serial.lowercase().trimStart('0')}-$fp"
+                val fn = "$model[$serial]#$num ${fmt.format(Date(fp * 1000))} (Bluetooth)"
+                db.execSQL("INSERT INTO log_data VALUES (?, ?, ?)", arrayOf<Any>(id, fn, blob))
+                db.execSQL("INSERT INTO dive_details VALUES (?, ?, NULL, NULL, NULL)", arrayOf<Any>(id, num))
+            }
+        } finally { db.close() }
     }
 
     private fun share(f: File, n: Int) {

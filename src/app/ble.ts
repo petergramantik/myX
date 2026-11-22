@@ -1,6 +1,6 @@
 // Stažení ponorů ze Shearwater přes Web Bluetooth (Chrome na Androidu). Protokol v core/swproto.ts.
 import type { RawDive } from "../core/shearwater";
-import { download, downloadDive, type DiveState, ID_FIRMWARE, ID_LOGUPLOAD, ID_MODEL, ID_SERIAL, MANIFEST_ADDR, MANIFEST_SIZE, parseManifest, rdbi, SlipReader, slipFrames, SW_MODELS, SW_SERVICE, SW_SERVICE_V2, unwrapResponse, wrapBlob, wrapRequest, type Proto } from "../core/swproto";
+import { download, downloadDive, setDownloadLog, type DiveState, ID_FIRMWARE, ID_LOGUPLOAD, ID_MODEL, ID_SERIAL, MANIFEST_ADDR, MANIFEST_SIZE, parseManifest, rdbi, SlipReader, slipFrames, SW_MODELS, SW_SERVICE, SW_SERVICE_V2, unwrapResponse, wrapBlob, wrapRequest, type Proto } from "../core/swproto";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Char = any;
@@ -26,7 +26,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Povolené příkazy – jen čtení: RDBI 0x22, stažení paměti 0x35/0x36/0x37. Cokoli jiného se neodešle. */
 const READ_ONLY = new Set([0x22, 0x35, 0x36, 0x37]);
 
-interface Session { tx: (req: Uint8Array) => Promise<Uint8Array>; proto: Proto; close: () => void }
+interface Session { tx: (req: Uint8Array) => Promise<Uint8Array>; proto: Proto; shutdown: () => Promise<void>; close: () => void }
+const SHUTDOWN = Uint8Array.from([0x2e, 0x90, 0x20, 0x00]);
 
 // Další možné „sériové“ služby BLE (Petrel 2 má starší modul – pravděpodobně Telit/Stollmann Terminal I/O)
 const TIO = "0000fefb-0000-1000-8000-00805f9b34fb";
@@ -93,7 +94,7 @@ async function openSession(device: any, log: (s: string) => void, first: boolean
     if (tio) { await waitFor(() => txCredits > 0, 3000, "Počítač nepřidělil kredity (Terminal I/O)"); txCredits--; }
     return wr.properties.writeWithoutResponse ? wr.writeValueWithoutResponse(f) : wr.writeValueWithResponse(f);
   };
-  const readPacket = async (ms = 3000): Promise<Uint8Array> => { await waitFor(() => reader.packets.length > 0, ms, "Počítač neodpovídá (časový limit)"); return reader.packets.shift()!; };
+  const readPacket = async (ms = 10000): Promise<Uint8Array> => { await waitFor(() => reader.packets.length > 0, ms, "Počítač neodpovídá (časový limit)"); return reader.packets.shift()!; };
   let verbose = first ? 0 : 99;
   const tx = async (req: Uint8Array) => {
     if (!READ_ONLY.has(req[0])) throw new Error(`Pojistka: příkaz 0x${req[0].toString(16)} není čtení – neodeslán`);
@@ -104,7 +105,9 @@ async function openSession(device: any, log: (s: string) => void, first: boolean
     if (verbose < 13) log(`← ${hex(res.subarray(0, 16))}${res.length > 16 ? ` … (${res.length} B)` : ""}`);
     return res;
   };
-  return { tx, proto, close: () => { nt.removeEventListener("characteristicvaluechanged", onVal); try { gatt.disconnect(); } catch { /* */ } } };
+  /** Ukončení spojení (jako libdivecomputer) – Petrel ukončí Upload log; jediný příkaz mimo čtení, odpověď se nečeká. */
+  const shutdown = async () => { reader.packets.length = 0; for (const f of slipFrames(wrapRequest(SHUTDOWN, proto), proto)) await write(f); await readPacket(1000).catch(() => {}); };
+  return { tx, proto, shutdown, close: () => { nt.removeEventListener("characteristicvaluechanged", onVal); try { gatt.disconnect(); } catch { /* */ } } };
 }
 
 /**
@@ -123,6 +126,7 @@ export async function bleDownload(plan: BlePlan, onDive: (r: RawDive) => Promise
   device.addEventListener("gattserverdisconnected", () => log(`Odpojeno po ${Math.round((Date.now() - t0) / 1000)} s (ponor ${diveNow || "–"}, ${Math.round(bytesNow / 1024)} kB z něj)`));
   onProgress({ phase: "Připojuji…" });
   let ses = await openSession(device, log, true);
+  setDownloadLog(log);
   let retries = 0;
   /** Provede krok; při přerušení spojení se znovu připojí (max. 3×) a krok zopakuje. */
   const step = async <T>(f: (s: Session) => Promise<T>): Promise<T> => {
@@ -167,10 +171,11 @@ export async function bleDownload(plan: BlePlan, onDive: (r: RawDive) => Promise
       const t1 = Date.now();
       onProgress({ phase: "Stahuji ponory…", dive: k + 1, of: todo.length });
       if (cancelled()) return { serial, model, firmware, saved, listed: list.length, cancelled: true };
-      const ds: DiveState = { have: null }; // po přerušení navázat, ne stahovat znovu od začátku
+      const ds: DiveState = { have: null, noTail: true }; // Petrel čtení od jiné adresy než začátku ponoru odmítá – navazování vypnuto, ponor znovu celý
       const nat = await step(async (s) => {
         bytesNow = 0;
-        const d = await downloadDive(s.tx, s.proto, base + todo[k].addr, ds, (b) => { if (cancelled()) throw new Error(CANCEL); bytesNow = b; onProgress({ phase: ds.have ? "Navazuji ponor…" : "Stahuji ponory…", dive: k + 1, of: todo.length, bytes: b }); }, log);
+        // ukončení až mezi ponory – přerušený přenos uvede Petrel do chyby (trans exit seq)
+        const d = await downloadDive(s.tx, s.proto, base + todo[k].addr, ds, (b) => { bytesNow = b; onProgress({ phase: cancelled() ? "Dokončuji ponor, pak skončím…" : "Stahuji ponory…", dive: k + 1, of: todo.length, bytes: b }); }, log);
         if (!diveComplete(d)) { ds.have = null; ds.noTail = true; throw new Error("Ponor se nestáhl celý"); }
         return d;
       }).catch((e) => { if (cancelled() || (e as Error).message === CANCEL) return null; throw e; });
@@ -187,6 +192,8 @@ export async function bleDownload(plan: BlePlan, onDive: (r: RawDive) => Promise
     }
     return { serial, model, firmware, saved, listed: list.length };
   } finally {
+    setDownloadLog(null);
+    try { await ses.shutdown(); log("Spojení ukončeno"); } catch { /* */ }
     ses.close();
   }
 }

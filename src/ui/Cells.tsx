@@ -2,7 +2,7 @@ import { ask, askText } from "../app/dialog";
 import { useEffect, useRef, useState } from "react";
 import { cellStatus, detectCellEvents, type CellStatus } from "../core/cells";
 import { answerCellPrompt, deleteCell, localNow, saveCell, saveSettings, toast } from "../app/store";
-import type { Cell, Meta } from "../app/model";
+import { CO2_SUSPECT, co2State, type Cell, type Meta } from "../app/model";
 import { Card, fmtDate, go, num, useStore } from "./common";
 import { LineChart } from "./Chart";
 
@@ -122,9 +122,14 @@ export function useCo2() {
   const on = last?.sum.co2Max != null;
   let since: Meta | null = null;
   if (on) for (let i = ms.length - 1; i >= 0 && ms[i].sum.co2Max != null; i--) since = ms[i];
-  const high = ms.filter((m) => m.sum.co2Max != null && m.sum.co2Max >= th.co2Mbar);
-  const level = !last ? "none" : !on ? "none" : last.sum.co2Max! >= th.co2Mbar ? "bad" : last.sum.co2Max! >= th.co2Mbar * 0.7 ? "warn" : "ok";
-  return { last, on, since, high, level, limit: th.co2Mbar, cal: st.lb.settings.co2Cal || null };
+  // nad limitem: bez ponorů s poruchou čidla a podezřelých hodnot (nad 20 mbar, nepotvrzené)
+  const stOf = (m: Meta) => co2State(m, st.lb.notes[m.id]);
+  const high = ms.filter((m) => m.sum.co2Max != null && m.sum.co2Max >= th.co2Mbar && (stOf(m) === "ok" || stOf(m) === "clipped"));
+  const excluded = ms.filter((m) => m.sum.co2Max != null && m.sum.co2Max >= th.co2Mbar && (stOf(m) === "fault" || stOf(m) === "suspect"));
+  const lastSt = last ? stOf(last) : "ok";
+  const level = !last ? "none" : !on ? "none" : lastSt === "fault" || lastSt === "suspect" ? "warn" : last.sum.co2Max! >= th.co2Mbar ? "bad" : lastSt === "clipped" ? "warn" : last.sum.co2Max! >= th.co2Mbar * 0.7 ? "warn" : "ok";
+  const label = !on ? "Vypnuto" : lastSt === "fault" ? "Porucha" : lastSt === "suspect" ? "Podezřelé" : level === "bad" ? "Vysoké" : lastSt === "clipped" ? "Nevěrohodné" : level === "warn" ? "Zvýšené" : "V pořádku";
+  return { last, on, since, high, excluded, level, label, lastSt, stOf, limit: th.co2Mbar, cal: st.lb.settings.co2Cal || null };
 }
 
 function Co2Tile() {
@@ -136,7 +141,7 @@ function Co2Tile() {
       {x.on ? <>
         <div className="ct-v">{num(x.last.sum.co2Max!, 1)}</div>
         <div className="ct-u">mbar max</div>
-        <div className={"ct-l " + x.level}>{x.level === "bad" ? "Vysoké" : x.level === "warn" ? "Pozor" : "OK"}</div>
+        <div className={"ct-l " + x.level}>{x.label === "V pořádku" ? "OK" : x.label === "Zvýšené" ? "Pozor" : x.label}</div>
       </> : <>
         <div className="ct-v">–</div>
         <div className="ct-u">mbar max</div>
@@ -156,13 +161,14 @@ function Co2Panel() {
   const GASES = ["vzduch", "O₂", "kalibrační plyn"];
   return (
     <div className={"pcell ptile " + lvl}>
-      {x.last?.sum.co2Bad && <div className="reason warn">Čidlo nejspíš podhodnocuje – v posledním ponoru ukazovalo v hloubce přesnou nulu (oříznutá nula). Zkontroluj kalibraci, nízké hodnoty ber s rezervou.</div>}
-      <div className="pcell-h"><b className={"c-" + lvl}>Čidlo CO₂</b><span className={"pill " + (x.on ? x.level : "")}>{x.on ? (x.level === "bad" ? "Vysoké" : x.level === "warn" ? "Zvýšené" : "V pořádku") : "Deaktivováno"}</span></div>
+      {x.lastSt === "suspect" && <div className="reason warn">Maximum {num(x.last.sum.co2Max!, 1)} mbar je nad {CO2_SUSPECT} mbar – nejspíš porucha čidla (?). V detailu ponoru (karta CO₂) ho potvrď jako skutečné, nebo označ jako poruchu.</div>}
+      {x.lastSt === "clipped" && <div className="reason warn">Čidlo nejspíš podhodnocuje – v posledním ponoru ukazovalo v hloubce přesnou nulu (oříznutá nula). Zkontroluj kalibraci, nízké hodnoty ber s rezervou.</div>}
+      <div className="pcell-h"><b className={"c-" + lvl}>Čidlo CO₂</b><span className={"pill " + (x.on ? x.level : "")}>{x.on ? x.label : "Deaktivováno"}</span></div>
       {x.on ? <>
         <div className="kvline"><span>Max</span><b>{num(x.last.sum.co2Max!, 2)} mbar</b><span>Průměr</span><b>{num(x.last.sum.co2Avg ?? 0, 2)} mbar</b></div>
         <small>Poslední ponor {fmtDate(x.last.start)} · limit {num(x.limit, 1)} mbar{x.since ? ` · zapnuté od ponoru ${fmtDate(x.since.start)}` : ""}</small>
       </> : <small>V posledním ponoru ({fmtDate(x.last.start)}) čidlo neměřilo – záznamy chybějí nebo jsou celou dobu nulové.</small>}
-      <small>Ponorů s CO₂ nad limitem: {x.high.length}{x.high.length ? ` (naposledy ${fmtDate(x.high[x.high.length - 1].start)})` : ""}</small>
+      <HighList x={x} />
       <div className="kvline"><span>Kalibrace</span><b>{x.cal ? `${fmtIso(x.cal.date)} · ${x.cal.gas}` : "nezadaná"}</b></div>
       {edit ? (
         <div className="form">
@@ -185,20 +191,36 @@ function Co2Panel() {
   );
 }
 
+/** Ponory nad limitem CO₂ (bez poruch a podezřelých hodnot) – rozbalitelný seznam. */
+function HighList({ x }: { x: ReturnType<typeof useCo2> }) {
+  const [open, setOpen] = useState(false);
+  return (<>
+    <small className={x.high.length ? "link" : ""} onClick={() => x.high.length && setOpen(!open)}>Ponorů s CO₂ nad limitem: {x.high.length}{x.high.length ? ` (naposledy ${fmtDate(x.high[x.high.length - 1].start)}) ${open ? "▴" : "▾"}` : ""}{x.excluded.length ? ` · nezapočteno ${x.excluded.length} (porucha / podezřelé)` : ""}</small>
+    {open && [...x.high].reverse().map((m) => (
+      <div key={m.id} className="kvline link" onClick={() => go({ t: "dive", id: m.id })}><span>{fmtDate(m.start)}</span><b>{num(m.sum.co2Max!, 1)} mbar</b><span className="muted">›</span></div>
+    ))}
+  </>);
+}
+
 export function Co2Screen() {
   const st = useStore();
   const x = useCo2();
   const ms = st.metas;
   const list = ms.map((m, i) => ({ m, no: i + 1 })).filter(({ m }) => (m.sum.co2Max != null && m.sum.co2Max >= x.limit) || m.sum.co2AlarmN > 0).reverse();
+  const clip = (v: number | null) => (v == null ? null : Math.min(v, CO2_SUSPECT));
+  const ok = (m: Meta) => { const k = x.stOf(m); return k === "ok"; };
+  const clipped = ms.filter((m) => m.sum.co2Max != null && m.sum.co2Max > CO2_SUSPECT);
+  const STL: Record<string, string> = { fault: "porucha čidla", suspect: "podezřelé (?)", clipped: "nevěrohodné (oříznutá nula)" };
   return (
     <div className="screen">
       <Co2Panel />
       <Card title="Maximum ppCO₂ v ponorech">
-        <LineChart t={ms.map((_, i) => i + 1)} height={180} xFmt={(v) => String(Math.round(v))}
-          xTitle={(v) => `Ponor ${v} (${fmtDate(ms[v - 1].start)})`}
-          series={[{ label: "Max. ppCO₂", color: "#d7c8a0", values: ms.map((m) => m.sum.co2Max), unit: "mbar", width: 2 },
+        <LineChart t={ms.map((_, i) => i + 1)} height={180} xFmt={(v) => { const m = ms[Math.round(v) - 1]; return m ? new Date(m.start * 1000).toLocaleDateString("cs-CZ", { month: "numeric", year: "2-digit" }) : ""; }}
+          xTitle={(v) => { const m = ms[v - 1]; return m ? `Ponor ${v} (${fmtDate(m.start)})${x.stOf(m) !== "ok" ? ` – ${STL[x.stOf(m)]}` : ""}` : ""; }}
+          series={[{ label: "Max. ppCO₂", color: "#d7c8a0", values: ms.map((m) => (ok(m) ? clip(m.sum.co2Max) : null)), unit: "mbar", width: 2 },
+            { label: "Nevěrohodné / porucha", color: "#78909c", values: ms.map((m) => (ok(m) ? null : clip(m.sum.co2Max))), unit: "mbar", width: 1.5, dash: "2 3" },
             { label: "Limit", color: "#ef5350", values: ms.map(() => x.limit), unit: "mbar", dash: "4 3" }]} />
-        <p className="note">Mezery v grafu = ponory, kdy čidlo neměřilo (vypnuté nebo celou dobu 0).</p>
+        <p className="note">Šedě ponory s nevěrohodným CO₂ (oříznutá nula, porucha čidla, podezřelá hodnota nad {CO2_SUSPECT} mbar). {clipped.length ? `Hodnoty nad ${CO2_SUSPECT} mbar jsou v grafu oříznuté: ${clipped.map((m) => `${fmtDate(m.start)} ${num(m.sum.co2Max!, 1)} mbar`).join(", ")}. ` : ""}Mezery = čidlo neměřilo. Ponor otevřeš v seznamu níže.</p>
       </Card>
       <Card title="Ponory s vysokým CO₂ nebo alarmem">
         {list.length ? list.map(({ m, no }) => (
@@ -206,6 +228,7 @@ export function Co2Screen() {
             <span>č. {no} · {fmtDate(m.start)}</span>
             <b>{m.sum.co2Max != null ? `${num(m.sum.co2Max, 1)} mbar` : "–"}</b>
             {m.sum.co2AlarmN > 0 && <span className="c-bad">alarm {m.sum.co2AlarmN}×</span>}
+            {x.stOf(m) !== "ok" && <span className="muted">{STL[x.stOf(m)]}</span>}
             <span className="muted">›</span>
           </div>
         )) : <p className="muted">Žádný ponor nepřekročil limit {num(x.limit, 1)} mbar.</p>}

@@ -1,9 +1,15 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.43-dev.1";
+export const APP_VERSION = "1.43-dev.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.43-dev.2", date: "2026-11-22", title: "Čidlo CO₂, řazení, spolehlivější stahování (dev)", items: [
+    "Čidlo CO₂: stav Nevěrohodné / Podezřelé / Porucha, maximum nad 20 mbar se nepočítá, dokud ho nepotvrdíš; v detailu ponoru „Porucha čidla CO₂“ / „Skutečné CO₂“; seznam ponorů nad limitem, graf s datem.",
+    "Seznam ponorů (plné zobrazení): řazení podle data, hloubky, doby (oba směry) a lokality.",
+    "Stahování přes Bluetooth: ztracená odpověď → stejný blok znovu, limit 10 s, Ukončit až po dokončení ponoru, na konci ukončení spojení (Petrel sám zavře Upload log).",
+    "myX Petrel: 10 ponorů, Uložit jako .db, Ukončit po dokončení ponoru; ladicí tlačítko odstraněno.",
+  ] },
   { version: "1.43-dev.1", date: "2026-11-22", title: "Můj log, spotřeba ve srovnání, ponor parťáka (dev)", items: [
     "DB → Databáze: první karta „Můj log“ – jméno (všude místo „Já“), období, počítače s Akcemi (přístroj, rebreather, vysílače, odebrat); Sdílet můj log: Vše nebo Vybrat ponory, malý odkaz na původní export Cloudu.",
     "Srovnání: spotřeba O₂ a diluentu (bary, s objemem litry a l/min), diluent při sestupu, graf tlaků on-board lahví; objem lahve parťáka jde zadat ve srovnání.",

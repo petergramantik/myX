@@ -522,3 +522,4 @@ label.inline input[type=checkbox] { width: auto; padding: 0; }
 .logtile .lt-name { display: block; margin: 6px 0; } .logtile.mine { border-color: var(--line); }
 .num-s { width: 56px; margin: 0 4px; padding: 4px 6px; }
 .volrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0; } .volrow input.num-s { width: 56px !important; flex: none; margin: 0; }
+.co2v { margin-top: 8px; } .co2v .row { gap: 8px; margin: 4px 0; } .btn.on { border-color: var(--accent, #4fc3f7); } .sort-row { margin: 4px 0; }

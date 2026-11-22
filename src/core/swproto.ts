@@ -99,6 +99,12 @@ export async function rdbi(tx: Transfer, id: number): Promise<Uint8Array> {
 }
 
 /** Stáhne blok paměti (upload); s kompresí LRE+XOR do konce proudu. */
+/** Výpis pro ladění (opakované bloky); nastaví volající. */
+let dlLog: ((s: string) => void) | null = null;
+export const setDownloadLog = (f: ((s: string) => void) | null) => { dlLog = f; };
+/** Kolikrát zkusit znovu stejný blok po výpadku odpovědi (UDS dovoluje opakování se stejným číslem bloku, P). */
+export const BLOCK_RETRY = 2;
+
 /** out: průběžný výstup (při přerušení v něm zůstane, co se stihlo stáhnout). */
 export async function download(tx: Transfer, proto: Proto, addr: number, size: number, compressed: boolean, onBytes?: (n: number) => void, out: number[] = []): Promise<Uint8Array> {
   const init = await tx(Uint8Array.from([UP_INIT, compressed ? 0x10 : 0, 0x34, addr >>> 24, (addr >> 16) & 0xff, (addr >> 8) & 0xff, addr & 0xff, (size >> 16) & 0xff, (size >> 8) & 0xff, size & 0xff]));
@@ -106,7 +112,17 @@ export async function download(tx: Transfer, proto: Proto, addr: number, size: n
   let block = 1, n = 0, done = false;
   while (n < size && !done) {
     const req = proto === 2 ? [UP_DATA, block, 0] : [UP_DATA, block];
-    const r = await tx(Uint8Array.from(req));
+    let r: Uint8Array | null = null;
+    for (let k = 0; ; k++) {
+      const t0 = Date.now();
+      try { r = await tx(Uint8Array.from(req)); break; }
+      catch (e) {
+        const m = (e as Error).message;
+        // jen ztracená odpověď (časový limit) – přerušené spojení nebo ukončení se neopakuje
+        if (k >= BLOCK_RETRY || !/časový limit/.test(m)) { dlLog?.(`Blok ${block}: ${m} po ${Math.round((Date.now() - t0) / 1000)} s (staženo ${n} B)${k ? `, po ${k} opakováních` : ""}`); throw e; }
+        dlLog?.(`Blok ${block}: bez odpovědi ${Math.round((Date.now() - t0) / 1000)} s (staženo ${n} B) – žádám znovu (${k + 1}/${BLOCK_RETRY})`);
+      }
+    }
     if (r.length < 2 || r[0] !== UP_DATA_RES || r[1] !== block) throw new Error("Neočekávaná odpověď (blok " + block + ")");
     const data = r.subarray(2);
     if (!data.length) break;

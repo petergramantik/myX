@@ -40,7 +40,16 @@ export function tankMix(g: string): string | null {
 export interface Prep { o2?: number; dil?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string } }
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
-  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** poloha z rozpracovaného ponoru (místo ponoru) */ pos?: { lat: number; lon: number }; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; updated: number;
+  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** poloha z rozpracovaného ponoru (místo ponoru) */ pos?: { lat: number; lon: number }; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; /** CO₂ v ponoru: porucha čidla / potvrzené skutečné */ co2?: "fault" | "real"; updated: number;
+}
+/** Hodnota CO₂ nad touto mezí (mbar) je podezřelá (pravděpodobně porucha čidla), dokud ji uživatel nepotvrdí. */
+export const CO2_SUSPECT = 20;
+/** Stav CO₂ ponoru pro statistiky: ok, porucha (ruční), podezřelé (nad 20 mbar), nevěrohodné (oříznutá nula). */
+export function co2State(m: { sum: { co2Max: number | null; co2Bad?: boolean } }, note?: { co2?: "fault" | "real" }): "ok" | "fault" | "suspect" | "clipped" {
+  if (note?.co2 === "fault") return "fault";
+  if (m.sum.co2Max != null && m.sum.co2Max > CO2_SUSPECT && note?.co2 !== "real") return "suspect";
+  if (m.sum.co2Bad) return "clipped";
+  return "ok";
 }
 /** Ponor založený na lokalitě před stažením logu; po importu se spáruje s ponorem z počítače. */
 export interface Draft extends DiveNote { id: string; created: number; lat?: number; lon?: number; diveId?: string }
