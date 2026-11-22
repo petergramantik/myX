@@ -14,17 +14,19 @@ export function BleDownload() {
   const add = (s: string) => setLog((l) => [...l, `${new Date().toLocaleTimeString("cs-CZ")} ${s}`]);
   const run = async () => {
     setBusy(true); setErr(null); setLog([]); setProg(null);
+    let lock: { release: () => Promise<void> } | null = null;
+    try { lock = await (navigator as unknown as { wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request("screen") ?? null; } catch { /* displej může zhasnout */ }
+    let n = 0;
     try {
-      const r = await bleDownload(knownStarts, setProg, add);
-      const n = await importBle(r.raws);
-      add(`Uloženo ${n} z ${r.raws.length} stažených`);
+      const r = await bleDownload(knownStarts, async (raw) => { n += await importBle([raw]); }, setProg, add);
+      add(`Uloženo ${n} z ${r.saved} stažených`);
       toast(n ? `Staženo z počítače: ${n} ${n === 1 ? "ponor" : n < 5 ? "ponory" : "ponorů"}` : `Žádné nové ponory (v počítači ${r.listed})`);
       setProg(null);
     } catch (e) {
       const m = (e as Error).message || String(e);
-      if (/cancel|chosen|User cancelled/i.test(m)) { setProg(null); setBusy(false); return; }
-      setErr(m); add("Chyba: " + m);
-    } finally { setBusy(false); }
+      if (/cancel|chosen/i.test(m) && !n) { setProg(null); return; }
+      setErr(m + (n ? ` – ${n} ${n === 1 ? "ponor je" : "ponorů je"} uloženo, zbytek stáhneš dalším pokusem` : "")); add("Chyba: " + m);
+    } finally { setBusy(false); lock?.release().catch(() => {}); }
   };
   return (
     <div className="ble">
