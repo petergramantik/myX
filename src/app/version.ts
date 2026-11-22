@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.15";
+export const APP_VERSION = "1.42-dev.16";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.16", date: "2026-11-22", title: "Bluetooth: Petrel 2 (dev)", items: [
+    "Stahování přes Bluetooth zkouší i sériovou službu Terminal I/O (starší modul Petrelu 2) a do ladicího výpisu vypíše všechny služby počítače.",
+  ] },
   { version: "1.42-dev.15", date: "2026-11-22", title: "Tlačítko ＋ a rozpracovaný ponor (dev)", items: [
     "Horní ＋ při existujícím rozpracovaném ponoru (posledních 48 h): 1. stisk aktualizuje jeho polohu a počasí (📍), další ho otevře (E). Nový ponor pak jen tlačítkem Nový ponor na Přehledu.",
     "Ruční aktualizace polohy bere vždy čerstvou polohu z GPS.",

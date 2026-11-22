@@ -18,34 +18,65 @@ const READ_ONLY = new Set([0x22, 0x35, 0x36, 0x37]);
 
 interface Session { tx: (req: Uint8Array) => Promise<Uint8Array>; proto: Proto; close: () => void }
 
+// Další možné „sériové“ služby BLE (Petrel 2 má starší modul – pravděpodobně Telit/Stollmann Terminal I/O)
+const TIO = "0000fefb-0000-1000-8000-00805f9b34fb";
+const TIO_DATA_RX = "00000001-0000-1000-8000-008025000000", TIO_DATA_TX = "00000002-0000-1000-8000-008025000000";
+const TIO_CRED_RX = "00000003-0000-1000-8000-008025000000", TIO_CRED_TX = "00000004-0000-1000-8000-008025000000";
+const UBLOX = "2456e1b9-26e2-8f83-e744-f34f01e9d701", NORDIC = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+export const BLE_SERVICES = [SW_SERVICE, SW_SERVICE_V2, TIO, UBLOX, NORDIC];
+
+const props = (c: Char) => Object.entries(c.properties).filter(([, v]) => v === true).map(([k]) => k).join(",");
+
 /** Připojí se k vybranému počítači a připraví přenos paketů. */
 async function openSession(device: any, log: (s: string) => void, first: boolean): Promise<Session> {
   const gatt = await device.gatt.connect();
-  let svc: any, proto: Proto = 1;
-  try { svc = await gatt.getPrimaryService(SW_SERVICE); } catch { svc = await gatt.getPrimaryService(SW_SERVICE_V2); proto = 2; }
-  const chars: Char[] = await svc.getCharacteristics();
-  if (first) for (const c of chars) log(`Charakteristika ${c.uuid}: ${Object.entries(c.properties).filter(([, v]) => v === true).map(([k]) => k).join(",")}`);
-  const wr = chars.find((c) => c.properties.writeWithoutResponse || c.properties.write);
-  const nt = chars.find((c) => c.properties.notify || c.properties.indicate);
+  // všechny dostupné služby – do ladicího výpisu
+  const svcs: any[] = await gatt.getPrimaryServices().catch(() => []);
+  const chars = new Map<string, Char[]>();
+  for (const sv of svcs) { const cs: Char[] = await sv.getCharacteristics().catch(() => []); chars.set(sv.uuid, cs); if (first) log(`Služba ${sv.uuid}: ${cs.map((c) => `${c.uuid.slice(0, 8)}[${props(c)}]`).join(" ")}`); }
+  const pick = BLE_SERVICES.find((u) => chars.has(u)) ?? [...chars.keys()].find((u) => { const cs = chars.get(u)!; return cs.some((c) => c.properties.write || c.properties.writeWithoutResponse) && cs.some((c) => c.properties.notify || c.properties.indicate); });
+  if (!pick) throw new Error(`Počítač nemá známou službu Bluetooth (nalezeno ${svcs.length} služeb) – pošli prosím ladicí výpis`);
+  const cs = chars.get(pick)!;
+  const proto: Proto = pick === SW_SERVICE_V2 ? 2 : 1;
+  const tio = pick === TIO;
+  if (first) log(`Používám službu ${pick}${tio ? " (Terminal I/O)" : ""}, protokol V${proto}`);
+  const byId = (u: string) => cs.find((c) => c.uuid === u);
+  const wr = tio ? byId(TIO_DATA_RX) : cs.find((c) => c.properties.writeWithoutResponse || c.properties.write);
+  const nt = tio ? byId(TIO_DATA_TX) : cs.find((c) => c.properties.notify || c.properties.indicate);
   if (!wr || !nt) throw new Error("Počítač nemá očekávané rozhraní Bluetooth");
   const reader = new SlipReader(proto);
   let wake: (() => void) | null = null;
-  const onVal = (e: any) => { const dv: DataView = e.target.value; reader.push(new Uint8Array(dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength))); wake?.(); };
+  const bytesOf = (e: any) => { const dv: DataView = e.target.value; return new Uint8Array(dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength)); };
+
+  // Terminal I/O: kreditové řízení toku – každý paket stojí 1 kredit v daném směru
+  let txCredits = 0, rxCredits = 0;
+  const credRx = tio ? byId(TIO_CRED_RX) : null, credTx = tio ? byId(TIO_CRED_TX) : null;
+  const grant = async () => { if (credRx && rxCredits < 128) { const n = 255 - rxCredits; rxCredits = 255; await credRx.writeValueWithResponse(Uint8Array.from([n])); } };
+  if (tio) {
+    if (!credRx || !credTx) throw new Error("Terminal I/O bez kreditových charakteristik");
+    credTx.addEventListener("characteristicvaluechanged", (e: any) => { txCredits += bytesOf(e)[0] || 0; wake?.(); });
+    await credTx.startNotifications();
+  }
+  const onVal = (e: any) => { reader.push(bytesOf(e)); if (tio) { rxCredits--; grant().catch(() => {}); } wake?.(); };
   nt.addEventListener("characteristicvaluechanged", onVal);
   await nt.startNotifications();
+  if (tio) { await grant(); if (first) log("Terminal I/O: kredity přiděleny"); }
   await sleep(300);
-  const write = async (f: Uint8Array) => (wr.properties.writeWithoutResponse ? wr.writeValueWithoutResponse(f) : wr.writeValueWithResponse(f));
-  const readPacket = async (ms = 3000): Promise<Uint8Array> => {
+  const waitFor = async (cond: () => boolean, ms: number, what: string) => {
     const t0 = Date.now();
-    while (!reader.packets.length) {
+    while (!cond()) {
       if (!gatt.connected) throw new Error("Spojení přerušeno");
       const left = ms - (Date.now() - t0);
-      if (left <= 0) throw new Error("Počítač neodpovídá (časový limit)");
+      if (left <= 0) throw new Error(what);
       await new Promise<void>((r) => { wake = r; setTimeout(r, Math.min(left, 200)); });
       wake = null;
     }
-    return reader.packets.shift()!;
   };
+  const write = async (f: Uint8Array) => {
+    if (tio) { await waitFor(() => txCredits > 0, 3000, "Počítač nepřidělil kredity (Terminal I/O)"); txCredits--; }
+    return wr.properties.writeWithoutResponse ? wr.writeValueWithoutResponse(f) : wr.writeValueWithResponse(f);
+  };
+  const readPacket = async (ms = 3000): Promise<Uint8Array> => { await waitFor(() => reader.packets.length > 0, ms, "Počítač neodpovídá (časový limit)"); return reader.packets.shift()!; };
   let verbose = first ? 0 : 99;
   const tx = async (req: Uint8Array) => {
     if (!READ_ONLY.has(req[0])) throw new Error(`Pojistka: příkaz 0x${req[0].toString(16)} není čtení – neodeslán`);
@@ -67,7 +98,7 @@ export async function bleDownload(have: (serial: number) => Set<number>, onDive:
   const bt = (navigator as any).bluetooth;
   const device = await bt.requestDevice({
     filters: [{ services: [SW_SERVICE] }, { services: [SW_SERVICE_V2] }, ...["Petrel", "Perdix", "Peregrine", "Teric", "Tern", "NERD", "Predator"].map((namePrefix) => ({ namePrefix }))],
-    optionalServices: [SW_SERVICE, SW_SERVICE_V2],
+    optionalServices: BLE_SERVICES,
   });
   log(`Zařízení: ${device.name || "?"}`);
   const t0 = Date.now();
