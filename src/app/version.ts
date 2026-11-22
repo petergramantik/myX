@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.42-dev.13";
+export const APP_VERSION = "1.42-dev.14";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.42-dev.14", date: "2026-11-22", title: "Poloha a počasí rozpracovaného ponoru (dev)", items: [
+    "Rozpracovaný ponor přesune polohu na místo, kde myX otevřeš (se zvolenou lokalitou až u ní); tlačítko „Aktualizovat polohu a počasí“.",
+    "Po spárování s logem se počasí načte pro čas začátku ponoru na lokalitě – ne z doby přípravy.",
+  ] },
   { version: "1.42-dev.13", date: "2026-11-22", title: "Odolné stahování přes Bluetooth (dev)", items: [
     "Každý ponor se uloží hned po stažení; při přerušení spojení až 3 automatická nová připojení, další pokus stáhne jen zbývající ponory.",
     "Během stahování displej nezhasne; ladicí výpis zaznamená, kdy a po kolika kB se spojení přerušilo.",

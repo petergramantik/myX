@@ -6,7 +6,7 @@ import { SqliteFile } from "../core/sqlite";
 import { peekHeader, readCloudDetails, readCloudNumbers, type CloudDetail, type Dive, type Header, type RawDive } from "../core/shearwater";
 import { DEFAULT_THRESHOLDS, diveWarnings, injections, summarize } from "../core/analysis";
 import { cellsOfDive } from "../core/cells";
-import { loadWeather } from "./weather";
+import { loadWeather, weatherAt } from "./weather";
 import * as db from "./db";
 import { decodeAny, readAny } from "../core/decoders";
 import { RIGS, defaultRig, diveType, isSupported, rigsForMode, type Rig } from "../core/rig";
@@ -1025,6 +1025,39 @@ export async function linkDraft(draftId: string, diveId: string, auto = false) {
   lb.deleted[draftId] = Date.now();
   await saveLb(lb);
   if (auto) toast(`Rozpracovaný ponor spárován s ponorem č. ${myNum(diveId)}`);
+  // počasí z doby založení nahradit počasím v čase začátku ponoru na lokalitě (jinak na poslední poloze přípravy)
+  const m = st.metas.find((x) => x.id === diveId), sid = cur?.siteId || dr.siteId, sc = sid && st.lb.sites[sid] ? siteCoords(st.lb.sites[sid]) : null;
+  const lat = sc?.lat ?? dr.lat, lon = sc?.lon ?? dr.lon;
+  if (m && lat != null && lon != null) weatherAt(lat, lon, m.start).then((w) => {
+    const n = st.lb.notes[diveId];
+    if (w && n) { const lb2 = structuredClone(st.lb); lb2.notes[diveId] = { ...n, weather: w, updated: Date.now() }; saveLb(lb2); }
+  }).catch(() => {});
+}
+
+/** Aktualizuje polohu (a počasí) rozpracovaného ponoru; bez zvolené lokality navrhne nejbližší do 2 km. */
+export async function moveDraft(id: string, pos: Pos) {
+  const dr = st.lb.drafts[id]; if (!dr) return;
+  const near = nearestSite(pos);
+  updateDraft(id, { lat: pos.lat, lon: pos.lon, siteId: dr.siteId || (near && near.km <= 2 ? near.site.id : undefined) });
+  try {
+    const w = await loadWeather(pos.lat, pos.lon);
+    if (st.lb.drafts[id]) updateDraft(id, { weather: { at: Date.now(), temp: w.now.temp, wind: w.now.wind, gust: w.now.gust, cloud: w.now.cloud, pressure: w.now.pressure, precip: w.now.precip, code: w.now.code } });
+  } catch { /* bez počasí */ }
+}
+
+/**
+ * Po zjištění polohy: rozpracované ponory z posledních 48 h, které jsou daleko (> 1 km), přesune na aktuální polohu.
+ * Se zvolenou lokalitou jen tehdy, když jsem u ní (do 2 km) – cestou se poloha nemění.
+ */
+function followDrafts(pos: Pos) {
+  if (st.guest || st.temp) return;
+  for (const dr of Object.values(st.lb.drafts)) {
+    if (localNow() - dr.created > 48 * 3600) continue;
+    if (dr.lat != null && distKm(pos, { lat: dr.lat, lon: dr.lon! }) <= 1) continue;
+    const sc = dr.siteId && st.lb.sites[dr.siteId] ? siteCoords(st.lb.sites[dr.siteId]) : null;
+    if (sc && distKm(pos, sc) > 2) continue;
+    moveDraft(dr.id, pos);
+  }
 }
 
 export async function createDraft(): Promise<string> {
@@ -1176,7 +1209,7 @@ export function locate(): Promise<Pos | null> {
   return new Promise((res) => {
     if (!navigator.geolocation) { set({ posErr: "Telefon neposkytuje polohu" }); return res(null); }
     navigator.geolocation.getCurrentPosition(
-      (p) => { const pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, at: Date.now() }; set({ pos, posErr: null }); res(pos); },
+      (p) => { const pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, at: Date.now() }; set({ pos, posErr: null }); followDrafts(pos); res(pos); },
       (e) => { set({ posErr: e.code === 1 ? "Přístup k poloze není povolený" : "Polohu se nepodařilo zjistit" }); res(null); },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 120000 },
     );
