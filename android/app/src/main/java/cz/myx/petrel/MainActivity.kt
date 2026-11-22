@@ -42,6 +42,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var go: Button
     private lateinit var resend: Button
+    private lateinit var gap: Button
     private val prefs by lazy { getSharedPreferences("petrel", MODE_PRIVATE) }
     private lateinit var devs: Spinner
     private lateinit var count: RadioGroup
@@ -70,6 +71,8 @@ class MainActivity : Activity() {
         resend = Button(this).apply { text = "Poslat znovu do myX"; setOnClickListener { lastFile()?.let { share(it, prefs.getInt("lastN", 0)) } } }
         root.addView(resend)
         resend.isEnabled = lastFile() != null
+        gap = Button(this).apply { text = "Ladicí: přečíst úsek před posledním ponorem"; setOnClickListener { if (!running) startGap() } }
+        root.addView(gap)
         status = text("", 16f)
         root.addView(status)
         log = text("", 11f).apply { typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.TOP }
@@ -185,6 +188,72 @@ class MainActivity : Activity() {
         f.writeText(JSONObject().put("myxbt", 1).put("serial", serial).put("model", model).put("firmware", fw).put("dives", arr).toString())
         setStatus("Staženo ${arr.length()} ${if (arr.length() == 1) "ponor" else "ponorů"}${if (stop) " (ukončeno)" else ""} – vyber myX")
         return f to arr.length()
+    }
+
+    /**
+     * Ladicí čtení (jen čtení paměti): úsek mezi koncem předposledního a začátkem posledního ponoru – zda Petrel
+     * ukládá i dobu na hladině mimo ponor. Výsledek: .bin (surová data) + .txt (výpis) ke sdílení.
+     */
+    @SuppressLint("MissingPermission")
+    private fun startGap() {
+        val dev = devices.getOrNull(devs.selectedItemPosition) ?: return
+        stop = false; running = true; go.text = "Ukončit"; log.text = ""
+        Thread {
+            try {
+                setStatus("Připojuji ${dev.name}…")
+                val sw = connect(dev)
+                val serial = String(sw.rdbi(Shearwater.ID_SERIAL)).trim().uppercase()
+                val lu = sw.rdbi(Shearwater.ID_LOGUPLOAD)
+                val base = ((lu[1].toLong() and 0xFF) shl 24) or ((lu[2].toLong() and 0xFF) shl 16) or ((lu[3].toLong() and 0xFF) shl 8) or (lu[4].toLong() and 0xFF)
+                add("S/N $serial, log 0x${base.toString(16)}")
+                setStatus("Čtu seznam ponorů…")
+                val list = sw.manifest().sortedByDescending { it.fp }
+                fun hex(b: ByteArray) = b.joinToString(" ") { "%02x".format(it.toInt() and 0xFF) }
+                for (e in list.take(3)) add("Ponor ${Date(e.fp * 1000)}: 0x${e.addr.toString(16)}–0x${e.end.toString(16)}\n  ${hex(e.raw)}")
+                if (list.size < 2) throw Exception("V počítači musí být aspoň 2 ponory")
+                val last = list[0]
+                val prev = list[1]
+                val from = prev.end
+                val len = (last.addr - prev.end).coerceIn(0L, 0x80000L).toInt()
+                add("Úsek 0x${from.toString(16)}–0x${(from + len).toString(16)} ($len B, celkem ${last.addr - prev.end} B)")
+                if (len <= 0) throw Exception("Mezi ponory není žádný úsek")
+                val out = java.io.ByteArrayOutputStream()
+                var mode = "bez komprese"
+                try {
+                    var off = 0
+                    while (off < len && !stop) {
+                        val n = minOf(0x8000, len - off)
+                        val c = sw.download(base + from + off, n, false) { b -> setStatus("Čtu úsek ${(off + b) / 1024} / ${len / 1024} kB") }
+                        if (c.isEmpty()) break
+                        out.write(c); off += c.size
+                    }
+                } catch (x: Exception) {
+                    add("Čtení bez komprese: ${x.message} (přečteno ${out.size()} B) – zkouším s kompresí")
+                    if (out.size() == 0) {
+                        mode = "s kompresí"
+                        out.write(sw.download(base + from, len, true) { b -> setStatus("Čtu úsek (komprese) ${b / 1024} kB") })
+                    }
+                }
+                val data = out.toByteArray()
+                add("Přečteno ${data.size} B ($mode); začátek: ${hex(data.copyOfRange(0, minOf(96, data.size)))}")
+                val dir = File(cacheDir, "out").apply { mkdirs() }
+                val bin = File(dir, "petrel-$serial-usek.bin").apply { writeBytes(data) }
+                val txt = File(dir, "petrel-$serial-usek.txt").apply { writeText(log.text.toString()) }
+                setStatus("Hotovo – pošli oba soubory")
+                runOnUiThread {
+                    val uris = arrayListOf(FileProvider.getUriForFile(this, "cz.myx.petrel.files", bin), FileProvider.getUriForFile(this, "cz.myx.petrel.files", txt))
+                    startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                        type = "*/*"; putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }, "Poslat ladicí úsek"))
+                }
+            } catch (e: Exception) {
+                add("Chyba: ${e.message}"); setStatus(if (stop) "Ukončeno." else "Chyba: ${e.message}")
+            } finally {
+                try { socket?.close() } catch (_: Exception) {}
+                running = false
+                runOnUiThread { go.text = "Stáhnout" }
+            }
+        }.start()
     }
 
     /** Připojí sériový port počítače (SPP, při neúspěchu RFCOMM kanál 5 – Petrel 2). */

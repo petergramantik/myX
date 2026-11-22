@@ -146,7 +146,8 @@ class Shearwater(private val inp: InputStream, private val out: OutputStream, pr
         }
     }
 
-    data class Entry(val addr: Long, val fp: Long)
+    /** Záznam seznamu ponorů: začátek (20–23) a konec (24–27) ponoru v paměti, otisk = začátek ponoru, raw = celých 32 B. */
+    class Entry(val addr: Long, val fp: Long, val end: Long, val raw: ByteArray)
 
     /** Seznam ponorů: 0xA5C4 platný, 0x5A23 smazaný; otisk = čas začátku ponoru. */
     fun manifest(): List<Entry> {
@@ -160,7 +161,7 @@ class Shearwater(private val inp: InputStream, private val out: OutputStream, pr
                 if (h != 0xA5C4) break
                 n++
                 fun be(o: Int) = ((m[i + o].toLong() and 0xFF) shl 24) or ((m[i + o + 1].toLong() and 0xFF) shl 16) or ((m[i + o + 2].toLong() and 0xFF) shl 8) or (m[i + o + 3].toLong() and 0xFF)
-                list.add(Entry(be(20), be(4)))
+                list.add(Entry(be(20), be(4), be(24), m.copyOfRange(i, i + 32)))
                 i += 32
             }
             if (n != m.size / 32) break
