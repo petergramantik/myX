@@ -1,7 +1,7 @@
 // Tlačítko „Stáhnout z počítače“ – stažení nových ponorů ze Shearwater přes Bluetooth (Chrome na Androidu).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { bleDownload, bleSupported, type BleProgress } from "../app/ble";
-import { importBle, knownStarts, toast } from "../app/store";
+import { downloadPlan, saveDownloaded, toast, type DownloadPlan } from "../app/store";
 import { useStore } from "./common";
 
 export function BleDownload() {
@@ -10,17 +10,21 @@ export function BleDownload() {
   const [prog, setProg] = useState<BleProgress | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const stop = useRef(false);
   if (!bleSupported() || st.guest || st.temp) return null;
   const add = (s: string) => setLog((l) => [...l, `${new Date().toLocaleTimeString("cs-CZ")} ${s}`]);
   const run = async () => {
     setBusy(true); setErr(null); setLog([]); setProg(null);
     let lock: { release: () => Promise<void> } | null = null;
     try { lock = await (navigator as unknown as { wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request("screen") ?? null; } catch { /* displej může zhasnout */ }
-    let n = 0;
+    let n = 0, dest: DownloadPlan | null = null;
+    stop.current = false;
     try {
-      const r = await bleDownload(knownStarts, async (raw) => { n += await importBle([raw]); }, setProg, add);
-      add(`Uloženo ${n} z ${r.saved} stažených`);
-      toast(n ? `Staženo z počítače: ${n} ${n === 1 ? "ponor" : n < 5 ? "ponory" : "ponorů"}` : `Žádné nové ponory (v počítači ${r.listed})`);
+      const r = await bleDownload(async (serial, model, total) => { dest = await downloadPlan(serial, model, total); return dest; },
+        async (raw) => { if (dest) n += await saveDownloaded(dest, [raw]); }, setProg, add, () => stop.current);
+      const where = dest ? (dest as DownloadPlan).label : "";
+      add(`Uloženo ${n} z ${r.saved} stažených${where ? ` (${where})` : ""}${r.cancelled ? " – ukončeno" : ""}`);
+      if (!r.cancelled || n) toast(n ? `Staženo z počítače: ${n} ${n === 1 ? "ponor" : n < 5 ? "ponory" : "ponorů"}${dest && !(dest as DownloadPlan).mine ? ` do ${(dest as DownloadPlan).label}` : ""}` : `Žádné nové ponory (v počítači ${r.listed})`);
       setProg(null);
     } catch (e) {
       const m = (e as Error).message || String(e);
@@ -30,7 +34,8 @@ export function BleDownload() {
   };
   return (
     <div className="ble">
-      <button className="btn primary" disabled={busy} onClick={run}>{busy ? "Stahuji…" : "Stáhnout z počítače (Bluetooth)"}</button>
+      {busy ? <button className="btn danger" onClick={() => { stop.current = true; setProg({ phase: "Ukončuji…" }); }}>Ukončit stahování</button>
+        : <button className="btn primary" onClick={run}>Stáhnout z počítače (Bluetooth)</button>}
       {!busy && !err && !log.length && <p className="note">Na Petrelu otevři Upload log (Bluetooth), pak klepni a vyber počítač.</p>}
       {busy && prog && <p className="muted small">{prog.phase}{prog.of ? ` ${prog.dive}/${prog.of}` : ""}{prog.bytes ? ` · ${Math.round(prog.bytes / 1024)} kB` : ""}</p>}
       {err && <p className="c-bad small">{err}</p>}

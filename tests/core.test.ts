@@ -472,5 +472,12 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   }
 }
 
+{ // úplnost staženého ponoru (hlavička, patička, závěrečný záznam)
+  const { diveComplete } = await import("../src/app/ble");
+  const rec = (t: number) => { const r = new Uint8Array(32); r[0] = t; return r; };
+  const cat = (...a: Uint8Array[]) => { const o = new Uint8Array(a.length * 32); a.forEach((x, i) => o.set(x, i * 32)); return o; };
+  ok(diveComplete(cat(rec(0x10), rec(1), rec(0x20), rec(0xff))) && !diveComplete(cat(rec(0x10), rec(1), rec(1))), "Bluetooth: neúplný ponor se pozná");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

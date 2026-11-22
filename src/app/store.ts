@@ -1,5 +1,5 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
-import { ask, askText } from "./dialog";
+import { ask, askText, choose } from "./dialog";
 import { mergeDives, segGroups } from "../core/segments";
 import { writeSqlite } from "../core/sqlitew";
 import { SqliteFile } from "../core/sqlite";
@@ -274,6 +274,7 @@ export function ownComputers(): { serial: string; model: string; count: number; 
 export async function importAny(file: File): Promise<{ own: number; guests: GuestLog[] }> {
   if (st.guest) closeGuest();
   const buf = new Uint8Array(await file.arrayBuffer());
+  if (buf[0] === 0x7b && new TextDecoder().decode(buf.subarray(0, 12)).includes("myxbt")) return importBtFile(buf);
   // SQLite databáze začíná „SQLite format 3“ – jiný soubor (fotka, záloha .json…) odmítnout srozumitelně
   if (new TextDecoder().decode(buf.subarray(0, 15)) !== "SQLite format 3") throw new Error("Soubor není databáze Shearwater (.db). V Shearwater Cloudu: Profil → Možnosti → Export (*.db).");
   const raws = readAny(buf);
@@ -365,11 +366,66 @@ async function importOwn(buf: Uint8Array, name: string, raws: RawDive[]): Promis
   return addRaws(raws, cnums);
 }
 
-/** Stažení z počítače přes Bluetooth: uloží nové ponory jako vlastní. */
-export async function importBle(raws: RawDive[]): Promise<number> { return raws.length ? addRaws(raws) : 0; }
-/** Začátky už uložených vlastních ponorů daného počítače (aby se stahovaly jen nové). */
-export function knownStarts(serial: number): Set<number> {
-  return new Set([...st.metas, ...(st.hidden || [])].filter((m) => m.h.serial === serial).map((m) => m.h.start));
+/** Plán stažení z počítače: čí je, které ponory už jsou v telefonu, kolik stáhnout a kam uložit. */
+export interface DownloadPlan { mine: boolean; known: Set<number>; limit: number; guest?: GuestLog; owner?: { id?: string; name?: string } | null; label: string }
+
+/**
+ * Rozhodne podle sériového čísla: můj počítač (nebo můj log je prázdný) → můj log, všechny nové ponory;
+ * cizí → DB jeho majitele (existující podle počítače, jinak nabídne založit) a ve výchozím stavu jen poslední ponor.
+ */
+export async function downloadPlan(serial: number, model: string, total: number): Promise<DownloadPlan | null> {
+  const hex = serial.toString(16).toUpperCase();
+  const mine = ownSerials().has(hex) || (!ownMetas().length && !ownHidden().length);
+  if (mine) return { mine, known: new Set([...ownMetas(), ...ownHidden()].filter((m) => m.h.serial === serial).map((m) => m.h.start)), limit: Infinity, label: "tvůj log" };
+  const guest = (await guestLogs()).flatMap((g) => g.logs || [g]).find((l) => l.serial === hex);
+  const old = guest ? await db.get<{ metas: Meta[] }>("kv", guest.id, db.GUEST) : undefined;
+  const who = guest ? ownerName(guest) || logName(guest) : "";
+  const k = await choose(`Počítač ${model} ${hex} není tvůj${guest ? ` – patří k DB ${who}` : ""}. V počítači je ${total} ponorů. Co stáhnout?`, [
+    { key: "1", label: "Jen poslední ponor", primary: true },
+    { key: "all", label: "Všechny nové ponory" },
+  ]);
+  if (!k) return null;
+  let owner: DownloadPlan["owner"] = null;
+  if (!guest) {
+    // nová DB pro majitele počítače – přiřadit k buddymu
+    const buds = Object.values(ownLb().buddies).sort((a, b) => a.name.localeCompare(b.name, "cs")).slice(0, 8);
+    const b = await choose(`Pro počítač ${model} ${hex} zatím nemáš DB. Komu patří?`, [...buds.map((x) => ({ key: x.id, label: x.name })), { key: "_new", label: "Jiný buddy…", primary: !buds.length }]);
+    if (!b) return null;
+    if (b === "_new") { const n = await askText("Jméno majitele počítače:"); if (!n?.trim()) return null; owner = { name: n.trim() }; } else owner = { id: b };
+  }
+  return { mine: false, known: new Set((old?.metas || []).map((m) => m.start)), limit: k === "1" ? 1 : Infinity, guest, owner, label: guest ? `DB ${who}` : "nová DB" };
+}
+
+/** Uloží stažené ponory podle plánu; vrací počet nových. */
+export async function saveDownloaded(plan: DownloadPlan, raws: RawDive[]): Promise<number> {
+  if (!raws.length) return 0;
+  if (plan.mine) return addRaws(raws);
+  const before = plan.guest ? (await db.get<{ metas: Meta[] }>("kv", plan.guest.id, db.GUEST))?.metas.length ?? 0 : 0;
+  const log = await importGuestRaws(new Uint8Array(0), raws, false);
+  if (!log) return 0;
+  if (!plan.guest) { if (plan.owner) await setComputerOwner(log, plan.owner); plan.guest = log; plan.owner = null; }
+  const after = (await db.get<{ metas: Meta[] }>("kv", log.id, db.GUEST))?.metas.length ?? 0;
+  return after - before;
+}
+
+/** Soubor z aplikace „myX Petrel“ (stažení z Petrelu 2 přes klasický Bluetooth): JSON s nativními daty ponorů. */
+async function importBtFile(buf: Uint8Array): Promise<{ own: number; guests: GuestLog[] }> {
+  const j = JSON.parse(new TextDecoder().decode(buf)) as { myxbt: number; serial: string; model: string; dives: { fp: number; num?: number; data: string }[] };
+  const { wrapBlob } = await import("../core/swproto");
+  const serial = parseInt(j.serial, 16) >>> 0, hex = serial.toString(16).toUpperCase();
+  const plan = await downloadPlan(serial, j.model, j.dives.length);
+  if (!plan) return { own: 0, guests: [] };
+  const list = [...j.dives].sort((a, b) => b.fp - a.fp).filter((d) => !plan.known.has(d.fp)).slice(0, plan.limit);
+  const raws: RawDive[] = [];
+  for (const d of list) {
+    const nat = Uint8Array.from(atob(d.data), (c) => c.charCodeAt(0));
+    const dt = new Date(d.fp * 1000);
+    raws.push({ id: `ble-${serial.toString(16)}-${d.fp}`, num: d.num || 0, start: d.fp, blob: await wrapBlob(nat), fn: `${j.model}[${hex}]#${d.num || 0} ${dt.getUTCFullYear()}-${dt.getUTCMonth() + 1}-${dt.getUTCDate()} (Bluetooth)` });
+  }
+  const n = await saveDownloaded(plan, raws);
+  if (plan.mine) return { own: n, guests: [] };
+  toast(n ? `Přidáno ${n} ${n === 1 ? "ponor" : "ponorů"} do ${plan.label}` : "Žádné nové ponory");
+  return { own: 0, guests: plan.guest ? [plan.guest] : [] };
 }
 
 /** Klíč ponoru nezávislý na zdroji (Cloud / Bluetooth): sériové číslo počítače + začátek. */
@@ -667,6 +723,7 @@ function readMyx(buf: Uint8Array): Map<string, CloudDetail> {
 }
 /** Cloud údaje doplněné o údaje z myX (Cloud má přednost). */
 function cloudPlus(buf: Uint8Array): Map<string, CloudDetail> {
+  if (!buf.length) return new Map(); // ponory stažené z počítače – bez údajů z Cloudu
   const c = readCloudDetails(buf);
   for (const [id, m] of readMyx(buf)) { const x = c.get(id); c.set(id, { site: x?.site || m.site, buddies: x?.buddies.length ? x.buddies : m.buddies, notes: x?.notes || "" }); }
   return c;

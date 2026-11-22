@@ -8,7 +8,17 @@ type Char = any;
 export const bleSupported = () => typeof navigator !== "undefined" && !!(navigator as any).bluetooth;
 
 export interface BleProgress { phase: string; dive?: number; of?: number; bytes?: number }
-export interface BleResult { serial: number; model: string; firmware: string; saved: number; listed: number }
+export interface BleResult { serial: number; model: string; firmware: string; saved: number; listed: number; cancelled?: boolean }
+/** Plán: které ponory už jsou v telefonu (začátky) a kolik nejnovějších stáhnout; null = zrušit. */
+export type BlePlan = (serial: number, model: string, total: number) => Promise<{ known: Set<number>; limit: number } | null>;
+
+/** Ponor je celý, když obsahuje hlavičku (0x10), patičku (0x20) a závěrečný záznam (0xFF). */
+export function diveComplete(nat: Uint8Array): boolean {
+  let o = false, c = false, f = false;
+  for (let i = 0; i + 32 <= nat.length; i += 32) { if (nat[i] === 0x10) o = true; else if (nat[i] === 0x20) c = true; else if (nat[i] === 0xff) f = true; }
+  return o && c && f;
+}
+const CANCEL = "Stahování ukončeno";
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(" ");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -101,7 +111,7 @@ async function openSession(device: any, log: (s: string) => void, first: boolean
  * Spojí se s počítačem a stáhne ponory, které ještě nemám (have = časy začátků uložených ponorů daného počítače).
  * Každý stažený ponor hned předá k uložení (onDive); při přerušení se až 3× znovu připojí a pokračuje dalším ponorem.
  */
-export async function bleDownload(have: (serial: number) => Set<number>, onDive: (r: RawDive) => Promise<void>, onProgress: (p: BleProgress) => void, log: (s: string) => void): Promise<BleResult> {
+export async function bleDownload(plan: BlePlan, onDive: (r: RawDive) => Promise<void>, onProgress: (p: BleProgress) => void, log: (s: string) => void, cancelled: () => boolean = () => false): Promise<BleResult> {
   const bt = (navigator as any).bluetooth;
   const device = await bt.requestDevice({
     filters: [{ services: [SW_SERVICE] }, { services: [SW_SERVICE_V2] }, ...["Petrel", "Perdix", "Peregrine", "Teric", "Tern", "NERD", "Predator"].map((namePrefix) => ({ namePrefix }))],
@@ -119,7 +129,7 @@ export async function bleDownload(have: (serial: number) => Set<number>, onDive:
     for (;;) {
       try { return await f(ses); }
       catch (e) {
-        if (retries >= 3) throw e;
+        if (cancelled() || (e as Error).message === CANCEL || retries >= 3) throw e;
         retries++;
         log(`Chyba: ${(e as Error).message} – znovu se připojuji (${retries}/3)`);
         onProgress({ phase: `Znovu se připojuji (${retries}/3)…` });
@@ -145,16 +155,25 @@ export async function bleDownload(have: (serial: number) => Set<number>, onDive:
       for (let page = 0; page < 40; page++) { const m = parseManifest(await download(s.tx, s.proto, MANIFEST_ADDR, MANIFEST_SIZE, false)); out.push(...m.dives); if (!m.full) break; }
       return out;
     });
-    const known = have(serial);
-    const todo = list.filter((d) => !known.has(d.fp));
-    log(`V počítači ${list.length} ponorů, nových ${todo.length}`);
-    const tag = `${model}[${serial.toString(16).toUpperCase().padStart(8, "0")}]`;
+    const pl = await plan(serial, model, list.length);
+    if (!pl) return { serial, model, firmware, saved: 0, listed: list.length, cancelled: true };
+    // nejnovější první; už uložené (podle začátku = otisku) přeskočit
+    const todo = [...list].sort((a, b) => b.fp - a.fp).filter((d) => !pl.known.has(d.fp)).slice(0, pl.limit);
+    log(`V počítači ${list.length} ponorů, v telefonu ${list.filter((d) => pl.known.has(d.fp)).length}, ke stažení ${todo.length}`);
+    const tag = `${model}[${serial.toString(16).toUpperCase()}]`;
     let saved = 0;
     for (let k = 0; k < todo.length; k++) {
       diveNow = k + 1; bytesNow = 0;
       const t1 = Date.now();
       onProgress({ phase: "Stahuji ponory…", dive: k + 1, of: todo.length });
-      const nat = await step((s) => { bytesNow = 0; return download(s.tx, s.proto, base + todo[k].addr, DIVE_SIZE, true, (b) => { bytesNow = b; onProgress({ phase: "Stahuji ponory…", dive: k + 1, of: todo.length, bytes: b }); }); });
+      if (cancelled()) return { serial, model, firmware, saved, listed: list.length, cancelled: true };
+      const nat = await step(async (s) => {
+        bytesNow = 0;
+        const d = await download(s.tx, s.proto, base + todo[k].addr, DIVE_SIZE, true, (b) => { if (cancelled()) throw new Error(CANCEL); bytesNow = b; onProgress({ phase: "Stahuji ponory…", dive: k + 1, of: todo.length, bytes: b }); });
+        if (!diveComplete(d)) throw new Error("Ponor se nestáhl celý");
+        return d;
+      }).catch((e) => { if (cancelled() || (e as Error).message === CANCEL) return null; throw e; });
+      if (!nat) return { serial, model, firmware, saved, listed: list.length, cancelled: true };
       log(`Ponor ${k + 1}/${todo.length}: ${Math.round(bytesNow / 1024)} kB za ${Math.round((Date.now() - t1) / 1000)} s`);
       const blob = await wrapBlob(nat);
       let num = 0;

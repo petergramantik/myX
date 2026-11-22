@@ -1,0 +1,36 @@
+name: myX Petrel APK
+
+on:
+  push:
+    branches: [dev, main]
+    paths: ["android/**", ".github/workflows/petrel-apk.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Sestavit APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk myX-Petrel-${{ github.run_number }}.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: petrel-${{ github.run_number }}
+          name: myX Petrel ${{ github.run_number }}
+          body: Stažení ponorů z Petrelu 2 přes klasický Bluetooth (pro myX). ${{ github.event.head_commit.message }}
+          files: android/myX-Petrel-${{ github.run_number }}.apk
+          prerelease: true
