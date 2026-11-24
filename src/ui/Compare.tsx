@@ -1,7 +1,7 @@
 // Porovnání mého ponoru s ponorem buddyho z cizího logu: grafy přes sebe, tabulka rozdílů a závěr.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { setpointChanges } from "../core/analysis";
+import { pressGaps, setpointChanges } from "../core/analysis";
 import { computerDiff, conclusionSections, deeperWindow, diveStats, groupSections, multiRows, profileLag, type MultiRow } from "../core/compare";
 import { buddyDivesFor, openBuddyDive, guestIndexLoad, nearestPair, suggestionsFor, loadDive, loadGuestDive, logName, ownerName, saveSettings, toast } from "../app/store";
 import { GuestCard, MyLogCard } from "./Settings";
@@ -9,7 +9,7 @@ import { gasUseOf } from "./Dives";
 import { dur } from "../core/analysis";
 import { askText } from "../app/dialog";
 import { compareHtml, shareHtml } from "./cmpExport";
-import { Card, fmtDate, fmtDateTime, go, leaveY, tab, useStore } from "./common";
+import { BLSwitch, Card, fmtDate, fmtDateTime, go, leaveY, tab, useStore } from "./common";
 import { LineChart } from "./Chart";
 import type { Meta } from "../app/model";
 
@@ -157,8 +157,8 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
       </Card>
       {S.some((x) => x.o2Bar != null || x.dilBar != null) && <GasCompare D={D} N={N} C={C} S={S} mine={!st0.guest && sel[0] === 0 ? 0 : -1} mineId={id} />}
       {D.some((d) => d.s.o2p.some((v) => v != null && v > 0) || d.s.dil.some((v) => v != null && v > 0)) && <Card title="Tlak on-board lahví">
-        <LineChart t={T} series={[...ser((d) => d.s.o2p, "O₂", "bar"), ...ser((d) => d.s.dil, "Diluent", "bar", "4 3", 1.5)]} />
-        <p className="note">Plná čára O₂, čárkovaně diluent. Tlak z DiveCAN nebo z vysílačů.</p>
+        <LineChart t={T} series={[...ser((d) => pressGaps(d.s.o2p), "O₂", "bar"), ...ser((d) => pressGaps(d.s.dil), "Diluent", "bar", "4 3", 1.5)]} />
+        <p className="note">Plná čára O₂, čárkovaně diluent. Tlak z DiveCAN nebo z vysílačů.{D.some((d) => hasGap(d.s.o2p) || hasGap(d.s.dil)) ? " Mezera v čáře = výpadek tlaku (vysílač nebo DiveCAN neposílal platný údaj) – nejde o spotřebu." : ""}</p>
       </Card>}
       {hasCo2 && <Card title="CO₂"><LineChart t={T} series={ser((d) => d.s.co2, "CO₂", "mbar")} /></Card>}
       <Card title="Rozdíly (od největšího)">
@@ -177,6 +177,8 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
 }
 
 /** Spotřeba plynu potápěčů: bary z logu, litry a l/min s objemem lahve (můj z Nastavení, parťáka zadaný tady). */
+const hasGap = (p: (number | null)[]) => pressGaps(p).some((v, i) => v == null && p[i] != null);
+
 function GasCompare({ D, N, C, S, mine, mineId }: { D: Dive[]; N: string[]; C: string[]; S: ReturnType<typeof diveStats>[]; mine: number; mineId: string }) {
   const st = useStore();
   const meta = mine >= 0 ? st.metas.find((m) => m.id === mineId) : undefined;
@@ -206,13 +208,13 @@ function GasCompare({ D, N, C, S, mine, mineId }: { D: Dive[]; N: string[]; C: s
         ))}</tbody>
       </table>
       {D.map((d, k) => k === mine ? null : (
-        <div key={k} className="volrow small">
-          <span style={{ color: C[k] }}>{N[k]}</span><span>objem O₂</span>
-          <input className="num-s" inputMode="decimal" defaultValue={volOf(k, "o2") ?? ""} placeholder="l" onBlur={(e) => setVol(k, "o2", e.target.value)} /><span>diluent</span>
-          <input className="num-s" inputMode="decimal" defaultValue={volOf(k, "dil") ?? ""} placeholder="l" onBlur={(e) => setVol(k, "dil", e.target.value)} /><span>l</span>
+        <div key={k} className="volcol small">
+          <b style={{ color: C[k] }}>{N[k]} – objemy on-board lahví</b>
+          <label className="volrow"><span>O₂</span><input className="num-s" inputMode="decimal" defaultValue={volOf(k, "o2") ?? ""} placeholder="l" onBlur={(e) => setVol(k, "o2", e.target.value)} /><span>l</span></label>
+          <label className="volrow"><span>Diluent</span><input className="num-s" inputMode="decimal" defaultValue={volOf(k, "dil") ?? ""} placeholder="l" onBlur={(e) => setVol(k, "dil", e.target.value)} /><span>l</span></label>
         </div>
       ))}
-      <p className="note">Spotřeba z poklesu tlaku on-board lahví v logu (bez úseků s externím plynem). Litry = bary × objem lahve; tvůj objem je z Nastavení → Výbava, u parťáka ho zadej – zapamatuje se pro jeho počítač. U tvého ponoru se započítají i off-board lahve z „Před a po ponoru“ (skutečná spotřeba). Spotřeba O₂ v l/min nezávisí na hloubce, porovnává zátěž (metabolismus). „sestup“ = diluent doplněný při sestupu.</p>
+      <p className="note">Spotřeba z poklesu tlaku on-board lahví v logu (bez úseků s externím plynem). Litry = bary × objem lahve; tvůj objem je z Výstroje (on-board lahve), u parťáka ho zadej – zapamatuje se pro jeho počítač. U tvého ponoru se započítají i off-board lahve z „Před a po ponoru“ (skutečná spotřeba). Spotřeba O₂ v l/min nezávisí na hloubce, porovnává zátěž (metabolismus). „sestup“ = diluent doplněný při sestupu.</p>
     </Card>
   );
 }
@@ -248,7 +250,8 @@ export function CompareHub({ sub = "cmp", who }: { sub?: "cmp" | "db"; who?: str
   const st = useStore();
   return (
     <div className="screen">
-      <div className="seg bl">
+      <BLSwitch on="hub" />
+      <div className="seg bl sub">
         <button className={sub === "cmp" ? "on" : ""} onClick={() => tab({ t: "hub", sub: "cmp" })}>Srovnání</button>
         <button className={sub === "db" ? "on" : ""} onClick={() => tab({ t: "hub", sub: "db" })}>Databáze</button>
       </div>

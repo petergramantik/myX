@@ -63,6 +63,7 @@ export function BatteryTiles() {
       <div className="cells">
         <div className={"celltile " + pLvl} onClick={() => go({ t: "bats" })}>
           <div className="ct-h"><b>{compName(h.serial)}</b><span className={"dot " + pLvl} /></div>
+          {b.head.some((x) => x.role) && <div className="ct-sub">počítač</div>}
           <div className="ct-v">{h.batVStart.toFixed(2).replace(".", ",")} <small>V</small></div>
           <div className="ct-u">na začátku ponoru</div>
           <div className={"ct-l " + pLvl}>{pLvl === "ok" ? "V pořádku" : pLvl === "warn" ? "Varování" : "Vyměnit"}</div>
@@ -71,7 +72,8 @@ export function BatteryTiles() {
           const lvl = x.suspect ? "bad" : x.reasons.length ? "warn" : x.cur ? "ok" : "none"; // bez zadané výměny šedě, ne zeleně
           return (
             <div key={x.pos} className={"celltile " + lvl} onClick={() => go({ t: "bats", pos: x.pos })}>
-              <div className="ct-h"><b>Hlava {x.pos}{x.short ? <small> · {x.short}</small> : null}</b><span className={"dot " + lvl} /></div>
+              <div className="ct-h"><b>Hlava {x.pos}</b><span className={"dot " + lvl} /></div>
+              {b.head.some((y) => y.role) && <div className="ct-sub">{x.role || "\u00a0"}</div>}
               {x.cur ? <>
                 <div className="ct-v">{num(x.minutes / 60, 1)} <small>h</small></div>
                 <div className="ct-u">pod vodou od výměny</div>
@@ -122,7 +124,7 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
           </div>
           {!b.guest && isCC(h) && b.head.map((x) => (
             <div key={x.pos} className={"pcell ptile " + hLvl(x)}>
-              <div className="pcell-h"><b className={"c-" + hLvl(x)}>Hlava – baterie {x.pos}{x.role ? ` (${x.role})` : ""}</b><span className={"pill " + (hLvl(x) === "none" ? "" : hLvl(x))}>{x.suspect ? "Podezřelá" : x.reasons.length ? "Vyměnit" : x.cur ? "V pořádku" : "Nezadaná"}</span></div>
+              <div className="pcell-h"><b className={"c-" + hLvl(x)}>Hlava {x.pos}{x.role ? <span className="sub-role">{x.role}</span> : null}</b><span className={"pill " + (hLvl(x) === "none" ? "" : hLvl(x))}>{x.suspect ? "Podezřelá" : x.reasons.length ? "Vyměnit" : x.cur ? "V pořádku" : "Nezadaná"}</span></div>
               {x.cur ? <small>{x.cur.maker || "Baterie"}{x.cur.model ? ` ${x.cur.model}` : ""}{x.cur.volt ? ` (${x.cur.volt})` : ""} · výměna {fmtIso(x.cur.installed)} · {x.dives} ponorů · {hm(x.minutes)} pod vodou{b.th.headBatHours > 0 ? ` z limitu ${b.th.headBatHours} h` : ""}</small> : <small>Výměna zatím nezadaná.</small>}
               {x.reasons.length ? x.reasons.map((r, i) => <div key={i} className={"reason " + (x.suspect && i === 0 ? "bad" : "warn")}>{r}</div>) : x.cur ? <div className="reason ok">✓ v pořádku</div> : null}
             </div>
@@ -154,7 +156,7 @@ export function BatteriesScreen({ pos }: { pos?: number }) {
       {!b.head.length && <Card title="Baterie v hlavě"><p className="muted">{b.model.label}: {b.model.note || "bez baterií v hlavě"}</p></Card>}
       {pos && <button className="btn" onClick={() => go({ t: "bats" })}>Zobrazit všechny baterie</button>}
       <Card title="Baterie v hlavě">
-        <p className="note">Rebreather: <b>{b.model.label}</b> (změníš v DB → Databáze → Můj log → Akce → Rebreather).{b.model.note ? ` ${b.model.note}` : ""} Napětí baterií v hlavě Petrel ukazuje jen na info obrazovce, do logu ho neukládá – proto se evidují ručně. Z logu jde jen alarm „Porucha solenoidu / baterie v hlavě“, ten označí baterii solenoidu jako podezřelou. Hodiny a ponory od výměny se počítají z logbooku. Limity pro varování nastavíš v Nastavení (0 = vypnuto).</p>
+        <p className="note">Rebreather: <b>{b.model.label}</b> (změníš v B&L → DB → Databáze → Můj log → Akce → Rebreather).{b.model.note ? ` ${b.model.note}` : ""} Napětí baterií v hlavě Petrel ukazuje jen na info obrazovce, do logu ho neukládá – proto se evidují ručně. Z logu jde jen alarm „Porucha solenoidu / baterie v hlavě“, ten označí baterii solenoidu jako podezřelou. Hodiny a ponory od výměny se počítají z logbooku. Limity pro varování nastavíš v Nastavení (0 = vypnuto).</p>
       </Card>
     </div>
   );
@@ -163,7 +165,8 @@ export function BatteriesScreen({ pos }: { pos?: number }) {
 function HeadBattery({ x }: { x: ReturnType<typeof useBatteries>["head"][number] }) {
   const [edit, setEdit] = useState<Partial<Battery> | null>(null);
   return (
-    <Card title={`Hlava – baterie ${x.pos}${x.role ? ` (${x.role})` : ""}`}>
+    <Card title={`Hlava ${x.pos}`}>
+      {x.role && <p className="sub-role">{x.role}</p>}
       {x.type && <p className="small muted">Typ: {x.type}</p>}
       {x.reasons.map((r, i) => <div key={i} className={"reason " + (x.suspect && i === 0 ? "bad" : "warn")}>{r}</div>)}
       {x.cur ? (

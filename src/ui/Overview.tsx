@@ -9,6 +9,8 @@ import { hasExt } from "./Dives";
 import type { Meta } from "../app/model";
 import { BatteryTiles, useBatteries } from "./Batteries";
 import { BleDownload } from "./BleDownload";
+import { LineChart } from "./Chart";
+import { SURF_GF_LIM } from "../app/noteWarns";
 
 export function ImportButton({ label = "Importovat export ze Shearwater Cloud" }: { label?: string }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -227,6 +229,7 @@ export function OverviewScreen() {
           ]} />
         </Card>
       )}
+      {!st.guest && <SurfGfTrend />}
       <div className="center"><BleDownload /><ImportButton /></div>
 
       <Card title="Kde jsem" onTitle={egg.tap} id="where">
@@ -244,6 +247,26 @@ export function OverviewScreen() {
         {busy ? "Zjišťuji polohu…" : "＋ Nový ponor"}
       </button>
     </div>
+  );
+}
+
+/** Trend SurfGF při vynoření (z GF99 Petrelu u hladiny) s hranicí – vypínatelné v Nastavení → Výbava. */
+function SurfGfTrend() {
+  const st = useStore();
+  const set = st.lb.settings;
+  if (set.surfGfOff) return null;
+  const lim = set.surfGfLim || SURF_GF_LIM;
+  const ms = st.metas.filter((m) => m.sum.surfGF != null && m.sum.ceilMax > 0);
+  if (ms.length < 3) return null;
+  const over = ms.filter((m) => m.sum.surfGF! > lim);
+  const vals = ms.map((m) => m.sum.surfGF!).sort((a, b) => a - b);
+  return (
+    <Card title="SurfGF při vynoření">
+      <LineChart t={ms.map((_, i) => i + 1)} height={140} xFmt={(v) => { const m = ms[Math.round(v) - 1]; return m ? new Date(m.start * 1000).toLocaleDateString("cs-CZ", { month: "numeric", year: "2-digit" }) : ""; }}
+        xTitle={(v) => { const m = ms[v - 1]; return m ? `${fmtDate(m.start)} · mělko ${m.sum.shallowMin ?? "?"} min` : ""; }}
+        series={[{ label: "SurfGF", color: "#4fc3f7", values: ms.map((m) => m.sum.surfGF!), unit: "%", width: 2 }, { label: "Hranice", color: "#ffb74d", values: ms.map(() => lim), unit: "%", dash: "4 3" }]} />
+      <p className="note">Ponory se stropem: medián {vals[vals.length >> 1]} %, nad hranicí {lim} %: {over.length}{over.length ? ` (naposledy ${fmtDate(over[over.length - 1].start)})` : ""}. Hodnota = GF99 z Petrelu v prvním vzorku u hladiny.</p>
+    </Card>
   );
 }
 

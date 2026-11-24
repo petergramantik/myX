@@ -26,7 +26,7 @@ function rawOpen(name: string): Promise<IDBDatabase> {
   return dbp;
 }
 
-/** Zkopíruje produkční data (vlastní i cizí logy, nastavení) do úložiště dev verze. Opačným směrem nikdy. */
+/** Zkopíruje produkční data (vlastní i cizí logy, nastavení) do úložiště dev verze a označí souhrny k přepočtu. Opačným směrem nikdy – produkce se jen čte. */
 export async function copyProdToDev(): Promise<void> {
   if (!IS_DEV) return;
   for (const n of DATA_DBS) {
@@ -41,7 +41,13 @@ export async function copyProdToDev(): Promise<void> {
       await new Promise<void>((res, rej) => {
         const tx = dst.transaction(store, "readwrite"), os = tx.objectStore(store);
         os.clear();
-        for (const r of rows) os.keyPath ? os.put(r.v) : os.put(r.v, r.k);
+        for (const r of rows) {
+          // souhrny ponorů (vlastní i v cizích logech) označit k přepočtu – dev může mít novější analýzu než produkce
+          let v = r.v as Record<string, unknown>;
+          if (store === "meta" && v && typeof v === "object") v = { ...v, v: 0 };
+          else if (store === "kv" && v && typeof v === "object" && Array.isArray((v as { metas?: unknown }).metas)) v = { ...v, metas: (v.metas as Record<string, unknown>[]).map((m) => ({ ...m, v: 0 })) };
+          os.keyPath ? os.put(v) : os.put(v, r.k);
+        }
         tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
       });
     }

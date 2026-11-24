@@ -544,5 +544,68 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   }
 }
 
+{ // A29, A33, A34, A35, A37
+  const A = await import("../src/core/analysis");
+  const mk = (depth: number[], extra: Partial<Record<string, unknown[]>> = {}) => {
+    const n = depth.length;
+    return { h: { diveTimeS: (n - 1) * 60, surfP: 1013, salinity: 1000 }, s: { t: depth.map((_, i) => i * 60), depth, dil: depth.map(() => null), o2p: depth.map(() => null), gf99: depth.map(() => null), tts: depth.map(() => 0), stop: depth.map(() => 0), ...extra } } as unknown as Parameters<typeof A.dilDescent>[0];
+  };
+  // sestup: výpadek tlaku diluentu → null; plynulý pokles → rozdíl
+  const dep = [0, 10, 20, 30, 30, 20, 10, 0];
+  ok(A.dilDescent(mk(dep, { dil: [190, 185, 180, 175, 175, 175, 175, 175] })) === 15 && A.dilDescent(mk(dep, { dil: [190, 185, 5, 3, 2, 2, 180, 180] })) === null, "Sestup: výpadek tlaku diluentu → –, jinak pokles");
+  ok(A.pressGaps([190, 185, 3, 2, 180]).join() === "190,185,,,180", "Graf tlaků: výpadek = mezera");
+  // SurfGF při vynoření = GF99 v prvním vzorku u hladiny, mělko < 7 m
+  const sg = A.surfacing(mk([0, 20, 30, 20, 6, 3, 3, 0.5, 0], { gf99: [null, null, null, 40, 60, 66, 63, 58, 57] }));
+  ok(sg.gf === 58 && sg.shallowMin === 3, "SurfGF: GF99 v prvním vzorku u hladiny, mělko 3 min");
+  // bailout: nejhorší okamžik – nejhlubší a nejdelší TTS
+  const B = await import("../src/core/bailout");
+  const prof = { t: [0, 60, 120, 180, 240], z: [0, 60, 60, 10, 0], tts: [0, 20, 30, 5, 0], stop: [0, 9, 12, 3, 0] };
+  const o = { sac: 20, airMax: 40, ttsMul: 1 };
+  // jen vzduch: v 60 m ho dýchat nejde → nedostatek „bez plynu“
+  const p1 = B.bailoutPlan(prof, [{ mix: "21/0", liters: 2200 }], o);
+  ok(p1.worst?.gas === B.NO_GAS && p1.worst.short > 0, `Bailout: vzduch v 60 m nejde dýchat (${p1.worst?.gas} ${p1.worst?.short} l)`);
+  // TMX + EAN50: hluboko TMX, mělko EAN50; s dostatkem obou bez nedostatku
+  const p2 = B.bailoutPlan(prof, [{ mix: "21/35", liters: 4000 }, { mix: "50/0", liters: 2000 }], o);
+  ok(p2.gases.includes("21/35") && p2.gases.includes("50/0") && (p2.worst?.short ?? 0) <= 0 && p2.need["50/0"][2]! > 0, "Bailout: rozdělení TMX hluboko / EAN50 mělko, bez nedostatku");
+  const p3 = B.bailoutPlan(prof, [{ mix: "21/35", liters: 300 }, { mix: "50/0", liters: 2000 }], { ...o, ttsMul: 1.5 });
+  ok(p3.worst?.gas === "21/35" && p3.worst.short > 0, `Bailout: málo TMX → nedostatek TMX (${p3.worst?.short} l)`);
+  // termíny revizí a servisů
+  const M = await import("../src/app/model");
+  ok(M.nextDue("2022-03-01", undefined, 5) === "2027-03-01" && M.nextDue("2022-03-01", "2026-01-01", 5) === "2026-01-01" && M.dueState("2000-01-01") === "over" && M.dueState(undefined) === "none", "Výstroj: příští termín a stav");
+  // lahev z Výstroje: tlak po ponoru, zavřená on-board lahev se nepřepíše
+  const G = await import("../src/app/gearSync");
+  const lb = M.emptyLogbook();
+  lb.tanks = { a: { id: "a", kind: "S80", vol: 11.1, mix: "vzduch", bar: 200, updated: 0 }, b: { id: "b", kind: "3 l", vol: 3, mix: "TMX 21/35", bar: 180, onboard: "dil", updated: 0 } };
+  lb.notes.d1 = { buddyIds: [], note: "", updated: 1, prep: { tanks: [{ id: "x", role: "bo", name: "S80", gas: "vzduch", gearId: "a", bar: 200, end: 150 }] } };
+  const meta = { id: "d1", start: 1700000000, h: { diveTimeS: 3600 }, sum: { dilStart: 8, dilEnd: 8, o2Start: 190, o2End: 120, gases: [{ mix: "21/35", s: 3000 }] } } as unknown as Parameters<typeof G.gearOnboardApply>[1];
+  G.gearTankApply(lb, "d1", meta); G.gearOnboardApply(lb, meta, true);
+  ok(lb.tanks.a.bar === 150 && lb.tanks.b.bar === 180 && !!lb.tanks.b.check, "Výstroj: off-board lahev převzala tlak po, zavřený diluent → zkontrolovat");
+  // A38: rozpoznání on-board lahve – diluent podle směsi a tlaku, O₂ se zavřenou lahví nejde
+  const lb2 = M.emptyLogbook();
+  lb2.tanks = {
+    a1: { id: "a1", name: "RB DIL 1", kind: "3 l", vol: 3, mix: "vzduch", bar: 150, onboard: "dil", updated: 0 },
+    a2: { id: "a2", name: "RB DIL 2", kind: "3 l", vol: 3, mix: "vzduch", bar: 180, onboard: "dil", updated: 0 },
+    t1: { id: "t1", name: "RB DIL 3", kind: "3 l", vol: 3, mix: "TMX 21/35", bar: 170, onboard: "dil", updated: 0 },
+    o1: { id: "o1", name: "RB O2 1", kind: "3 l", vol: 3, mix: "O₂", bar: 120, onboard: "o2", updated: 0 },
+    o2: { id: "o2", name: "RB O2 2", kind: "3 l", vol: 3, mix: "O₂", bar: 190, onboard: "o2", updated: 0 },
+  };
+  const mAir = { id: "d2", start: 1700100000, h: { diveTimeS: 3000 }, sum: { dilStart: 176, dilEnd: 150, o2Start: 8, o2End: 8, gases: [{ mix: "21/0", s: 3000 }] } } as unknown as Parameters<typeof G.gearOnboardApply>[1];
+  const mTmx = { ...mAir, id: "d3", sum: { ...mAir.sum, gases: [{ mix: "21/35", s: 3000 }] } } as typeof mAir;
+  ok(G.rbMatch(lb2, mAir, "dil").id === "a2" && G.rbMatch(lb2, mTmx, "dil").id === "t1" && G.rbMatch(lb2, mAir, "o2").id === null, "On-board lahve: diluent podle směsi a tlaku, O₂ se zavřenou lahví nerozpoznána");
+  G.gearOnboardApply(lb2, mAir, true);
+  ok(lb2.tanks.a2.bar === 150 && lb2.notes.d2?.rb?.dil?.id === "a2" && !lb2.notes.d2?.rb?.o2 && lb2.tanks.o1.bar === 120, "On-board lahve: přiřazený diluent převzal tlak, O₂ nepřiřazená");
+  const lb3 = M.emptyLogbook(); G.gearOnboardApply(lb3, mTmx, true);
+  const made = Object.values(lb3.tanks || {});
+  ok(made.length === 2 && made.some((t) => t.name === "RB O2 1" && !!t.check) && made.some((t) => t.name === "RB DIL 1" && t.mix === "TMX 21/35" && t.bar === 150), "On-board lahve: první založení RB O2 1 a RB DIL 1 z posledního ponoru");
+  // trend čidla
+  const C = await import("../src/core/cells");
+  const D = 86400000, pts = [0, 10, 20, 30, 40, 50].map((d, i) => ({ t: d * D, mv: 50 - i * 2, lin: [1, 0.99, 0.98, 0.93, 0.92, 0.9][i] }));
+  const tr = C.cellTrend(pts, 8);
+  ok(tr.slopePctM != null && tr.slopePctM < -5 && C.trendReasons(tr).length === 2, `Čidlo: trend ${tr.slopePctM} %/měs., linearita ${tr.linFirst}→${tr.linNow}`);
+  // štítky nových upozornění
+  const T = await import("../src/core/tags");
+  ok(T.tagCat("Bailout by nestačil") === "BO" && T.tagCat("SurfGF nad hranicí") === "GF", "Štítky BO a GF");
+}
+
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
 console.log("Vše v pořádku");

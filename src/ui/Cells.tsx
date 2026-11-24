@@ -1,6 +1,6 @@
 import { ask, askText } from "../app/dialog";
 import { useEffect, useRef, useState } from "react";
-import { cellStatus, detectCellEvents, type CellStatus } from "../core/cells";
+import { cellStatus, cellTrend, trendReasons, detectCellEvents, type CellStatus } from "../core/cells";
 import { answerCellPrompt, deleteCell, localNow, saveCell, saveSettings, toast } from "../app/store";
 import { CO2_SUSPECT, co2State, type Cell, type Meta } from "../app/model";
 import { Card, fmtDate, go, num, useStore } from "./common";
@@ -40,7 +40,13 @@ export function useCells() {
     // jen ponory od instalace aktuálního čidla (údaje starého čidla se nepočítají)
     const mine = ccr.filter(({ m }) => !c || isoOf(m.start) >= c.installed);
     const refOwn = lastMeta ? mine.filter(({ m }) => m.start <= lastMeta.start - 30 * DAY && m.start >= lastMeta.start - 120 * DAY).map(({ m }) => m.cells) : [];
-    return cellStatus(k, mine.map(({ m }) => m.cells).slice(-5), th, monthsSince(c?.installed, now), monthsSince(c?.made, now), c?.lifeM ?? null, refOwn);
+    const stt = cellStatus(k, mine.map(({ m }) => m.cells).slice(-5), th, monthsSince(c?.installed, now), monthsSince(c?.made, now), c?.lifeM ?? null, refOwn);
+    // trend od instalace (pokles citlivosti, zhoršující se linearita) – varuje dřív než rozdíl proti ostatním čidlům
+    const tr = trendReasons(cellTrend(mine.map(({ m }) => ({ t: m.start * 1000, mv: m.cells.mvBar[k], lin: m.cells.lin[k] })), th.cellAirWarn));
+    if (!tr.length) return stt;
+    const order = ["ok", "info", "warn", "bad"];
+    const lv = tr.reduce((l, r) => (order.indexOf(r.level) > order.indexOf(l) ? r.level : l), stt.level as string) as CellStatus["level"];
+    return { level: lv, reasons: [...stt.reasons, ...tr.map((r) => r.text)] };
   });
   const lastCalEv = [...events].reverse().find((e) => e.kind === "cal" || e.kind === "change");
   const lastCal = lastCalEv ? ccr[lastCalEv.index].m : null;
@@ -55,7 +61,7 @@ export function useCells() {
     const lo = isoOf(p.prev.start), hi = isoOf(p.meta.start);
     return !cells.some((c) => c.pos === p.pos && c.installed >= lo && c.installed <= hi);
   });
-  return { ccr, series, events, current, empty, status, isNew, lastCal, lastCalNo: lastCalEv ? ccr[lastCalEv.index].i + 1 : null, prompts, changes, now, cells, answered: st.lb.answered, guest: !!st.guest };
+  return { th, ccr, series, events, current, empty, status, isNew, lastCal, lastCalNo: lastCalEv ? ccr[lastCalEv.index].i + 1 : null, prompts, changes, now, cells, answered: st.lb.answered, guest: !!st.guest };
 }
 
 /** Kontrola data výměny proti logu: najde nejbližší zjištěnou výměnu na pozici a ověří, že datum leží mezi posledním ponorem se starým a prvním s novým čidlem. */
@@ -352,6 +358,15 @@ function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnTyp
           series={[{ label: "mV/bar", color: "#4fc3f7", values: ys, unit: "mV/bar", width: 2 }]}
           extra={[{ label: "Na vzduchu", values: ys.map((y) => (y != null ? +(y * 0.21).toFixed(1) : null)), unit: "mV" }, { label: "Linearita", values: lin }]} />
       )}
+      {cur && (() => {
+        const tr = cellTrend(c.ccr.filter(({ m }) => isoOf(m.start) >= cur.installed).map(({ m }) => ({ t: m.start * 1000, mv: m.cells.mvBar[pos - 1], lin: m.cells.lin[pos - 1] })), c.th.cellAirWarn);
+        const lins = c.ccr.filter(({ m }) => isoOf(m.start) >= cur.installed).map(({ m }) => m.cells.lin[pos - 1]);
+        return (<>
+          {lins.filter((x) => x != null).length > 1 && <LineChart t={xs} height={110} xFmt={(v) => String(Math.round(v))} xTitle={(v) => `Ponor ${v} (${fmtDate(metas[v - 1].start)})`} markers={marks}
+            series={[{ label: "Linearita", color: "#ce93d8", values: lin, width: 2 }, { label: "Hranice", color: "#ef5350", values: xs.map(() => c.th.cellLinWarn), dash: "4 3" }]} />}
+          <p className="note">Trend od instalace: {tr.slopePctM != null ? `${tr.slopePctM > 0 ? "+" : ""}${String(tr.slopePctM).replace(".", ",")} % citlivosti za měsíc` : "zatím málo dat (aspoň 5 ponorů za měsíc)"}{tr.linFirst != null && tr.linNow != null ? ` · linearita ${tr.linFirst.toFixed(2).replace(".", ",")} → ${tr.linNow.toFixed(2).replace(".", ",")}` : ""}. Linearita 1 = čidlo měří stejně při nízkém i vysokém pO₂, pokles = začínající current limiting.</p>
+        </>);
+      })()}
       <div className="row">
         <button className="btn primary" onClick={() => { setEdit({ pos, installed: isoOf(c.now), lifeM: 12, maker: cur?.maker || "", type: cur?.type }); setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}>Vyměnit / zadat čidlo</button>
         {cur && <button className="btn" onClick={() => setEdit({ ...cur })}>Upravit</button>}

@@ -523,3 +523,35 @@ label.inline input[type=checkbox] { width: auto; padding: 0; }
 .num-s { width: 56px; margin: 0 4px; padding: 4px 6px; }
 .volrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0; } .volrow input.num-s { width: 56px !important; flex: none; margin: 0; }
 .co2v { margin-top: 8px; } .co2v .row { gap: 8px; margin: 4px 0; } .btn.on { border-color: var(--accent, #4fc3f7); } .sort-row { margin: 4px 0; }
+.volcol { margin: 8px 0; display: flex; flex-direction: column; gap: 4px; } .volcol .volrow span:first-child { min-width: 64px; }
+.co2v-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 2px; } .co2v-btns .btn { white-space: nowrap; }
+/* Výstroj */
+.gear-row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; padding: 7px 0; border-bottom: 1px solid var(--line, #22344d); }
+.gear-row:last-child { border-bottom: 0; }
+.gear-row .pill { margin-left: 6px; }
+.gear-v { white-space: nowrap; }
+.gear-big { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0; }
+.gear-mix { font-size: 1.5em; font-weight: 700; }
+.gear-bar { display: flex; align-items: center; gap: 6px; font-size: 1.1em; white-space: nowrap; }
+.gear-bar input.bar-in { width: 92px !important; font-size: 1.2em; font-weight: 700; text-align: right; margin: 0; }
+.gear-form label { display: block; margin: 8px 0; }
+.gear-form .row { margin-top: 10px; }
+.gear-tank .card-h, .card .card-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fault { padding: 6px 0; border-bottom: 1px solid var(--line, #22344d); }
+.fault.fixed { opacity: 0.8; }
+.prep-row select { flex: 1; min-width: 0; }
+.seg.bl.sub { margin-top: -4px; }
+.gear-hose { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.gear-hose select { flex: 1; min-width: 0; width: auto !important; margin: 0; }
+.gear-hose input.num-s { width: 64px !important; margin: 0; }
+.gear-hose label { display: flex; align-items: center; gap: 4px; white-space: nowrap; margin: 0; }
+.gear-chk { display: flex !important; align-items: center; gap: 8px; margin: 8px 0; }
+.gear-chk input { width: auto !important; margin: 0; }
+.ct-sub { font-size: 0.72em; color: var(--muted, #8aa0b8); margin: -2px 0 4px; line-height: 1.2; min-height: 1.2em; }
+.sub-role { display: block; font-size: 0.72em; font-weight: 400; color: var(--muted, #8aa0b8); margin-top: 2px; }
+p.sub-role { margin: -6px 0 6px; font-size: 0.85em; }
+.tanktile .ct-h b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .tanktile .ct-v small { font-size: 0.5em; margin-left: 3px; }
+.tgroup + .tgroup { margin-top: 10px; }
+.tg-l { font-size: 0.72em; color: var(--muted, #8aa0b8); text-transform: uppercase; letter-spacing: 0.04em; margin: 2px 0 4px; }
+.tsec-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 14px 0 4px; }
+.tsec-h .subh { margin: 0; }

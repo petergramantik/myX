@@ -32,12 +32,17 @@ export function SettingsScreen() {
       </Sec>
 
       <Sec title="Výbava">
-        <label>Diluent – objem on-board lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
-        <label>O₂ – objem on-board lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
-        <p className="note">Externí lahve (S80 = 11,1 l, S40 = 5,7 l) se zadávají u ponoru v kartě Spotřeba plynu.</p>
+        <p className="note">Objemy on-board lahví a seznam lahví a automatik najdeš ve Výstroji.</p>
+        <button className="btn" onClick={() => tab({ t: "gear" })}>Výstroj ›</button>
+        <label>Spotřeba ve stresu pro výpočet bailoutu (l/min)<input inputMode="decimal" defaultValue={st.lb.settings.boSac ?? 20} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ boSac: v }); }} /></label>
+        <label>Bailout: vzduch dýchat do hloubky (m)<input inputMode="numeric" defaultValue={st.lb.settings.boAirMax ?? 40} onBlur={(e) => { const v = Math.round(+e.target.value); if (v > 0 && v <= 70) saveSettings({ boAirMax: v }); }} /></label>
+        <label>Bailout: násobek TTS pro dekompresi na otevřeném okruhu<input inputMode="decimal" defaultValue={st.lb.settings.boTtsMul ?? 1.5} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v >= 1 && v <= 4) saveSettings({ boTtsMul: v }); }} /></label>
+        <p className="note">Bailout po ponoru: potřeba plynu v nejhorším okamžiku ponoru proti BO a deko lahvím z „Před a po ponoru“, po plynech (vzduch do nastavené hloubky, EAN a O₂ podle MOD při pO₂ 1,6, trimix všude). TTS z počítače platí pro CCR – dekomprese na otevřeném okruhu je delší, proto násobek (P, prozatím; přesněji až s vlastním modelem dekomprese).</p>
+        <label className="check"><input type="checkbox" checked={!st.lb.settings.surfGfOff} onChange={(e) => saveSettings({ surfGfOff: !e.target.checked })} /> SurfGF při vynoření (dlaždice, trend a upozornění)</label>
+        {!st.lb.settings.surfGfOff && <label>Hranice SurfGF při vynoření (%)<input inputMode="numeric" defaultValue={st.lb.settings.surfGfLim ?? 70} onBlur={(e) => { const v = Math.round(+e.target.value); if (v > 0 && v <= 150) saveSettings({ surfGfLim: v }); }} /></label>}
         <label>Spojit záznamy s povrchovým intervalem do (minuty, 0 = vypnuto)<input inputMode="decimal" defaultValue={st.lb.settings.segGap ?? 30} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v >= 0) saveSettings({ segGap: v }); }} /></label>
         <p className="note">Víc záznamů počítače jako jeden ponor (bazén, krátký suchý přechod). Záznamy se stejným číslem ponoru v Shearwater Cloudu se spojují vždy; v detailu ponoru jdou části ručně oddělit nebo spojit.</p>
-        <p className="note">Moje počítače (přístroj, rebreather, vysílače) nastavíš v DB → Databáze → Můj log.</p>
+        <p className="note">Moje počítače (přístroj, rebreather, vysílače) nastavíš v B&L → DB → Databáze → Můj log.</p>
         <button className="btn" onClick={() => tab({ t: "hub", sub: "db" })}>Moje počítače ›</button>
         <AliasCard kind="buddy" id={ME} title="Moje aliasy" />
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
@@ -51,7 +56,7 @@ export function SettingsScreen() {
       </Sec>
 
       <Sec title="Sdílení"><ShareInner />
-        <p className="note">Své jméno a sdílení svého logu najdeš v DB → Databáze → Můj log.</p>
+        <p className="note">Své jméno a sdílení svého logu najdeš v B&L → DB → Databáze → Můj log.</p>
       </Sec>
 
       <Sec title="Upozornění">
@@ -325,6 +330,7 @@ export function GuestCard() {
 /** Přepnutí mezi běžnou (produkční) a dev verzí. Dev verze běží na …/dev/, bez synchronizace, na vlastní kopii dat. */
 function DevSec() {
   const [copied, setCopied] = useState(0);
+  const [busy, setBusy] = useState(false);
   useEffect(() => { devCopiedAt().then(setCopied); }, []);
   const base = location.pathname.replace(/\/dev(\/.*)?$/, "/").replace(/[^/]*$/, "");
   const goTo = (dev: boolean) => { location.href = base + (dev ? "dev/" : ""); };
@@ -333,11 +339,13 @@ function DevSec() {
       <label className="inline dev-sw"><input type="checkbox" checked={IS_DEV} onChange={(e) => goTo(e.target.checked)} /> Dev verze {IS_DEV ? "ON" : "OFF"}</label>
       <p className="note">Dev verze je testovací a může obsahovat chyby. Pracuje na vlastní kopii tvých dat (bez synchronizace). Změny v ní se do běžné verze nepřenesou.</p>
       {IS_DEV && <>
-        <p className="note">Kopie dat z běžné verze: {copied ? new Date(copied).toLocaleString("cs-CZ") : "–"}</p>
-        <button className="btn" onClick={async () => {
-          if (!await ask("Zahodit data dev verze a znovu zkopírovat aktuální data z běžné verze?")) return;
-          await copyProdToDev(); location.reload();
-        }}>Obnovit kopii z produkce</button>
+        <p className="note">Poslední sync z produkce: {copied ? new Date(copied).toLocaleString("cs-CZ") : "–"}</p>
+        <button className="btn primary" disabled={busy} onClick={async () => {
+          if (!await ask("Sync z produkce: data dev verze se nahradí aktuální kopií dat z běžné (produkční) verze – tvůj log, poznámky, lokality, parťáci, nastavení, Výstroj i logy ostatních. Všechno, co jsi změnil jen v dev verzi, se ztratí. Produkce se jen čte, nic se v ní nezmění.", { ok: "Sync z produkce", danger: true })) return;
+          setBusy(true); toast("Kopíruji data z produkce…");
+          await copyProdToDev(); location.reload(); // po načtení se přepočítají souhrny ponorů, on-board lahve i stav výbavy
+        }}>{busy ? "Kopíruji…" : "Sync z produkce"}</button>
+        <p className="note">Po syncu se aplikace znovu načte a přepočítá souhrny všech ponorů aktuální verzí analýzy (i u logů ostatních při otevření), on-board lahve z posledního ponoru a stav čidel, scrubberu, baterií a upozornění.</p>
       </>}
     </Sec>
   );

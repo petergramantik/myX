@@ -84,6 +84,31 @@ export interface CellStatus { level: "ok" | "info" | "warn" | "bad"; reasons: st
 
 /** Stav čidla na pozici k z posledních ponorů. ageM = stáří od instalace (měsíce), madeM = od výroby, life = životnost čidla.
  *  ref = ponory starší 30–120 dní (pro pokles citlivosti; porovnává se medián s mediánem dvou posledních ponorů). */
+/** Trend čidla od instalace: změna citlivosti (% za měsíc, lineární regrese), odhad měsíců do hranice na vzduchu, linearita na začátku a teď. */
+export interface CellTrend { n: number; slopePctM: number | null; monthsToWarn: number | null; linFirst: number | null; linNow: number | null }
+export function cellTrend(pts: { t: number; mv: number | null; lin: number | null }[], airWarn: number): CellTrend {
+  const p = pts.filter((x) => x.mv != null) as { t: number; mv: number; lin: number | null }[];
+  const lins = pts.map((x) => x.lin).filter((x): x is number => x != null);
+  const linFirst = lins.length >= 3 ? med(lins.slice(0, 3)) : null, linNow = lins.length >= 3 ? med(lins.slice(-3)) : null;
+  if (p.length < 5 || p[p.length - 1].t - p[0].t < 30 * 86400000) return { n: p.length, slopePctM: null, monthsToWarn: null, linFirst, linNow };
+  const M = 30.44 * 86400000, xs = p.map((x) => (x.t - p[0].t) / M), ys = p.map((x) => x.mv);
+  const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
+  let sxy = 0, sxx = 0; xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; });
+  const slope = sxx ? sxy / sxx : 0; // mV/bar za měsíc
+  const now = my + slope * (xs[xs.length - 1] - mx);
+  const monthsToWarn = slope < 0 ? Math.max(0, (now * 0.21 - airWarn) / (-slope * 0.21)) : null;
+  return { n: p.length, slopePctM: Math.round((slope / my) * 1000) / 10, monthsToWarn: monthsToWarn != null ? Math.round(monthsToWarn * 10) / 10 : null, linFirst, linNow };
+}
+/** Varování z trendu (dřív, než se čidlo rozejde s ostatními): rychlý pokles citlivosti nebo zhoršující se linearita. */
+export function trendReasons(tr: CellTrend): { level: "warn" | "info"; text: string }[] {
+  const out: { level: "warn" | "info"; text: string }[] = [];
+  if (tr.slopePctM != null && tr.slopePctM <= -2 && tr.monthsToWarn != null && tr.monthsToWarn <= 6)
+    out.push({ level: "warn", text: `Citlivost klesá o ${Math.abs(tr.slopePctM).toString().replace(".", ",")} % za měsíc – pod hranici na vzduchu zhruba za ${tr.monthsToWarn < 1 ? "méně než měsíc" : `${Math.round(tr.monthsToWarn)} měs.`}` });
+  if (tr.linNow != null && tr.linFirst != null && tr.linNow < 0.95 && tr.linFirst - tr.linNow >= 0.03)
+    out.push({ level: "warn", text: `Linearita se zhoršuje: ${tr.linFirst.toFixed(2).replace(".", ",")} → ${tr.linNow.toFixed(2).replace(".", ",")} (začínající current limiting)` });
+  return out;
+}
+
 export function cellStatus(k: number, recent: CellDive[], th: CellThresholds, ageM: number | null, madeM: number | null, life: number | null, ref: CellDive[]): CellStatus {
   const reasons: string[] = [];
   let level: CellStatus["level"] = "ok";

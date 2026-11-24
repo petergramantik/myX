@@ -1,9 +1,11 @@
 // Tagy problémů v seznamu ponorů: kategorie z oranžových a červených varování (stejný zdroj jako záhlaví detailu).
-export type TagCat = "pO₂" | "CO₂" | "ČIDLO" | "TLAK" | "BAT" | "SP";
-export const TAG_ORDER: TagCat[] = ["pO₂", "CO₂", "ČIDLO", "TLAK", "BAT", "SP"];
+export type TagCat = "pO₂" | "CO₂" | "ČIDLO" | "TLAK" | "BAT" | "SP" | "BO" | "GF";
+export const TAG_ORDER: TagCat[] = ["pO₂", "CO₂", "ČIDLO", "TLAK", "BO", "GF", "BAT", "SP"];
 export interface DiveTag { cat: TagCat; level: "warn" | "bad"; cells: number[]; label: string }
 
 export function tagCat(title: string): TagCat | null {
+  if (/^Bailout/.test(title)) return "BO";
+  if (/^SurfGF/.test(title)) return "GF";
   if (/CO₂/.test(title)) return "CO₂";
   if (/pO₂|hypoxi/i.test(title)) return "pO₂";
   if (/^Nízký tlak/.test(title)) return "TLAK";

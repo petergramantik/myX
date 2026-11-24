@@ -1,9 +1,18 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.43";
+export const APP_VERSION = "1.44";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44", date: "2026-11-24", title: "Výstroj, bailout podle plynů, SurfGF, trend čidel", items: [
+    "Nová záložka Výstroj: lahve jako dlaždice v sekcích On-board, Stage, Twin, Mono, Argon a Plnění, seskupené podle plynu a řazené podle tlaku; stav OK / Doplnit / Prázdná / Ověřit / Revize; automatiky (1. a 2. stupeň se servisem, hadice), závady a jejich řešení; termíny revizí jen ve Výstroji.",
+    "On-board lahve rebreatheru RB O2 n / RB DIL n: po ponoru se rozpozná, která lahev byla v rebreatheru, a převezme tlak na konci; nejednoznačné přiřazení se vybere v detailu ponoru. Lahve z Výstroje v „Před a po ponoru“ – zavřená lahev se nepřepíše („ověřit“).",
+    "Bailout po ponoru podle plynů: vzduch do nastavené hloubky (40 m), EAN a O₂ podle MOD, trimix všude; násobek TTS pro dekompresi na OC (1,5); graf v záložce Grafy s profilem, žlutá dlaždice a upozornění BO jen při skutečném nedostatku.",
+    "SurfGF při vynoření v detailu ponoru, upozornění GF nad hranicí (70 %) a trend na Přehledu; vypínatelné v Nastavení.",
+    "Detail ponoru: pořadí V kostce (Hloubka, Doba, O₂, Diluent, Max. pO₂, Max. pN₂, Baterie, Scrubber…), „Před a po ponoru“ pod Profilem, panely B&L (lokalita a s kým) a Hodnocení (hodnocení a poznámka); hydratace před ponorem.",
+    "O₂ čidla: trend citlivosti a linearity od instalace s včasným varováním. CO₂: tlačítka Porucha čidla / Skutečné CO₂ vedle sebe s vysvětlením.",
+    "Baterie v hlavě: Hlava 1 / Hlava 2 s funkcí (solenoid, HUD a výstup pO₂). DB je třetí přepínač v B&L. Výpadek tlaku lahve = mezera v grafu.",
+  ] },
   { version: "1.43", date: "2026-11-22", title: "Můj log, spotřeba ve srovnání, čidlo CO₂, řazení", items: [
     "DB → Databáze: první karta „Můj log“ – tvoje jméno (všude místo „Já“), období, počítače s Akcemi (přístroj, rebreather, vysílače, odebrat); Sdílet můj log: Vše nebo Vybrat ponory, malý odkaz na původní export Cloudu.",
     "Srovnání: spotřeba O₂ a diluentu (bary, s objemem litry a l/min), diluent při sestupu, graf tlaků on-board lahví; objem lahve parťáka jde zadat ve srovnání.",
