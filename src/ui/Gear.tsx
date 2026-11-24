@@ -73,10 +73,11 @@ function gasRank(mix: string): [number, number] {
  *  (stejný plyn u sebe: AIR, EAN, TMX, O₂, argon), v rámci plynu od nejvyššího tlaku. */
 export function tankGroups(list: GearTank[], sec: string): { key: string; label: string; tanks: GearTank[] }[] {
   const kindOrd = (t: GearTank) => { const k = GEAR_TANK_KINDS.indexOf(t.kind); return (k < 0 ? 99 : k) * 1000 + t.vol; };
-  const key = (t: GearTank) => (sec === "onboard" ? (t.onboard === "o2" ? "0|O₂" : "1|Diluent") : `${kindOrd(t)}|${t.kind === "Dvojče" || t.kind === "Jiná" ? tankLabel({ ...t, name: undefined }) : t.kind}`);
+  const flat = sec === "argon" || sec === "fill" || sec === "mono"; // malé a různorodé lahve – bez podkategorií, vedle sebe
+  const key = (t: GearTank) => (sec === "onboard" ? (t.onboard === "o2" ? "0|O₂" : "1|Diluent") : flat ? "0|" : `${kindOrd(t)}|${t.kind === "Dvojče" || t.kind === "Jiná" ? tankLabel({ ...t, name: undefined }) : t.kind}`);
   const map = new Map<string, GearTank[]>();
   for (const t of list) map.set(key(t), [...(map.get(key(t)) || []), t]);
-  const byGas = (a: GearTank, b: GearTank) => { const x = gasRank(a.mix), y = gasRank(b.mix); return x[0] - y[0] || x[1] - y[1] || gasDisp(a.mix).localeCompare(gasDisp(b.mix)) || (b.bar ?? -1) - (a.bar ?? -1) || tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }); };
+  const byGas = (a: GearTank, b: GearTank) => { const x = gasRank(a.mix), y = gasRank(b.mix); return x[0] - y[0] || x[1] - y[1] || gasDisp(a.mix).localeCompare(gasDisp(b.mix)) || (flat ? gearVol(b) - gearVol(a) : 0) || (b.bar ?? -1) - (a.bar ?? -1) || tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }); };
   return [...map.entries()]
     .sort((a, b) => +a[0].split("|")[0] - +b[0].split("|")[0])
     .map(([k, ts]) => ({ key: k, label: k.split("|")[1], tanks: ts.sort(byGas) }));
