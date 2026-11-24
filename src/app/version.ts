@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44.1";
+export const APP_VERSION = "1.44.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44.2", date: "2026-11-24", title: "Revize lahví fialově", items: [
+    "Dlaždice lahví: barva a stav ukazují jen plnost (OK / Doplnit / Prázdná / Ověřit); revize po termínu nebo do 30 dní jako fialový pruh dole (sytý po termínu, světlý do 30 dní).",
+  ] },
   { version: "1.44.1", date: "2026-11-24", title: "Úprava lahve, barvy plynů", items: [
     "Výstroj → Lahve: u každé lahve rozbalovací „Upravit“; název lahve bíle a výrazně, plyn v barvě plynu.",
     "AIR místo „vzduch“ všude u plynů; O₂ všude světle modře (lahve, profil, tlaky lahví, bailout).",
