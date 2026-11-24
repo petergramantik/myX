@@ -328,6 +328,7 @@ export function GuestCard() {
 /** Přepnutí mezi běžnou (produkční) a dev verzí. Dev verze běží na …/dev/, bez synchronizace, na vlastní kopii dat. */
 function DevSec() {
   const [copied, setCopied] = useState(0);
+  const [busy, setBusy] = useState(false);
   useEffect(() => { devCopiedAt().then(setCopied); }, []);
   const base = location.pathname.replace(/\/dev(\/.*)?$/, "/").replace(/[^/]*$/, "");
   const goTo = (dev: boolean) => { location.href = base + (dev ? "dev/" : ""); };
@@ -336,11 +337,13 @@ function DevSec() {
       <label className="inline dev-sw"><input type="checkbox" checked={IS_DEV} onChange={(e) => goTo(e.target.checked)} /> Dev verze {IS_DEV ? "ON" : "OFF"}</label>
       <p className="note">Dev verze je testovací a může obsahovat chyby. Pracuje na vlastní kopii tvých dat (bez synchronizace). Změny v ní se do běžné verze nepřenesou.</p>
       {IS_DEV && <>
-        <p className="note">Kopie dat z běžné verze: {copied ? new Date(copied).toLocaleString("cs-CZ") : "–"}</p>
-        <button className="btn" onClick={async () => {
-          if (!await ask("Zahodit data dev verze a znovu zkopírovat aktuální data z běžné verze?")) return;
-          await copyProdToDev(); location.reload();
-        }}>Obnovit kopii z produkce</button>
+        <p className="note">Poslední sync z produkce: {copied ? new Date(copied).toLocaleString("cs-CZ") : "–"}</p>
+        <button className="btn primary" disabled={busy} onClick={async () => {
+          if (!await ask("Sync z produkce: data dev verze se nahradí aktuální kopií dat z běžné (produkční) verze – tvůj log, poznámky, lokality, parťáci, nastavení, Výstroj i logy ostatních. Všechno, co jsi změnil jen v dev verzi, se ztratí. Produkce se jen čte, nic se v ní nezmění.", { ok: "Sync z produkce", danger: true })) return;
+          setBusy(true); toast("Kopíruji data z produkce…");
+          await copyProdToDev(); location.reload(); // po načtení se přepočítají souhrny ponorů, on-board lahve i stav výbavy
+        }}>{busy ? "Kopíruji…" : "Sync z produkce"}</button>
+        <p className="note">Po syncu se aplikace znovu načte a přepočítá souhrny všech ponorů aktuální verzí analýzy (i u logů ostatních při otevření), on-board lahve z posledního ponoru a stav čidel, scrubberu, baterií a upozornění.</p>
       </>}
     </Sec>
   );

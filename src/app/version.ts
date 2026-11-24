@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44-dev.2";
+export const APP_VERSION = "1.44-dev.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44-dev.3", date: "2026-11-24", title: "Sync dev verze z produkce (dev)", items: [
+    "Nastavení → Dev → Sync z produkce: data dev verze se nahradí aktuální kopií produkčních dat (produkce se jen čte) a po načtení se přepočítají souhrny všech ponorů, on-board lahve i stav výbavy.",
+  ] },
   { version: "1.44-dev.2", date: "2026-11-24", title: "On-board lahve RB O2 / RB DIL (dev)", items: [
     "On-board lahve rebreatheru jako lahve ve Výstroji (RB O2 n, RB DIL n); první dvě se založí z posledního ponoru.",
     "Po ponoru se rozpozná, která lahev byla v rebreatheru (diluent podle směsi, pak tlaku; O₂ podle tlaku), a převezme tlak na konci; nejednoznačné přiřazení se vybere v detailu ponoru.",
