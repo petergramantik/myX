@@ -2,7 +2,8 @@
 // Upozornění na termíny jsou jen tady – nepatří mezi upozornění k ponorům.
 import { useEffect, useState } from "react";
 import { gasColorOf, gasDisp } from "../app/gas";
-import { GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, tankMix, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
+import type { Settings } from "../app/model";
+import { tankLowBar, FILL_BAR, GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, tankMix, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
 import { deleteReg, deleteTank, ownMetas, saveReg, saveTank } from "../app/store";
 import { RB_TOL, rbMatch } from "../app/gearSync";
 import { isCC } from "../core/rig";
@@ -14,7 +15,7 @@ const HOSE_TYPES: GearHose["type"][] = ["HP", "LP", "inflátor", "Swagelok"];
 const fmtD = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }) : "–");
 const fmtMs = (ms: number) => new Date(ms).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
 const DUE_CLS = { over: "c-bad", soon: "c-warn", ok: "", none: "muted" } as const;
-const lvlBar = (b?: number) => (b == null ? "muted" : b < 50 ? "c-bad" : b < 100 ? "c-warn" : "");
+const lvlBar = (b: number | undefined, low: number | null) => (b == null ? "muted" : b < 50 ? "c-bad" : low != null && b < low ? "c-warn" : "");
 export const tankLabel = (t: GearTank) => t.name || (t.kind === "Dvojče" ? `Dvojče 2×${num(t.vol, 0)} l` : t.kind === "Jiná" ? `${num(t.vol, 1)} l` : t.kind);
 const tankDue = (t: GearTank) => nextDue(t.revLast, t.revNext, t.revYears ?? REV_YEARS);
 const stageDue = (s: GearStage) => nextDue(s.svcLast, s.svcNext, s.svcYears ?? SVC_YEARS);
@@ -47,12 +48,12 @@ export function tankSec(t: GearTank): TSec {
 }
 /** Stav lahve pro dlaždici: Prázdná / Revize (prošlá) červeně, Ověřit / Doplnit / Revize (brzy) žlutě, jinak OK. Plnicí lahve hlídají jen ověření a revizi. */
 /** Stav lahve: barva a štítek = plnost (a ověření tlaku); revize zvlášť (fialový pruh na dlaždici). */
-export function tankState(t: GearTank): { lvl: "ok" | "warn" | "bad" | "none"; label: string; rev: "over" | "soon" | null } {
-  const ds = dueState(tankDue(t)), fill = t.use === "fill";
+export function tankState(t: GearTank, set?: Settings): { lvl: "ok" | "warn" | "bad" | "none"; label: string; rev: "over" | "soon" | null } {
+  const ds = dueState(tankDue(t)), fill = t.use === "fill", low = tankLowBar(t, set);
   const rev = ds === "over" || ds === "soon" ? ds : null;
   if (!fill && t.bar != null && t.bar < 50) return { lvl: "bad", label: "Prázdná", rev };
   if (t.check) return { lvl: "warn", label: "Ověřit", rev };
-  if (!fill && t.bar != null && t.bar < 100) return { lvl: "warn", label: "Doplnit", rev };
+  if (low != null && t.bar != null && t.bar < low) return { lvl: "warn", label: "Doplnit", rev };
   if (t.bar == null) return { lvl: "none", label: "Tlak?", rev };
   return { lvl: "ok", label: "OK", rev };
 }
@@ -82,7 +83,7 @@ export function tankGroups(list: GearTank[], sec: string): { key: string; label:
 }
 
 function TankTile({ t }: { t: GearTank }) {
-  const s = tankState(t);
+  const s = tankState(t, useStore().lb.settings);
   return (
     <div className={"celltile tanktile " + s.lvl} onClick={() => tab({ t: "gear", sub: "tanks", id: t.id })}>
       <div className="ct-h"><b>{tankLabel(t)}</b><span className={"dot " + s.lvl} /></div>
@@ -137,7 +138,7 @@ function GearHome() {
     <div className="row"><button className="btn" onClick={() => tab({ t: "gear", sub: "tanks" })}>Láhve ›</button></div>
     {regs.map((r) => <RegPanel key={r.id} r={r} />)}
     {!regs.length && <Card title="Sestavy"><p className="muted">Zatím žádné sestavy. Přidej automatiky v Automatiky.</p><button className="btn" onClick={() => tab({ t: "gear", sub: "regs" })}>Automatiky ›</button></Card>}
-    <p className="note">Dlaždice: barva podle plnosti – OK (zeleně), Doplnit (pod 100 bar), Prázdná (pod 50 bar), Ověřit (tlak se po ponoru nepřepsal); revize jako fialový pruh dole (světlý 30 dní předem, sytý po termínu). Upozornění na revize a servisy jsou jen tady ve Výstroji.</p>
+    <p className="note">Dlaždice: barva podle plnosti – OK (zeleně), Doplnit (on-board pod 100 bar, ostatní pod 85 % plnicího tlaku), Prázdná (pod 50 bar), Ověřit (tlak se po ponoru nepřepsal); revize jako fialový pruh dole (světlý 30 dní předem, sytý po termínu). Upozornění na revize a servisy jsou jen tady ve Výstroji.</p>
   </>);
 }
 
@@ -191,7 +192,7 @@ function TankList({ open }: { open?: string }) {
 }
 
 function TankCard({ t, edit, setEdit }: { t: GearTank; edit: boolean; setEdit: (v: boolean) => void }) {
-  const due = tankDue(t), ds = dueState(due);
+  const due = tankDue(t), ds = dueState(due), stg = useStore().lb.settings;
   const [bar, setBar] = useState(t.bar != null ? String(t.bar) : "");
   const saveBar = () => { const n = Math.round(+bar.replace(",", ".")); if (bar.trim() && n >= 0 && n < 400 && (n !== t.bar || t.check)) saveTank({ ...t, bar: n, barAt: Date.now(), check: undefined }); };
   return (
@@ -199,7 +200,7 @@ function TankCard({ t, edit, setEdit }: { t: GearTank; edit: boolean; setEdit: (
       <div className="card-h"><h2 className="gear-name">{tankLabel(t)}</h2><span>{t.o2 ? <span className="pill info">O₂ čisté</span> : null}{t.onboard ? <span className="pill">on-board {t.onboard === "o2" ? "O₂" : "dil"}</span> : null}</span></div>
       <div className="gear-big">
         <span className="gear-mix" style={{ color: gasColorOf(t.mix) || undefined }}>{gasDisp(t.mix)}</span>
-        <span className="gear-bar"><input className={"bar-in " + lvlBar(t.bar)} type="number" inputMode="numeric" value={bar} placeholder="bar" onChange={(e) => setBar(e.target.value)} onBlur={saveBar} /> bar</span>
+        <span className="gear-bar"><input className={"bar-in " + lvlBar(t.bar, tankLowBar(t, stg))} type="number" inputMode="numeric" value={bar} placeholder="bar" onChange={(e) => setBar(e.target.value)} onBlur={saveBar} /> bar</span>
       </div>
       {t.check && <div className="reason warn">Ověřit tlak: {t.check.text}. <button className="btn small" onClick={() => saveTank({ ...t, check: undefined, barAt: Date.now() })}>Tlak sedí</button></div>}
       <small className="muted">{num(gearVol(t), 1)} l{t.use === "fill" ? " · plnění" : ""}{t.barAt ? ` · tlak z ${fmtMs(t.barAt)}` : ""} · revize <span className={DUE_CLS[ds]}>{fmtD(due)}</span>{t.revLast ? ` (poslední ${fmtD(t.revLast)})` : ""}</small>
@@ -212,6 +213,7 @@ function TankCard({ t, edit, setEdit }: { t: GearTank; edit: boolean; setEdit: (
 
 function TankForm({ init, onDone }: { init: Partial<GearTank> & { kind: string; vol: number; mix: string }; onDone: () => void }) {
   const [f, setF] = useState({ ...init, mix: gasDisp(init.mix) });
+  const defFill = useStore().lb.settings.fillBar || FILL_BAR;
   const set = (p: Partial<GearTank>) => setF({ ...f, ...p });
   const customMix = !GASES.includes(f.mix);
   return (
@@ -226,6 +228,7 @@ function TankForm({ init, onDone }: { init: Partial<GearTank> & { kind: string; 
       <label>Interval revize (roky)<input inputMode="numeric" defaultValue={f.revYears ?? REV_YEARS} onBlur={(e) => { const v = Math.round(+e.target.value); if (v > 0) set({ revYears: v }); }} /></label>
       <label>Příští revize (jinak dopočítaná: {fmtD(nextDue(f.revLast, undefined, f.revYears ?? REV_YEARS))})<input type="date" value={f.revNext || ""} onChange={(e) => set({ revNext: e.target.value || undefined })} /></label>
       <label className="small inline gear-chk"><input type="checkbox" checked={!!f.o2} onChange={(e) => set({ o2: e.target.checked })} />O₂ čisté</label>
+      {!f.onboard && f.use !== "fill" && <label>Plnicí tlak (bar, nepovinné – jinak {defFill} bar z Nastavení)<input inputMode="numeric" defaultValue={f.fillBar ?? ""} onBlur={(e) => { const v = Math.round(+e.target.value); set({ fillBar: e.target.value.trim() && v >= 50 && v <= 350 ? v : undefined }); }} /></label>}
       <label>Účel<select value={f.use || ""} onChange={(e) => set({ use: (e.target.value || undefined) as GearTank["use"] })}><option value="">běžná lahev</option><option value="fill">Plnění (přepouštění plynu)</option></select></label>
       <label>On-board lahev rebreatheru<select value={f.onboard || ""} onChange={(e) => set({ onboard: (e.target.value || undefined) as GearTank["onboard"] })}><option value="">ne</option><option value="o2">O₂</option><option value="dil">diluent</option></select></label>
       <label>Poznámka<input defaultValue={f.note || ""} onBlur={(e) => set({ note: e.target.value.trim() || undefined })} /></label>

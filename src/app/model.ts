@@ -61,7 +61,7 @@ export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
 /** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
 export interface Co2Cal { date: string; gas: string }
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; /** spotřeba ve stresu pro výpočet bailoutu (l/min), vzduch do hloubky (m), násobek TTS pro dekompresi na OC */ boSac?: number; boAirMax?: number; boTtsMul?: number; /** SurfGF při vynoření: vypnuto / hranice upozornění (%) */ surfGfOff?: boolean; surfGfLim?: number; co2Cal?: Co2Cal | null; /** poslední potvrzená kalibrace čidel O₂ (z přípravy) */ o2Cal?: { date: string } | null; motto?: boolean; cyl?: { dil: number; o2: number }; /** objemy on-board lahví parťáků (l) podle počítače – pro srovnání spotřeby */ cylOf?: Record<string, { o2?: number; dil?: number }>; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; /** moje jméno ve sdíleném srovnání (místo „Já“) */ myName?: string; updated: number }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; /** spotřeba ve stresu pro výpočet bailoutu (l/min), vzduch do hloubky (m), násobek TTS pro dekompresi na OC */ boSac?: number; boAirMax?: number; boTtsMul?: number; /** lahve mimo rebreather: „Doplnit“ pod tolika % plnicího tlaku; výchozí plnicí tlak (bar) */ fillPct?: number; fillBar?: number; /** SurfGF při vynoření: vypnuto / hranice upozornění (%) */ surfGfOff?: boolean; surfGfLim?: number; co2Cal?: Co2Cal | null; /** poslední potvrzená kalibrace čidel O₂ (z přípravy) */ o2Cal?: { date: string } | null; motto?: boolean; cyl?: { dil: number; o2: number }; /** objemy on-board lahví parťáků (l) podle počítače – pro srovnání spotřeby */ cylOf?: Record<string, { o2?: number; dil?: number }>; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; /** moje jméno ve sdíleném srovnání (místo „Já“) */ myName?: string; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
@@ -88,6 +88,7 @@ export interface GearTank {
   revLast?: string; revNext?: string; revYears?: number; o2?: boolean; note?: string; updated: number;
   /** on-board lahev rebreatheru (objem se bere pro výpočty spotřeby) */ onboard?: "o2" | "dil";
   /** účel: plnění (lahev na přepouštění plynu) */ use?: "fill";
+  /** plnicí tlak lahve (bar); jinak výchozí z nastavení */ fillBar?: number;
 }
 export const GEAR_TANK_KINDS = ["S80", "S40", "12 l", "3 l", "2,5 l", "Dvojče", "Jiná"];
 export const TWIN_VOLS = [8, 10, 12, 15, 18];
@@ -99,7 +100,13 @@ export interface GearHose { id: string; len?: number; type: "HP" | "LP" | "infl�
 export interface GearFault { id: string; at: number; text: string; diveId?: string; fix?: { at: number; kind: "oprava" | "výměna"; text?: string } }
 /** Sestava = automatika (1. a 2. stupeň s hadicemi). */
 export interface GearReg { id: string; name: string; s1: GearStage; s2: GearStage; hoses: GearHose[]; o2?: boolean; faults: GearFault[]; note?: string; updated: number }
-export const REV_YEARS = 5, SVC_YEARS = 2;
+export const REV_YEARS = 5, SVC_YEARS = 2, FILL_PCT = 85, FILL_BAR = 200, RB_LOW = 100;
+/** Pod jakým tlakem lahev „Doplnit“: on-board 100 bar, ostatní % plnicího tlaku (lahve na plnění se nehlídají → null). */
+export function tankLowBar(t: GearTank, set?: { fillPct?: number; fillBar?: number }): number | null {
+  if (t.use === "fill") return null;
+  if (t.onboard) return RB_LOW;
+  return Math.round(((t.fillBar || set?.fillBar || FILL_BAR) * (set?.fillPct || FILL_PCT)) / 100);
+}
 /** Datum dalšího termínu: zadané, jinak poslední + interval (roky). */
 export function nextDue(last?: string, next?: string, years?: number): string | undefined {
   if (next) return next;
