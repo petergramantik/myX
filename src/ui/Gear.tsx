@@ -1,6 +1,6 @@
 // Výstroj: moje lahve, sestavy (automatiky s hadicemi), revize a servisy, závady a jejich řešení.
 // Upozornění na termíny jsou jen tady – nepatří mezi upozornění k ponorům.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
 import { deleteReg, deleteTank, ownMetas, saveReg, saveTank } from "../app/store";
 import { RB_TOL, rbMatch } from "../app/gearSync";
@@ -33,55 +33,72 @@ export function GearScreen({ sub = "home", id }: { sub?: "home" | "tanks" | "reg
 }
 
 // ---------- Přehled
+type TSec = "onboard" | "stage" | "twin" | "mono" | "argon" | "fill";
+const SECS: [TSec, string][] = [["onboard", "On-board"], ["stage", "Stage"], ["twin", "Twin"], ["mono", "Mono"], ["argon", "Argon"], ["fill", "Plnění"]];
+const isArgon = (t: GearTank) => /^argon$/i.test(t.mix.trim());
+export function tankSec(t: GearTank): TSec {
+  if (t.use === "fill") return "fill";
+  if (t.onboard) return "onboard";
+  if (isArgon(t)) return "argon";
+  if (t.kind === "Dvojče") return "twin";
+  if (t.kind === "S80" || t.kind === "S40") return "stage";
+  return "mono";
+}
+/** Stav lahve pro dlaždici: Prázdná / Revize (prošlá) červeně, Ověřit / Doplnit / Revize (brzy) žlutě, jinak OK. Plnicí lahve hlídají jen ověření a revizi. */
+export function tankState(t: GearTank): { lvl: "ok" | "warn" | "bad" | "none"; label: string } {
+  const ds = dueState(tankDue(t)), fill = t.use === "fill";
+  if (!fill && t.bar != null && t.bar < 50) return { lvl: "bad", label: "Prázdná" };
+  if (ds === "over") return { lvl: "bad", label: "Revize" };
+  if (t.check) return { lvl: "warn", label: "Ověřit" };
+  if (!fill && t.bar != null && t.bar < 100) return { lvl: "warn", label: "Doplnit" };
+  if (ds === "soon") return { lvl: "warn", label: "Revize" };
+  if (t.bar == null) return { lvl: "none", label: "Tlak?" };
+  return { lvl: "ok", label: "OK" };
+}
+
+function TankTile({ t }: { t: GearTank }) {
+  const s = tankState(t);
+  return (
+    <div className={"celltile tanktile " + s.lvl} onClick={() => tab({ t: "gear", sub: "tanks", id: t.id })}>
+      <div className="ct-h"><b>{tankLabel(t)}</b><span className={"dot " + s.lvl} /></div>
+      <div className="ct-sub">{t.mix}</div>
+      <div className="ct-v">{t.bar != null ? t.bar : "–"}<small>bar</small></div>
+      <div className={"ct-l " + s.lvl}>{s.label}</div>
+    </div>
+  );
+}
+
 function GearHome() {
   const st = useStore();
   const all = Object.values(st.lb.tanks || {}).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }));
-  const tanks = all.filter((t) => !t.onboard);
   const regs = Object.values(st.lb.regs || {}).sort((a, b) => a.name.localeCompare(b.name, "cs"));
-  return (<>
-    <OnboardCard tanks={all} />
-    <Card title="Láhve" right={<button className="btn small" onClick={() => tab({ t: "gear", sub: "tanks" })}>Spravovat ›</button>}>
-      {!tanks.length && <p className="muted">Zatím žádné off-board lahve. Přidej je v Láhve.</p>}
-      {tanks.map((t) => { const due = dueState(tankDue(t)); return (
-        <div key={t.id} className="gear-row link" onClick={() => tab({ t: "gear", sub: "tanks", id: t.id })}>
-          <span><b>{tankLabel(t)}</b>{t.onboard ? <small className="muted"> · on-board {t.onboard === "o2" ? "O₂" : "diluent"}</small> : null}{t.o2 ? <span className="pill info">O₂ čisté</span> : null}</span>
-          <span className="gear-v"><b>{t.mix}</b> · <b className={lvlBar(t.bar)}>{t.bar != null ? `${t.bar} bar` : "– bar"}</b>{t.check ? <small className="c-warn"> zkontrolovat</small> : null}</span>
-          {due !== "ok" && due !== "none" && <small className={DUE_CLS[due]}>revize {fmtD(tankDue(t))}</small>}
-        </div>); })}
-    </Card>
-    {regs.map((r) => <RegPanel key={r.id} r={r} />)}
-    {!regs.length && <Card title="Sestavy"><p className="muted">Zatím žádné sestavy. Přidej automatiky v Automatiky.</p><button className="btn" onClick={() => tab({ t: "gear", sub: "regs" })}>Automatiky ›</button></Card>}
-    <p className="note">Termíny revizí a servisů: 30 dní předem žlutě, po termínu červeně. Upozornění na ně jsou jen tady ve Výstroji.</p>
-  </>);
-}
-
-/** On-board lahve rebreatheru (RB O2 n / RB DIL n): přiřazení k poslednímu ponoru, tlak, přidání další lahve. */
-function OnboardCard({ tanks }: { tanks: GearTank[] }) {
-  const st = useStore();
   const cc = ownMetas().filter((m) => isCC(m.h));
   const last = cc[cc.length - 1];
   const rb = last ? st.lb.notes[last.id]?.rb : undefined;
-  const role = (g: "o2" | "dil", label: string) => {
-    const list = tanks.filter((t) => t.onboard === g).sort((a, b) => (a.name || "").localeCompare(b.name || "", "cs", { numeric: true }));
-    const un = last && list.length && !rb?.[g];
-    return (<>
-      <h3 className="subh">{label}</h3>
-      {list.map((t) => (
-        <div key={t.id} className="gear-row link" onClick={() => tab({ t: "gear", sub: "tanks", id: t.id })}>
-          <span><b>{tankLabel(t)}</b> <small className="muted">{num(gearVol(t), 1)} l</small>{rb?.[g]?.id === t.id ? <span className="pill info">poslední ponor</span> : null}</span>
-          <span className="gear-v"><b>{t.mix}</b> · <b className={lvlBar(t.bar)}>{t.bar != null ? `${t.bar} bar` : "– bar"}</b>{t.check ? <small className="c-warn"> zkontrolovat</small> : null}</span>
-        </div>
-      ))}
-      {un ? <div className="reason warn link" onClick={() => go({ t: "dive", id: last!.id })}>Ponor {fmtMs(last!.start * 1000)}: nepřiřazená lahev {label} ({rbMatch(st.lb, last!, g).why}) – vyber ji v detailu ponoru v „Před a po ponoru“ ›</div> : null}
-      <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: g === "o2" ? "O₂" : list[0]?.mix || "vzduch", onboard: g })}>＋ {g === "o2" ? "RB O2" : "RB DIL"}</button>
-    </>);
-  };
-  return (
-    <Card title="On-board lahve rebreatheru">
-      {role("o2", "O₂")}{role("dil", "Diluent")}
-      <p className="note">Po každém ponoru myX rozpozná, která lahev byla v rebreatheru – diluent podle směsi z logu, pak podle tlaku na začátku ponoru proti zbytkovému tlaku (±{RB_TOL} bar). Přiřazená lahev převezme tlak na konci ponoru; zavřená (jen mezitlak) se nepřepíše a bude „zkontrolovat“. Když to nejde jednoznačně, vybereš lahev v detailu ponoru. Objem poslední upravené lahve se používá pro výpočty spotřeby.</p>
-    </Card>
-  );
+  const unassigned = (["o2", "dil"] as const).filter((g) => last && all.some((t) => t.onboard === g) && !rb?.[g]);
+  return (<>
+    {SECS.map(([k, label]) => {
+      const list = all.filter((t) => tankSec(t) === k);
+      if (!list.length && k !== "onboard") return null;
+      return (
+        <section key={k} className="card">
+          <div className="card-h"><h2>{label}</h2>{k === "onboard" && <span className="row">
+            <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: "O₂", onboard: "o2" })}>＋ RB O2</button>
+            <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: all.find((t) => t.onboard === "dil")?.mix || "vzduch", onboard: "dil" })}>＋ RB DIL</button>
+          </span>}</div>
+          {list.length ? <div className="cells">{list.map((t) => <TankTile key={t.id} t={t} />)}</div> : <p className="muted small">Zatím žádné lahve rebreatheru.</p>}
+          {k === "onboard" && unassigned.map((g) => (
+            <div key={g} className="reason warn link" onClick={() => go({ t: "dive", id: last!.id })}>Ponor {fmtMs(last!.start * 1000)}: nepřiřazená lahev {g === "o2" ? "O₂" : "diluentu"} ({rbMatch(st.lb, last!, g).why}) – vyber ji v detailu ponoru v „Před a po ponoru“ ›</div>
+          ))}
+          {k === "onboard" && <p className="note">Po ponoru myX rozpozná lahev v rebreatheru (diluent podle směsi, pak tlaku ±{RB_TOL} bar; O₂ podle tlaku) a převezme tlak na konci. Zavřená lahev se nepřepíše – „Ověřit“.</p>}
+        </section>
+      );
+    })}
+    <div className="row"><button className="btn" onClick={() => tab({ t: "gear", sub: "tanks", id: "new" })}>＋ Přidat lahev</button><button className="btn" onClick={() => tab({ t: "gear", sub: "tanks" })}>Láhve ›</button></div>
+    {regs.map((r) => <RegPanel key={r.id} r={r} />)}
+    {!regs.length && <Card title="Sestavy"><p className="muted">Zatím žádné sestavy. Přidej automatiky v Automatiky.</p><button className="btn" onClick={() => tab({ t: "gear", sub: "regs" })}>Automatiky ›</button></Card>}
+    <p className="note">Dlaždice: OK, Doplnit (pod 100 bar), Prázdná (pod 50 bar), Ověřit (tlak se po ponoru nepřepsal), Revize (30 dní předem žlutě, po termínu červeně). Upozornění na revize a servisy jsou jen tady ve Výstroji.</p>
+  </>);
 }
 
 function RegPanel({ r }: { r: GearReg }) {
@@ -114,6 +131,7 @@ async function addFault(r: GearReg) {
 function TankList({ open }: { open?: string }) {
   const st = useStore();
   const [edit, setEdit] = useState<string | null>(open || null);
+  useEffect(() => { if (open && open !== "new") setTimeout(() => document.getElementById("tank-" + open)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }, [open]);
   const tanks = Object.values(st.lb.tanks || {}).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }));
   return (<>
     {tanks.map((t) => <TankCard key={t.id} t={t} edit={edit === t.id} setEdit={(v) => setEdit(v ? t.id : null)} />)}
@@ -128,14 +146,14 @@ function TankCard({ t, edit, setEdit }: { t: GearTank; edit: boolean; setEdit: (
   const [bar, setBar] = useState(t.bar != null ? String(t.bar) : "");
   const saveBar = () => { const n = Math.round(+bar.replace(",", ".")); if (bar.trim() && n >= 0 && n < 400 && (n !== t.bar || t.check)) saveTank({ ...t, bar: n, barAt: Date.now(), check: undefined }); };
   return (
-    <section className="card gear-tank">
+    <section className="card gear-tank" id={"tank-" + t.id}>
       <div className="card-h" onClick={() => setEdit(!edit)}><h2>{tankLabel(t)}</h2><span>{t.o2 ? <span className="pill info">O₂ čisté</span> : null}{t.onboard ? <span className="pill">on-board {t.onboard === "o2" ? "O₂" : "dil"}</span> : null}</span></div>
       <div className="gear-big">
         <span className="gear-mix">{t.mix}</span>
         <span className="gear-bar"><input className={"bar-in " + lvlBar(t.bar)} type="number" inputMode="numeric" value={bar} placeholder="bar" onChange={(e) => setBar(e.target.value)} onBlur={saveBar} /> bar</span>
       </div>
-      {t.check && <div className="reason warn">Tlak {t.check.text}. <button className="btn small" onClick={() => saveTank({ ...t, check: undefined, barAt: Date.now() })}>Tlak sedí</button></div>}
-      <small className="muted">{num(gearVol(t), 1)} l{t.barAt ? ` · tlak z ${fmtMs(t.barAt)}` : ""} · revize <span className={DUE_CLS[ds]}>{fmtD(due)}</span>{t.revLast ? ` (poslední ${fmtD(t.revLast)})` : ""}</small>
+      {t.check && <div className="reason warn">Ověřit tlak: {t.check.text}. <button className="btn small" onClick={() => saveTank({ ...t, check: undefined, barAt: Date.now() })}>Tlak sedí</button></div>}
+      <small className="muted">{num(gearVol(t), 1)} l{t.use === "fill" ? " · plnění" : ""}{t.barAt ? ` · tlak z ${fmtMs(t.barAt)}` : ""} · revize <span className={DUE_CLS[ds]}>{fmtD(due)}</span>{t.revLast ? ` (poslední ${fmtD(t.revLast)})` : ""}</small>
       {t.note && <p className="small">{t.note}</p>}
       {edit && <TankForm init={t} onDone={() => setEdit(false)} />}
     </section>
@@ -158,6 +176,7 @@ function TankForm({ init, onDone }: { init: Partial<GearTank> & { kind: string; 
       <label>Interval revize (roky)<input inputMode="numeric" defaultValue={f.revYears ?? REV_YEARS} onBlur={(e) => { const v = Math.round(+e.target.value); if (v > 0) set({ revYears: v }); }} /></label>
       <label>Příští revize (jinak dopočítaná: {fmtD(nextDue(f.revLast, undefined, f.revYears ?? REV_YEARS))})<input type="date" value={f.revNext || ""} onChange={(e) => set({ revNext: e.target.value || undefined })} /></label>
       <label className="small inline gear-chk"><input type="checkbox" checked={!!f.o2} onChange={(e) => set({ o2: e.target.checked })} />O₂ čisté</label>
+      <label>Účel<select value={f.use || ""} onChange={(e) => set({ use: (e.target.value || undefined) as GearTank["use"] })}><option value="">běžná lahev</option><option value="fill">Plnění (přepouštění plynu)</option></select></label>
       <label>On-board lahev rebreatheru<select value={f.onboard || ""} onChange={(e) => set({ onboard: (e.target.value || undefined) as GearTank["onboard"] })}><option value="">ne</option><option value="o2">O₂</option><option value="dil">diluent</option></select></label>
       <label>Poznámka<input defaultValue={f.note || ""} onBlur={(e) => set({ note: e.target.value.trim() || undefined })} /></label>
       <div className="row">

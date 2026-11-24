@@ -52,7 +52,7 @@ function TankRow({ t, set, del }: { t: PrepTank; set: (p: Partial<PrepTank>) => 
         }}>
           <option value="">lahev mimo Výstroj</option>{gear.map((x) => <option key={x.id} value={x.id}>{tankLabel(x)} · {x.mix}{x.bar != null ? ` · ${x.bar} bar` : ""}</option>)}
         </select>
-        {g?.check && <span className="small c-warn">zkontrolovat tlak</span>}
+        {g?.check && <span className="small c-warn">ověřit tlak</span>}
       </div>}
       <div className="pt-row">
         <select value={t.role} onChange={(e) => set({ role: e.target.value as PrepTank["role"] })}>

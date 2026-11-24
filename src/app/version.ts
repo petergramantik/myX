@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44-dev.3";
+export const APP_VERSION = "1.44-dev.4";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44-dev.4", date: "2026-11-24", title: "Dlaždice lahví, popisky baterií (dev)", items: [
+    "Přehled Výstroje: lahve jako dlaždice v sekcích On-board, Stage, Twin, Mono, Argon a Plnění; stav OK / Doplnit / Prázdná / Ověřit / Revize.",
+    "Baterie v hlavě: nadpis Hlava 1 / Hlava 2, funkce (solenoid, HUD a výstup pO₂) menším šedým písmem pod ním.",
+  ] },
   { version: "1.44-dev.3", date: "2026-11-24", title: "Sync dev verze z produkce (dev)", items: [
     "Nastavení → Dev → Sync z produkce: data dev verze se nahradí aktuální kopií produkčních dat (produkce se jen čte) a po načtení se přepočítají souhrny všech ponorů, on-board lahve i stav výbavy.",
   ] },

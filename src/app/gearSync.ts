@@ -1,5 +1,5 @@
 // Výstroj ↔ ponory: zbytkový tlak lahví po ponoru. Zavřená lahev (beze změny bez tlaku, mezitlak v logu, chybějící tlak)
-// tlak nepřepíše – u lahve se objeví „zkontrolovat“. On-board lahve rebreatheru (RB O2 n / RB DIL n) se po ponoru rozpoznají
+// tlak nepřepíše – u lahve se objeví „Ověřit“. On-board lahve rebreatheru (RB O2 n / RB DIL n) se po ponoru rozpoznají
 // podle směsi diluentu z logu a tlaku na začátku ponoru proti zbytkovému tlaku lahve.
 import { tankMix, uid, type GearTank, type Logbook, type Meta } from "./model";
 
@@ -23,7 +23,7 @@ export function gearTankApply(lb: Logbook, diveId: string, meta?: Meta): boolean
     const end = t.same ? t.bar : t.end;
     if (g.fromDive?.id === diveId && g.fromDive.end === end) continue;  // už převzato
     if ((g.barAt || 0) > endT * 1000 && g.fromDive?.id !== diveId) continue; // novější údaj (pozdější ponor nebo ruční zadání)
-    if (end == null) lb.tanks[g.id] = { ...g, check: { at: Date.now(), text: `po ponoru ${meta ? dd(meta.start) : ""} chybí tlak „po“ – zkontroluj` }, fromDive: { id: diveId, end }, updated: Date.now() };
+    if (end == null) lb.tanks[g.id] = { ...g, check: { at: Date.now(), text: `po ponoru ${meta ? dd(meta.start) : ""} chybí tlak „po“ – ověř` }, fromDive: { id: diveId, end }, updated: Date.now() };
     else lb.tanks[g.id] = { ...g, bar: end, barAt: endT * 1000, check: undefined, fromDive: { id: diveId, end }, updated: Date.now() };
     ch = true;
   }
@@ -54,7 +54,7 @@ export function rbMatch(lb: Logbook, m: Meta, role: RbRole): { id: string | null
   return { id: null, why: near.length ? "víc lahví s podobným tlakem" : "tlak neodpovídá žádné lahvi (dotlakovaná?)" };
 }
 
-/** Převzetí tlaku na konci ponoru k on-board lahvi (zavřená = zkontrolovat). */
+/** Převzetí tlaku na konci ponoru k on-board lahvi (zavřená = ověřit). */
 export function rbApply(lb: Logbook, m: Meta, role: RbRole, id: string): void {
   const g = lb.tanks?.[id];
   if (!g) return;
@@ -64,7 +64,7 @@ export function rbApply(lb: Logbook, m: Meta, role: RbRole, id: string): void {
   const closed = end == null || end < CLOSED || (start != null && start < CLOSED);
   const prev = g.fromDive?.id === m.id ? g.fromDive.prev : { bar: g.bar, barAt: g.barAt };
   lb.tanks![id] = closed
-    ? { ...g, check: { at: Date.now(), text: `po ponoru ${dd(m.start)} ${end == null ? "počítač tlak nezná" : "lahev byla zavřená (jen mezitlak)"} – zkontroluj` }, fromDive: { id: m.id, prev }, updated: Date.now() }
+    ? { ...g, check: { at: Date.now(), text: `po ponoru ${dd(m.start)} ${end == null ? "počítač tlak nezná" : "lahev byla zavřená (jen mezitlak)"} – ověř` }, fromDive: { id: m.id, prev }, updated: Date.now() }
     : { ...g, bar: Math.round(end!), barAt: endT, check: undefined, fromDive: { id: m.id, end: Math.round(end!), prev }, updated: Date.now() };
 }
 

@@ -87,6 +87,7 @@ export interface GearTank {
   /** poslední převzetí z ponoru (aby se při úpravě téhož ponoru tlak znovu nepřepisoval); prev = tlak před převzetím (pro vrácení při změně přiřazení) */ fromDive?: { id: string; end?: number; prev?: { bar?: number; barAt?: number } };
   revLast?: string; revNext?: string; revYears?: number; o2?: boolean; note?: string; updated: number;
   /** on-board lahev rebreatheru (objem se bere pro výpočty spotřeby) */ onboard?: "o2" | "dil";
+  /** účel: plnění (lahev na přepouštění plynu) */ use?: "fill";
 }
 export const GEAR_TANK_KINDS = ["S80", "S40", "12 l", "3 l", "2,5 l", "Dvojče", "Jiná"];
 export const TWIN_VOLS = [8, 10, 12, 15, 18];

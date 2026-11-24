@@ -281,7 +281,7 @@ export function typeBreakdown(metas: Meta[], lb: Logbook = ownLb()): { text: str
 function informTypes(metas: Meta[], model?: string) {
   const sers = [...new Set(metas.map((m) => m.h.serial))];
   const parts = sers.map((ser) => `${model || modelFor(ser)}: ${typeBreakdown(metas.filter((m) => m.h.serial === ser)).text}`);
-  if (parts.length) setTimeout(() => toast(`${parts.join(" · ")}. Typ přístroje změníš v DB u počítače (Akce) nebo u ponoru.`), 4000); // po hlášce o importu
+  if (parts.length) setTimeout(() => toast(`${parts.join(" · ")}. Typ přístroje změníš v B&L → DB u počítače (Akce) nebo u ponoru.`), 4000); // po hlášce o importu
 }
 
 /** Název počítače pro zobrazení: model, u dvou stejných modelů pořadí („Petrel 2 (druhý)“). */
