@@ -1,39 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44-dev.7";
+export const APP_VERSION = "1.44";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.44-dev.7", date: "2026-11-24", title: "Bailout podle plynů, panely B&L a Hodnocení (dev)", items: [
-    "Bailout po plynech: vzduch do nastavené hloubky (40 m), EAN a O₂ podle MOD, trimix všude; násobek TTS pro dekompresi na OC (1,5); graf po plynech se sbalitelným popisem, upozornění hlásí chybějící plyn.",
-    "Detail ponoru: Lokalita a S kým v panelu B&L, Hodnocení a Poznámka v panelu Hodnocení.",
-  ] },
-  { version: "1.44-dev.6", date: "2026-11-24", title: "Detail ponoru: pořadí, bailout v Grafech (dev)", items: [
-    "V kostce: Hloubka, Doba, O₂, Diluent, Max. pO₂, Max. pN₂, Baterie, Scrubber, pak ostatní.",
-    "„Před a po ponoru“ hned pod grafem Profil a strop.",
-    "Graf bailoutu jen v záložce Grafy, s profilem ponoru; nedostatečný bailout žlutě (dlaždice, upozornění, štítek BO).",
-  ] },
-  { version: "1.44-dev.5", date: "2026-11-24", title: "Skupiny lahví (dev)", items: [
-    "Výstroj: sekce i v Láhvích; uvnitř sekce skupiny (on-board O₂, pak diluenty podle plynu; ostatní podle plynu), řazení od nejvyššího tlaku. Tlačítka RB O2 / RB DIL na Přehledu jen když chybí, v Láhvích vždy.",
-  ] },
-  { version: "1.44-dev.4", date: "2026-11-24", title: "Dlaždice lahví, popisky baterií (dev)", items: [
-    "Přehled Výstroje: lahve jako dlaždice v sekcích On-board, Stage, Twin, Mono, Argon a Plnění; stav OK / Doplnit / Prázdná / Ověřit / Revize.",
-    "Baterie v hlavě: nadpis Hlava 1 / Hlava 2, funkce (solenoid, HUD a výstup pO₂) menším šedým písmem pod ním.",
-  ] },
-  { version: "1.44-dev.3", date: "2026-11-24", title: "Sync dev verze z produkce (dev)", items: [
-    "Nastavení → Dev → Sync z produkce: data dev verze se nahradí aktuální kopií produkčních dat (produkce se jen čte) a po načtení se přepočítají souhrny všech ponorů, on-board lahve i stav výbavy.",
-  ] },
-  { version: "1.44-dev.2", date: "2026-11-24", title: "On-board lahve RB O2 / RB DIL (dev)", items: [
-    "On-board lahve rebreatheru jako lahve ve Výstroji (RB O2 n, RB DIL n); první dvě se založí z posledního ponoru.",
-    "Po ponoru se rozpozná, která lahev byla v rebreatheru (diluent podle směsi, pak tlaku; O₂ podle tlaku), a převezme tlak na konci; nejednoznačné přiřazení se vybere v detailu ponoru.",
-  ] },
-  { version: "1.44-dev.1", date: "2026-11-24", title: "Výstroj, bailout, SurfGF, trend čidel (dev)", items: [
-    "Nová záložka Výstroj: lahve (Dvojče, směs, zbytkový tlak, revize, O₂ čisté), on-board lahve rebreatheru, automatiky (1. a 2. stupeň se servisem, hadice), závady a jejich řešení; termíny jen ve Výstroji.",
-    "Lahve z Výstroje v „Před a po ponoru“ – tlak po ponoru se zapíše k lahvi; zavřená lahev se nepřepíše („zkontrolovat“).",
-    "DB je nově třetí přepínač v B&L.",
-    "Detail ponoru: Bailout (potřeba v nejhorším okamžiku proti bailout lahvím, graf) a SurfGF při vynoření; upozornění BO a GF; trend SurfGF na Přehledu (vypínatelné).",
-    "O₂ čidla: trend citlivosti a linearity od instalace s včasným varováním.",
-    "Hydratace v „Před a po ponoru“; CO₂: tlačítka Porucha čidla / Skutečné CO₂ vedle sebe s vysvětlením, zrušení vrací jen vlastní skrytí; výpadek tlaku lahve = mezera v grafu a „sestup –“; objemy lahví parťáka pod sebou.",
+  { version: "1.44", date: "2026-11-24", title: "Výstroj, bailout podle plynů, SurfGF, trend čidel", items: [
+    "Nová záložka Výstroj: lahve jako dlaždice v sekcích On-board, Stage, Twin, Mono, Argon a Plnění, seskupené podle plynu a řazené podle tlaku; stav OK / Doplnit / Prázdná / Ověřit / Revize; automatiky (1. a 2. stupeň se servisem, hadice), závady a jejich řešení; termíny revizí jen ve Výstroji.",
+    "On-board lahve rebreatheru RB O2 n / RB DIL n: po ponoru se rozpozná, která lahev byla v rebreatheru, a převezme tlak na konci; nejednoznačné přiřazení se vybere v detailu ponoru. Lahve z Výstroje v „Před a po ponoru“ – zavřená lahev se nepřepíše („ověřit“).",
+    "Bailout po ponoru podle plynů: vzduch do nastavené hloubky (40 m), EAN a O₂ podle MOD, trimix všude; násobek TTS pro dekompresi na OC (1,5); graf v záložce Grafy s profilem, žlutá dlaždice a upozornění BO jen při skutečném nedostatku.",
+    "SurfGF při vynoření v detailu ponoru, upozornění GF nad hranicí (70 %) a trend na Přehledu; vypínatelné v Nastavení.",
+    "Detail ponoru: pořadí V kostce (Hloubka, Doba, O₂, Diluent, Max. pO₂, Max. pN₂, Baterie, Scrubber…), „Před a po ponoru“ pod Profilem, panely B&L (lokalita a s kým) a Hodnocení (hodnocení a poznámka); hydratace před ponorem.",
+    "O₂ čidla: trend citlivosti a linearity od instalace s včasným varováním. CO₂: tlačítka Porucha čidla / Skutečné CO₂ vedle sebe s vysvětlením.",
+    "Baterie v hlavě: Hlava 1 / Hlava 2 s funkcí (solenoid, HUD a výstup pO₂). DB je třetí přepínač v B&L. Výpadek tlaku lahve = mezera v grafu.",
   ] },
   { version: "1.43", date: "2026-11-22", title: "Můj log, spotřeba ve srovnání, čidlo CO₂, řazení", items: [
     "DB → Databáze: první karta „Můj log“ – tvoje jméno (všude místo „Já“), období, počítače s Akcemi (přístroj, rebreather, vysílače, odebrat); Sdílet můj log: Vše nebo Vybrat ponory, malý odkaz na původní export Cloudu.",
