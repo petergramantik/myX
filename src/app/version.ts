@@ -1,10 +1,10 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.45.1-dev.1";
+export const APP_VERSION = "1.45.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.45.1-dev.1", date: "2026-11-24", title: "Pořadí skupin, karty lahví (dev)", items: [
+  { version: "1.45.1", date: "2026-11-24", title: "Pořadí skupin, karty lahví", items: [
     "Skupiny lahví s pořadím (✎ u skupiny: název, pořadí, smazání).",
     "Láhve: odstup mezi kartami, skupiny lahve vpravo dole, pod nimi pruh revize s dobou po termínu („Revize 3 roky po termínu“, pod rok v měsících).",
   ] },
