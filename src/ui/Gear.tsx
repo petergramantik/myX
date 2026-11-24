@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { gasColorOf, gasDisp } from "../app/gas";
 import type { Settings } from "../app/model";
 import { tankLowBar, FILL_BAR, GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, tankMix, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
-import { deleteReg, deleteTank, ownMetas, saveReg, saveTank } from "../app/store";
+import { deleteReg, deleteTank, ownMetas, renameTankGroup, saveReg, saveTank } from "../app/store";
 import { RB_TOL, rbMatch } from "../app/gearSync";
 import { isCC } from "../core/rig";
 import { ask, askText as promptText } from "../app/dialog";
@@ -107,16 +107,53 @@ function RbAdd({ all, onlyMissing }: { all: GearTank[]; onlyMissing?: boolean })
   );
 }
 
+/** Všechny názvy skupin lahví (abecedně). */
+const allGroups = (ts: GearTank[]) => [...new Set(ts.flatMap((t) => t.groups || []))].sort((a, b) => a.localeCompare(b, "cs"));
+
+/** Dlaždice lahví v pořadí sekcí a podkategorií (sub = podnadpisy uvnitř skupiny). */
+function TankTiles({ list }: { list: GearTank[] }) {
+  return (<>{SECS.map(([k, label]) => {
+    const l = list.filter((t) => tankSec(t) === k);
+    if (!l.length) return null;
+    const gs = tankGroups(l, k);
+    return gs.map((g) => (
+      <div key={k + g.key} className="tgroup">
+        <div className="tg-l">{gs.length > 1 ? `${label} · ${g.label}` : label}</div>
+        <div className="cells">{g.tanks.map((t) => <TankTile key={t.id} t={t} />)}</div>
+      </div>
+    ));
+  })}</>);
+}
+
+const VIEW_K = "myx-gear-view";
 function GearHome() {
   const st = useStore();
+  const [view, setViewS] = useState<"type" | "groups">(() => { try { return localStorage.getItem(VIEW_K) === "groups" ? "groups" : "type"; } catch { return "type"; } });
+  const setView = (v: "type" | "groups") => { setViewS(v); try { localStorage.setItem(VIEW_K, v); } catch { /* bez úložiště */ } };
   const all = Object.values(st.lb.tanks || {}).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }));
   const regs = Object.values(st.lb.regs || {}).sort((a, b) => a.name.localeCompare(b.name, "cs"));
   const cc = ownMetas().filter((m) => isCC(m.h));
   const last = cc[cc.length - 1];
   const rb = last ? st.lb.notes[last.id]?.rb : undefined;
   const unassigned = (["o2", "dil"] as const).filter((g) => last && all.some((t) => t.onboard === g) && !rb?.[g]);
+  const groups = allGroups(all);
+  const none = all.filter((t) => !t.groups?.length);
+  const rename = async (g: string) => {
+    const n = (await promptText(`Nový název skupiny „${g}“ (prázdné = smazat skupinu, lahve zůstanou):`, g, { ok: "Uložit" }));
+    if (n == null) return;
+    if (!n.trim()) { if (await ask(`Smazat skupinu ${g}? Lahve zůstanou, jen bez této skupiny.`, { danger: true, ok: "Smazat" })) await renameTankGroup(g, null); }
+    else if (n.trim() !== g) await renameTankGroup(g, n.trim());
+  };
   return (<>
-    {SECS.map(([k, label]) => {
+    {all.length > 0 && <div className="gview"><div className="seg"><button className={view === "type" ? "on" : ""} onClick={() => setView("type")}>Typ</button><button className={view === "groups" ? "on" : ""} onClick={() => setView("groups")}>Skupiny</button></div></div>}
+    {view === "groups" && all.length > 0 ? (<>
+      {groups.map((g) => {
+        const list = all.filter((t) => t.groups?.includes(g));
+        return <section key={g} className="card"><div className="card-h"><h2>{g}</h2><button className="btn small" onClick={() => rename(g)}>✎</button></div><TankTiles list={list} /></section>;
+      })}
+      {none.length > 0 && <section className="card"><div className="card-h"><h2>Bez skupiny</h2></div><TankTiles list={none} /></section>}
+      {!groups.length && <p className="note">Zatím žádné skupiny. Lahev přidáš do skupiny v Láhve → Upravit → Skupiny.</p>}
+    </>) : SECS.map(([k, label]) => {
       const list = all.filter((t) => tankSec(t) === k);
       if (!list.length && k !== "onboard") return null;
       return (
@@ -138,7 +175,7 @@ function GearHome() {
     <div className="row"><button className="btn" onClick={() => tab({ t: "gear", sub: "tanks" })}>Láhve ›</button></div>
     {regs.map((r) => <RegPanel key={r.id} r={r} />)}
     {!regs.length && <Card title="Sestavy"><p className="muted">Zatím žádné sestavy. Přidej automatiky v Automatiky.</p><button className="btn" onClick={() => tab({ t: "gear", sub: "regs" })}>Automatiky ›</button></Card>}
-    <p className="note">Dlaždice: barva podle plnosti – OK (zeleně), Doplnit (on-board pod 100 bar, ostatní pod 85 % plnicího tlaku), Prázdná (pod 50 bar), Ověřit (tlak se po ponoru nepřepsal); revize jako fialový pruh dole (světlý 30 dní předem, sytý po termínu). Upozornění na revize a servisy jsou jen tady ve Výstroji.</p>
+    <p className="note">Dlaždice: barva podle plnosti – OK (zeleně), Doplnit (on-board pod 100 bar, ostatní pod 85 % plnicího tlaku), Prázdná (pod 50 bar), Ověřit (tlak se po ponoru nepřepsal); revize jako fialový pruh dole (světlý 30 dní předem, sytý po termínu). Přepínač Typ / Skupiny: lahve podle druhu, nebo ve tvých skupinách (lahev ve více skupinách je v každé). Upozornění na revize a servisy jsou jen tady ve Výstroji.</p>
   </>);
 }
 
@@ -192,22 +229,43 @@ function TankList({ open }: { open?: string }) {
 }
 
 function TankCard({ t, edit, setEdit }: { t: GearTank; edit: boolean; setEdit: (v: boolean) => void }) {
-  const due = tankDue(t), ds = dueState(due), stg = useStore().lb.settings;
+  const due = tankDue(t), ds = dueState(due), stg = useStore().lb.settings, ts = tankState(t, stg);
   const [bar, setBar] = useState(t.bar != null ? String(t.bar) : "");
   const saveBar = () => { const n = Math.round(+bar.replace(",", ".")); if (bar.trim() && n >= 0 && n < 400 && (n !== t.bar || t.check)) saveTank({ ...t, bar: n, barAt: Date.now(), check: undefined }); };
   return (
-    <section className="card gear-tank" id={"tank-" + t.id}>
+    <section className={"card gear-tank tstate " + ts.lvl} id={"tank-" + t.id}>
       <div className="card-h"><h2 className="gear-name">{tankLabel(t)}</h2><span>{t.o2 ? <span className="pill info">O₂ čisté</span> : null}{t.onboard ? <span className="pill">on-board {t.onboard === "o2" ? "O₂" : "dil"}</span> : null}</span></div>
       <div className="gear-big">
         <span className="gear-mix" style={{ color: gasColorOf(t.mix) || undefined }}>{gasDisp(t.mix)}</span>
         <span className="gear-bar"><input className={"bar-in " + lvlBar(t.bar, tankLowBar(t, stg))} type="number" inputMode="numeric" value={bar} placeholder="bar" onChange={(e) => setBar(e.target.value)} onBlur={saveBar} /> bar</span>
       </div>
+      <div className={"ct-l " + ts.lvl}>{ts.label}{t.groups?.length ? <span className="muted grp-tags"> · {t.groups.join(", ")}</span> : null}</div>
       {t.check && <div className="reason warn">Ověřit tlak: {t.check.text}. <button className="btn small" onClick={() => saveTank({ ...t, check: undefined, barAt: Date.now() })}>Tlak sedí</button></div>}
-      <small className="muted">{num(gearVol(t), 1)} l{t.use === "fill" ? " · plnění" : ""}{t.barAt ? ` · tlak z ${fmtMs(t.barAt)}` : ""} · revize <span className={DUE_CLS[ds]}>{fmtD(due)}</span>{t.revLast ? ` (poslední ${fmtD(t.revLast)})` : ""}</small>
+      <small className="muted">{num(gearVol(t), 1)} l{t.use === "fill" ? " · plnění" : ""}{t.barAt ? ` · tlak z ${fmtMs(t.barAt)}` : ""} · revize <span className={ts.rev ? "c-rev " + ts.rev : DUE_CLS[ds]}>{fmtD(due)}</span>{t.revLast ? ` (poslední ${fmtD(t.revLast)})` : ""}</small>
       {t.note && <p className="small">{t.note}</p>}
       <button className="ev-head" onClick={() => setEdit(!edit)}>{edit ? "▾" : "▸"} Upravit</button>
       {edit && <TankForm init={t} onDone={() => setEdit(false)} />}
+      {ts.rev && <div className={"tt-rev " + ts.rev}><span>Revize {ts.rev === "over" ? "po termínu" : fmtD(due)}</span></div>}
     </section>
+  );
+}
+
+/** Skupiny lahve: nenápadný řádek, po klepnutí čipy existujících skupin a nová skupina. */
+function GroupPick({ value, onChange }: { value: string[]; onChange: (g: string[]) => void }) {
+  const st = useStore();
+  const [open, setOpen] = useState(false);
+  const [nw, setNw] = useState("");
+  const known = [...new Set([...allGroups(Object.values(st.lb.tanks || {})), ...value])].sort((a, b) => a.localeCompare(b, "cs"));
+  const flip = (g: string) => onChange(value.includes(g) ? value.filter((x) => x !== g) : [...value, g]);
+  const add = () => { const n = nw.trim(); if (n && !value.includes(n)) onChange([...value, n]); setNw(""); };
+  return (
+    <div className="grp-pick">
+      <button type="button" className="grp-line" onClick={() => setOpen(!open)}>Skupiny: {value.length ? value.join(", ") : "žádné"} <span className="muted">✎</span></button>
+      {open && <div className="grp-box">
+        {known.map((g) => <button type="button" key={g} className={"chip" + (value.includes(g) ? " on" : "")} onClick={() => flip(g)}>{g}</button>)}
+        <span className="grp-new"><input value={nw} placeholder="＋ nová skupina" onChange={(e) => setNw(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} onBlur={add} /></span>
+      </div>}
+    </div>
   );
 }
 
@@ -232,6 +290,7 @@ function TankForm({ init, onDone }: { init: Partial<GearTank> & { kind: string; 
       <label>Účel<select value={f.use || ""} onChange={(e) => set({ use: (e.target.value || undefined) as GearTank["use"] })}><option value="">běžná lahev</option><option value="fill">Plnění (přepouštění plynu)</option></select></label>
       <label>On-board lahev rebreatheru<select value={f.onboard || ""} onChange={(e) => set({ onboard: (e.target.value || undefined) as GearTank["onboard"] })}><option value="">ne</option><option value="o2">O₂</option><option value="dil">diluent</option></select></label>
       <label>Poznámka<input defaultValue={f.note || ""} onBlur={(e) => set({ note: e.target.value.trim() || undefined })} /></label>
+      <GroupPick value={f.groups || []} onChange={(g) => set({ groups: g.length ? g : undefined })} />
       <div className="row">
         <button className="btn primary" onClick={async () => { if (!f.mix) return; await saveTank(f); onDone(); }}>Uložit</button>
         <button className="btn" onClick={onDone}>Zrušit</button>
