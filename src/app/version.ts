@@ -1,10 +1,10 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.45.2-dev.1";
+export const APP_VERSION = "1.45.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.45.2-dev.1", date: "2026-11-24", title: "Argon, Mono a Plnění vedle sebe (dev)", items: [
+  { version: "1.45.2", date: "2026-11-24", title: "Argon, Mono a Plnění vedle sebe", items: [
     "Výstroj: sekce Mono, Argon a Plnění bez podkategorií podle objemu – lahve vedle sebe, podle plynu a od největšího objemu.",
   ] },
   { version: "1.45.1", date: "2026-11-24", title: "Pořadí skupin, karty lahví", items: [
