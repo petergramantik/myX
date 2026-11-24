@@ -559,6 +559,8 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(sg.gf === 58 && sg.shallowMin === 3, "SurfGF: GF99 v prvním vzorku u hladiny, mělko 3 min");
   // bailout: nejhorší okamžik – nejhlubší a nejdelší TTS
   const B = await import("../src/core/bailout");
+  { const Mo = await import("../src/app/model"); const D = (d: string) => new Date(d).getTime();
+    ok(Mo.overdueText("2023-01-01", D("2026-11-24")) === "4 roky" && Mo.overdueText("2021-11-01", D("2026-11-24")) === "5 let" && Mo.overdueText("2025-11-01", D("2026-11-24")) === "1 rok" && Mo.overdueText("2026-04-20", D("2026-11-24")) === "7 měsíců" && Mo.overdueText("2026-11-10", D("2026-11-24")) === "méně než měsíc" && Mo.overdueText("2026-09-20", D("2026-11-24")) === "2 měsíce", "Revize po termínu: roky / měsíce"); }
   { const Mo = await import("../src/app/model"); const tk = (p: object) => ({ id: "x", kind: "S80", vol: 11.1, mix: "AIR", updated: 0, ...p });
     ok(Mo.tankLowBar(tk({}) as never) === 170 && Mo.tankLowBar(tk({ onboard: "dil" }) as never) === 100 && Mo.tankLowBar(tk({ use: "fill" }) as never) == null && Mo.tankLowBar(tk({ fillBar: 300 }) as never, { fillPct: 80 }) === 240, "Lahve: hranice Doplnit (85 % z 200, RB 100, plnění –, vlastní tlak)"); }
   const GS = await import("../src/app/gas");

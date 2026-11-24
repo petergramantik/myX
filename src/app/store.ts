@@ -1265,15 +1265,20 @@ export function saveTank(t: Partial<GearTank> & { kind: string; vol: number; mix
   }
   return saveLb(lb);
 }
-/** Přejmenuje skupinu lahví (to = null → smaže skupinu, lahve zůstanou). */
-export function renameTankGroup(from: string, to: string | null): Promise<void> {
+/** Uloží skupinu lahví: přejmenování (to = null → smazání, lahve zůstanou) a pořadí (null = bez pořadí). */
+export function saveTankGroup(from: string, to: string | null, ord?: number | null): Promise<void> {
   const lb = structuredClone(st.lb);
-  for (const t of Object.values(lb.tanks || {})) {
+  if (to !== from) for (const t of Object.values(lb.tanks || {})) {
     if (!t.groups?.includes(from)) continue;
     const g = t.groups.filter((x) => x !== from);
     if (to && !g.includes(to)) g.push(to);
     lb.tanks![t.id] = { ...t, groups: g.length ? g : undefined, updated: Date.now() };
   }
+  const o = { ...(lb.settings.tankGroupOrd || {}) };
+  const keep = ord === undefined ? o[from] : ord;
+  delete o[from];
+  if (to && keep != null) o[to] = keep;
+  lb.settings = { ...lb.settings, tankGroupOrd: o, updated: Date.now() };
   return saveLb(lb);
 }
 export function deleteTank(id: string): Promise<void> {
