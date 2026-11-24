@@ -571,3 +571,19 @@ p.sub-role { margin: -6px 0 6px; font-size: 0.85em; }
 
 /* Výstroj: lahev v pořádku (plnost) = zelený rámeček, i s pruhem revize */
 .celltile.tanktile.ok { border-color: var(--ok); }
+
+/* Výstroj: karta lahve v Láhvích – stejné barvy jako dlaždice */
+.card.gear-tank.tstate { position: relative; overflow: hidden; }
+.card.gear-tank.tstate.ok { border-color: var(--ok); } .card.gear-tank.tstate.warn { border-color: var(--warn); } .card.gear-tank.tstate.bad { border-color: var(--bad); }
+.card.gear-tank .tt-rev { height: 5px; } .card.gear-tank .tt-rev span { font-size: 0.7em; bottom: 7px; }
+.card.gear-tank:has(.tt-rev) { padding-bottom: 24px; }
+.c-rev.over { color: #ce93d8; font-weight: 600; } .c-rev.soon { color: #e1bee7; }
+.grp-tags { font-weight: 400; text-transform: none; }
+/* skupiny lahví */
+.gview { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.grp-pick { margin: 2px 0 6px; }
+.grp-line { background: none; border: 0; padding: 4px 0; color: var(--muted, #8aa0b8); font-size: 0.85em; text-align: left; cursor: pointer; }
+.grp-box { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.grp-box .chip { background: var(--panel); border: 1px solid var(--line); color: var(--muted); border-radius: 14px; padding: 4px 10px; font-size: 12px; }
+.grp-box .chip.on { background: #0277bd; color: #fff; border-color: #0288d1; }
+.grp-new input { width: 150px; padding: 4px 8px; font-size: 12px; }

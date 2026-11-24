@@ -89,6 +89,7 @@ export interface GearTank {
   /** on-board lahev rebreatheru (objem se bere pro výpočty spotřeby) */ onboard?: "o2" | "dil";
   /** účel: plnění (lahev na přepouštění plynu) */ use?: "fill";
   /** plnicí tlak lahve (bar); jinak výchozí z nastavení */ fillBar?: number;
+  /** vlastní skupiny (např. RB, Kurzy); lahev může být ve více */ groups?: string[];
 }
 export const GEAR_TANK_KINDS = ["S80", "S40", "12 l", "3 l", "2,5 l", "Dvojče", "Jiná"];
 export const TWIN_VOLS = [8, 10, 12, 15, 18];

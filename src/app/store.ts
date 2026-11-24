@@ -1265,6 +1265,17 @@ export function saveTank(t: Partial<GearTank> & { kind: string; vol: number; mix
   }
   return saveLb(lb);
 }
+/** Přejmenuje skupinu lahví (to = null → smaže skupinu, lahve zůstanou). */
+export function renameTankGroup(from: string, to: string | null): Promise<void> {
+  const lb = structuredClone(st.lb);
+  for (const t of Object.values(lb.tanks || {})) {
+    if (!t.groups?.includes(from)) continue;
+    const g = t.groups.filter((x) => x !== from);
+    if (to && !g.includes(to)) g.push(to);
+    lb.tanks![t.id] = { ...t, groups: g.length ? g : undefined, updated: Date.now() };
+  }
+  return saveLb(lb);
+}
 export function deleteTank(id: string): Promise<void> {
   const lb = structuredClone(st.lb);
   if (lb.tanks) delete lb.tanks[id];
