@@ -5,7 +5,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      attempt:
+        description: "Pokus (opakování po chybě GitHubu)"
+        required: false
+        default: "1"
 permissions:
+  actions: write
   contents: read
   pages: write
   id-token: write
@@ -17,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.d1.outputs.page_url || steps.d2.outputs.page_url || steps.d3.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,5 +50,34 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
-      - id: deployment
+      # Zveřejnění občas selže na straně GitHubu („No artifacts named github-pages“) – zkusit znovu po pauze.
+      - id: d1
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - if: steps.d1.outcome == 'failure'
+        run: sleep 60
+      - id: d2
+        if: steps.d1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - if: steps.d2.outcome == 'failure'
+        run: sleep 90
+      - id: d3
+        if: steps.d2.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      # Ani tak – spustit celé nasazení znovu (nové sestavení a nový artefakt), nejvýš 3 běhy.
+      - name: Opakovat celé nasazení
+        if: steps.d3.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTEMPT: ${{ github.event.inputs.attempt || '1' }}
+        run: |
+          if [ "$ATTEMPT" -lt 3 ]; then
+            sleep 60
+            gh workflow run "Nasadit web" --repo "$GITHUB_REPOSITORY" --ref main -f attempt=$((ATTEMPT + 1))
+            echo "Nasazení selhalo, spuštěn pokus $((ATTEMPT + 1))."
+          else
+            echo "Nasazení selhalo ani na třetí pokus."
+          fi
+          exit 1
