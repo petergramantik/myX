@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44-dev.5";
+export const APP_VERSION = "1.44-dev.6";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44-dev.6", date: "2026-11-24", title: "Detail ponoru: pořadí, bailout v Grafech (dev)", items: [
+    "V kostce: Hloubka, Doba, O₂, Diluent, Max. pO₂, Max. pN₂, Baterie, Scrubber, pak ostatní.",
+    "„Před a po ponoru“ hned pod grafem Profil a strop.",
+    "Graf bailoutu jen v záložce Grafy, s profilem ponoru; nedostatečný bailout žlutě (dlaždice, upozornění, štítek BO).",
+  ] },
   { version: "1.44-dev.5", date: "2026-11-24", title: "Skupiny lahví (dev)", items: [
     "Výstroj: sekce i v Láhvích; uvnitř sekce skupiny (on-board O₂, pak diluenty podle plynu; ostatní podle plynu), řazení od nejvyššího tlaku. Tlačítka RB O2 / RB DIL na Přehledu jen když chybí, v Láhvích vždy.",
   ] },

@@ -6,7 +6,7 @@ import { weatherText } from "../app/weather";
 import { PrepCard } from "./Prep";
 import { Card, Chip, Picker, RatingPicker, go, num, useStore } from "./common";
 
-export function NoteEditor({ note, onChange, pos, real, cc, diveId }: { note: DiveNote; onChange: (p: Partial<DiveNote>) => void; pos?: { lat?: number; lon?: number }; /** tlaky on-board lahví z počítače (u spárovaného ponoru) */ real?: { dil: number | null; o2: number | null }; cc?: boolean; diveId?: string }) {
+export function NoteEditor({ note, onChange, pos, real, cc, diveId, noPrep }: { /** „Před a po ponoru“ se vykresluje jinde (detail ponoru: pod grafem profilu) */ noPrep?: boolean; note: DiveNote; onChange: (p: Partial<DiveNote>) => void; pos?: { lat?: number; lon?: number }; /** tlaky on-board lahví z počítače (u spárovaného ponoru) */ real?: { dil: number | null; o2: number | null }; cc?: boolean; diveId?: string }) {
   const st = useStore();
   const lb = st.lb;
   const [text, setText] = useState(note.note);
@@ -40,7 +40,7 @@ export function NoteEditor({ note, onChange, pos, real, cc, diveId }: { note: Di
           onCreate={async (name) => { const b = findBuddyByName(name) || (await upsertBuddy({ name })); onChange({ buddyIds: [...new Set([...note.buddyIds, b.id])] }); }} />
         {topBuddies.length > 0 && <div className="quick">{topBuddies.map((id) => <button key={id} className="btn small" onClick={() => onChange({ buddyIds: [...note.buddyIds, id] })}>＋ {lb.buddies[id].name}</button>)}</div>}
       </Card>
-      <PrepCard prep={note.prep} real={real} cc={cc} diveId={diveId} onChange={(prep) => onChange({ prep })} />
+      {!noPrep && <PrepCard prep={note.prep} real={real} cc={cc} diveId={diveId} onChange={(prep) => onChange({ prep })} />}
       <Card title="Hodnocení">
         <RatingPicker value={note.rating} onChange={(rating) => onChange({ rating })} />
       </Card>

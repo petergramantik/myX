@@ -27,7 +27,7 @@ export function noteWarns(m: Meta, note: DiveNote | undefined, set: Settings): {
   const out: { level: "warn" | "bad"; title: string; text: string }[] = [];
   const bo = bailoutOf(m, note, set);
   if (bo && bo.have != null && bo.have < bo.need)
-    out.push({ level: "bad", title: "Bailout by nestačil", text: `V ${mmss(bo.t)} by při přechodu na bailout bylo potřeba asi ${bo.need} l (spotřeba ${set.boSac || BO_SAC} l/min), s sebou ${bo.have} l – chybělo ${bo.need - bo.have} l.` });
+    out.push({ level: "warn", title: "Bailout by nestačil", text: `V ${mmss(bo.t)} by při přechodu na bailout bylo potřeba asi ${bo.need} l (spotřeba ${set.boSac || BO_SAC} l/min), s sebou ${bo.have} l – chybělo ${bo.need - bo.have} l.` });
   const sg = surfGfOf(m, set);
   if (sg?.over) out.push({ level: "warn", title: "SurfGF nad hranicí", text: `SurfGF při vynoření ${sg.gf} % (hranice ${sg.lim} %)${sg.shallowMin != null ? `, mělčeji než 7 m ${sg.shallowMin} min` : ""}. Delší poslední zastávka by ho snížila.` });
   return out;
