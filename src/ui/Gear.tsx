@@ -21,10 +21,10 @@ const tankDue = (t: GearTank) => nextDue(t.revLast, t.revNext, t.revYears ?? REV
 const stageDue = (s: GearStage) => nextDue(s.svcLast, s.svcNext, s.svcYears ?? SVC_YEARS);
 const worst = (xs: ("over" | "soon" | "ok" | "none")[]) => (xs.includes("over") ? "over" : xs.includes("soon") ? "soon" : xs.includes("ok") ? "ok" : "none");
 
-/** Podíl výstroje v pořádku: lahve (stav OK, bez revize po termínu; lahve na plnění jen revize) a sestavy (bez otevřené závady a servisu po termínu). */
-export function gearHealth(tanks: GearTank[], regs: GearReg[], set?: Settings): { ok: number; n: number } {
+/** Technická připravenost výstroje: lahve bez revize po termínu (tlak se nepočítá) a sestavy bez otevřené závady a servisu po termínu. */
+export function gearHealth(tanks: GearTank[], regs: GearReg[]): { ok: number; n: number } {
   let ok = 0;
-  for (const t of tanks) { const s = tankState(t, set); if (s.rev !== "over" && (t.use === "fill" || s.lvl === "ok")) ok++; }
+  for (const t of tanks) if (dueState(tankDue(t)) !== "over") ok++;
   for (const r of regs) if (!r.faults.some((f) => !f.fix) && dueState(stageDue(r.s1)) !== "over" && dueState(stageDue(r.s2)) !== "over") ok++;
   return { ok, n: tanks.length + regs.length };
 }
@@ -35,7 +35,7 @@ const HEALTH: [number, string, string][] = [
 function GearMotto() {
   const st = useStore();
   if (st.lb.settings.gearMotto === false) return null;
-  const h = gearHealth(Object.values(st.lb.tanks || {}), Object.values(st.lb.regs || {}), st.lb.settings);
+  const h = gearHealth(Object.values(st.lb.tanks || {}), Object.values(st.lb.regs || {}));
   if (!h.n) return null;
   const pct = (h.ok / h.n) * 100;
   const [, cls, text] = HEALTH.find(([min]) => pct >= min)!;
