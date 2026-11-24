@@ -154,7 +154,7 @@ export function BatteriesScreen({ pos }: { pos?: number }) {
       {!b.head.length && <Card title="Baterie v hlavě"><p className="muted">{b.model.label}: {b.model.note || "bez baterií v hlavě"}</p></Card>}
       {pos && <button className="btn" onClick={() => go({ t: "bats" })}>Zobrazit všechny baterie</button>}
       <Card title="Baterie v hlavě">
-        <p className="note">Rebreather: <b>{b.model.label}</b> (změníš v DB → Databáze → Můj log → Akce → Rebreather).{b.model.note ? ` ${b.model.note}` : ""} Napětí baterií v hlavě Petrel ukazuje jen na info obrazovce, do logu ho neukládá – proto se evidují ručně. Z logu jde jen alarm „Porucha solenoidu / baterie v hlavě“, ten označí baterii solenoidu jako podezřelou. Hodiny a ponory od výměny se počítají z logbooku. Limity pro varování nastavíš v Nastavení (0 = vypnuto).</p>
+        <p className="note">Rebreather: <b>{b.model.label}</b> (změníš v B&L → DB → Databáze → Můj log → Akce → Rebreather).{b.model.note ? ` ${b.model.note}` : ""} Napětí baterií v hlavě Petrel ukazuje jen na info obrazovce, do logu ho neukládá – proto se evidují ručně. Z logu jde jen alarm „Porucha solenoidu / baterie v hlavě“, ten označí baterii solenoidu jako podezřelou. Hodiny a ponory od výměny se počítají z logbooku. Limity pro varování nastavíš v Nastavení (0 = vypnuto).</p>
       </Card>
     </div>
   );

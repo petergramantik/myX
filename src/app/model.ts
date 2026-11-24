@@ -16,7 +16,7 @@ export interface WeatherSnap { at: number; temp: number; wind: number; gust: num
 /** Externí lahev připojená během ponoru (Petrel její tlak neměří). */
 export interface ExtGas { id: string; /** sup = zásobní plyn přístroje bez vysílačů (pSCR, OC…) */ gas: "dil" | "o2" | "sup"; kind: string; vol: number; start?: number; end?: number }
 /** Off-board lahev z předponorové přípravy (bailout, off-board O₂…). */
-export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "suit" | "other"; name: string; gas: string; bar?: number; /** tlak po ponoru */ end?: number; /** beze změny (lahev nepoužitá) – konec = začátek */ same?: boolean; /** objem (l); jinak z označení S80/S40… */ vol?: number }
+export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "suit" | "other"; name: string; gas: string; /** lahev z Výstroje */ gearId?: string; bar?: number; /** tlak po ponoru */ end?: number; /** beze změny (lahev nepoužitá) – konec = začátek */ same?: boolean; /** objem (l); jinak z označení S80/S40… */ vol?: number }
 /** Objem lahve (l) z ručního zadání nebo z označení (S80, S40, 12 l…). */
 export function tankVol(t: { vol?: number; name: string }): number | null {
   if (t.vol) return t.vol;
@@ -37,10 +37,11 @@ export function tankMix(g: string): string | null {
   return null;
 }
 /** Předponorová příprava: naměřené tlaky (bar) on-board lahví, off-board lahve a potvrzení kalibrace (ms). */
-export interface Prep { o2?: number; dil?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string } }
+export interface Prep { o2?: number; dil?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string }; /** hydratace před ponorem (jen informace) */ hyd?: "low" | "mid" | "good" }
+export const HYD_LABEL = { low: "Slabá", mid: "Střední", good: "Dobrá" } as const;
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
-  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** poloha z rozpracovaného ponoru (místo ponoru) */ pos?: { lat: number; lon: number }; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; /** CO₂ v ponoru: porucha čidla / potvrzené skutečné */ co2?: "fault" | "real"; updated: number;
+  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** poloha z rozpracovaného ponoru (místo ponoru) */ pos?: { lat: number; lon: number }; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; /** CO₂ v ponoru: porucha čidla / potvrzené skutečné */ co2?: "fault" | "real"; /** skrytí „c:CO₂“ přidala volba Porucha čidla (při zrušení se vrátí jen ono) */ co2Hid?: boolean; updated: number;
 }
 /** Hodnota CO₂ nad touto mezí (mbar) je podezřelá (pravděpodobně porucha čidla), dokud ji uživatel nepotvrdí. */
 export const CO2_SUSPECT = 20;
@@ -60,7 +61,7 @@ export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
 /** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
 export interface Co2Cal { date: string; gas: string }
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; co2Cal?: Co2Cal | null; /** poslední potvrzená kalibrace čidel O₂ (z přípravy) */ o2Cal?: { date: string } | null; motto?: boolean; cyl?: { dil: number; o2: number }; /** objemy on-board lahví parťáků (l) podle počítače – pro srovnání spotřeby */ cylOf?: Record<string, { o2?: number; dil?: number }>; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; /** moje jméno ve sdíleném srovnání (místo „Já“) */ myName?: string; updated: number }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; /** spotřeba ve stresu pro výpočet bailoutu (l/min) */ boSac?: number; /** SurfGF při vynoření: vypnuto / hranice upozornění (%) */ surfGfOff?: boolean; surfGfLim?: number; co2Cal?: Co2Cal | null; /** poslední potvrzená kalibrace čidel O₂ (z přípravy) */ o2Cal?: { date: string } | null; motto?: boolean; cyl?: { dil: number; o2: number }; /** objemy on-board lahví parťáků (l) podle počítače – pro srovnání spotřeby */ cylOf?: Record<string, { o2?: number; dil?: number }>; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; /** moje jméno ve sdíleném srovnání (místo „Já“) */ myName?: string; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
@@ -74,6 +75,42 @@ export interface Logbook {
   settings: Settings;
   computers?: Record<string, Computer>; // sériové číslo cizího počítače → majitel (buddy)
   aliases?: Record<string, Alias>;     // jméno buddyho/lokality z cizího logu → můj záznam
+  tanks?: Record<string, GearTank>;    // Výstroj: moje lahve
+  regs?: Record<string, GearReg>;      // Výstroj: moje sestavy (automatiky)
+}
+
+/** Lahev ve Výstroji. Dvojče = 2 ocelové lahve (objem jedné × 2) jako jedna lahev. */
+export interface GearTank {
+  id: string; kind: string; /** objem jedné lahve (l); u dvojčete jedné z dvojice */ vol: number; name?: string; mix: string;
+  /** zbytkový tlak (bar) a kdy byl zadán / převzat z ponoru */ bar?: number; barAt?: number;
+  /** po ponoru se tlak nepřepsal (lahev zavřená / tlak chybí) – zkontrolovat */ check?: { at: number; text: string };
+  /** poslední převzetí z ponoru (aby se při úpravě téhož ponoru tlak znovu nepřepisoval) */ fromDive?: { id: string; end?: number };
+  revLast?: string; revNext?: string; revYears?: number; o2?: boolean; note?: string; updated: number;
+  /** on-board lahev rebreatheru (objem se bere pro výpočty spotřeby) */ onboard?: "o2" | "dil";
+}
+export const GEAR_TANK_KINDS = ["S80", "S40", "12 l", "3 l", "2,5 l", "Dvojče", "Jiná"];
+export const TWIN_VOLS = [8, 10, 12, 15, 18];
+/** Celkový objem lahve (l). */
+export const gearVol = (t: GearTank) => (t.kind === "Dvojče" ? 2 * t.vol : t.vol);
+export const gearKindVol = (k: string): number | null => ({ S80: 11.1, S40: 5.7, "12 l": 12, "3 l": 3, "2,5 l": 2.5, Dvojče: 12 } as Record<string, number>)[k] ?? null;
+export interface GearStage { model?: string; svcLast?: string; svcNext?: string; svcYears?: number }
+export interface GearHose { id: string; len?: number; type: "HP" | "LP" | "inflátor" | "Swagelok"; o2?: boolean; note?: string }
+export interface GearFault { id: string; at: number; text: string; diveId?: string; fix?: { at: number; kind: "oprava" | "výměna"; text?: string } }
+/** Sestava = automatika (1. a 2. stupeň s hadicemi). */
+export interface GearReg { id: string; name: string; s1: GearStage; s2: GearStage; hoses: GearHose[]; o2?: boolean; faults: GearFault[]; note?: string; updated: number }
+export const REV_YEARS = 5, SVC_YEARS = 2;
+/** Datum dalšího termínu: zadané, jinak poslední + interval (roky). */
+export function nextDue(last?: string, next?: string, years?: number): string | undefined {
+  if (next) return next;
+  if (!last) return undefined;
+  const d = new Date(last); d.setFullYear(d.getFullYear() + (years || 0));
+  return d.toISOString().slice(0, 10);
+}
+/** Stav termínu: po termínu / do 30 dní / v pořádku / nezadáno. */
+export function dueState(due?: string, now = Date.now()): "over" | "soon" | "ok" | "none" {
+  if (!due) return "none";
+  const t = new Date(due).getTime();
+  return t < now ? "over" : t - now < 30 * 86400000 ? "soon" : "ok";
 }
 /** Jméno z cizího logu přiřazené k mému buddymu nebo lokalitě (klíč „buddy:jméno“ / „site:jméno“ v normalizované podobě). */
 export interface Alias { id: string; kind: "buddy" | "site"; name: string; targetId: string; updated: number; /** odkud jméno pochází (cizí log), pro zobrazení v B&L */ from?: string }
@@ -86,7 +123,7 @@ export interface Computer { id: string; model: string; buddyId?: string; primary
   /** model rebreatheru (určuje baterie v hlavě) */ ccr?: CcrModel;
   /** změny u jednotlivých ponorů */ dives?: Record<string, { rig?: Rig; supplyO2?: number }>; updated: number }
 
-export const META_V = 30;
+export const META_V = 31;
 
 /** Model rebreatheru – kolik baterií má hlava, jakého typu a co napájí. */
 export type CcrModel = "xccr" | "flex2" | "fx" | "jj" | "tp" | "other";
@@ -136,6 +173,8 @@ export function mergeLogbooks(a: Logbook, b: Logbook): Logbook {
     notes: mergeMap(a.notes, b.notes || {}, deleted),
     computers: mergeMap(a.computers || {}, b.computers || {}, deleted),
     aliases: mergeMap(a.aliases || {}, b.aliases || {}, deleted),
+    tanks: mergeMap(a.tanks || {}, b.tanks || {}, deleted),
+    regs: mergeMap(a.regs || {}, b.regs || {}, deleted),
     deleted,
     settings: fixSettings((b.settings?.updated || 0) > a.settings.updated
       ? { ...a.settings, ...b.settings, th: { ...DEFAULT_ALL_TH, ...b.settings.th } }

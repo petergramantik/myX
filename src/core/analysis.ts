@@ -11,6 +11,41 @@ export interface Summary {
   sp: SpChange[]; /** zpoždění prvního přepnutí na vysoký SP po dosažení dna (min) */ spLate?: number | null; dose: { sol: number; man: number; amb: number; dil: number; manPreSw: number };
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
+  /** SurfGF při vynoření = GF99 Petrelu v prvním vzorku u hladiny (%), délka mělké části (< 7 m) před vynořením (min) */ surfGF?: number | null; shallowMin?: number | null;
+  /** bailout: nejhorší potřeba plynu na 1 l/min spotřeby (bar·min = litrů na l/min) a čas (s) */ boK?: number | null; boT?: number | null;
+}
+
+/** SurfGF při vynoření: GF99 v prvním vzorku u hladiny po nejhlubším bodě (na hladině GF99 = SurfGF) a minuty mělčeji než 7 m před tím. */
+export function surfacing(d: Dive): { gf: number | null; shallowMin: number | null } {
+  const s = d.s, n = s.depth.length;
+  let imax = 0; s.depth.forEach((v, i) => { if (v > s.depth[imax]) imax = i; });
+  if (s.depth[imax] < 3) return { gf: null, shallowMin: null };
+  let k = -1; for (let i = imax; i < n; i++) if (s.depth[i] < 1) { k = i; break; }
+  if (k < 0) return { gf: null, shallowMin: null };
+  const gf = [s.gf99[k], s.gf99[k + 1], s.gf99[k + 2]].find((v) => v != null) ?? null;
+  let j = k; while (j > imax && s.depth[j] < 7) j--;
+  return { gf, shallowMin: Math.round((s.t[k] - s.t[Math.min(k, j + 1)]) / 60) };
+}
+
+/**
+ * Potřeba bailoutu (P – zjednodušený odhad): v každém vzorku 1 min řešení problému v hloubce, výstup 9 m/min
+ * při průměrném tlaku poloviny hloubky a zbytek TTS na zastávkách (průměrně tlak poloviny hloubky první zastávky, nejméně 3 m).
+ * Vrací litry na 1 l/min povrchové spotřeby (stačí vynásobit spotřebou) a čas nejhoršího okamžiku.
+ */
+export function bailoutSeries(d: Dive): (number | null)[] {
+  const s = d.s;
+  const P = (z: number) => (d.h.surfP || 1013) / 1000 + z * 0.0981 * (d.h.salinity || 1000) / 1000;
+  return s.depth.map((z, i) => {
+    if (s.t[i] > d.h.diveTimeS || z < 3) return null;
+    const travel = z / 9, rest = Math.max(0, (s.tts[i] || 0) - travel);
+    return Math.round((P(z) + travel * P(z / 2) + rest * P(Math.max(3, (s.stop[i] || 0) / 2))) * 10) / 10;
+  });
+}
+export function bailoutNeed(d: Dive): { k: number; t: number } | null {
+  const ks = bailoutSeries(d);
+  let best = { k: 0, t: 0 };
+  ks.forEach((k, i) => { if (k != null && k > best.k) best = { k, t: d.s.t[i] }; });
+  return best.k ? best : null;
 }
 
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
@@ -367,6 +402,7 @@ export const realStops = (d: Dive) => d.s.stop.map((v, i) => (atStop(d, i) ? v :
 export function summarize(d: Dive): Summary {
   const cs0 = cellSpread(d);
   const s = d.s, n = s.t.length;
+  const sf = surfacing(d), bo = bailoutNeed(d);
   const idx = [...Array(n).keys()].filter((i) => inDive(d, i));
   const deps = idx.map((i) => s.depth[i]);
   const rates: number[] = [];
@@ -406,6 +442,7 @@ export function summarize(d: Dive): Summary {
     decoMin: Math.round(idx.filter((i) => atStop(d, i)).length * (d.h.rateS || 5) / 60),
     decoModeMin: Math.round(idx.filter((i) => s.stop[i] > 0).length * (d.h.rateS || 5) / 60), dilStart: firstNum(s.dil), dilEnd: lastNum(s.dil), o2Start: firstNum(s.o2p), o2End: lastNum(s.o2p),
     dilUsed: [...new Set(s.o2.map((o, i) => `${o}/${s.he[i]}`))].join(", "),
+    surfGF: sf.gf, shallowMin: sf.shallowMin, boK: bo?.k ?? null, boT: bo?.t ?? null,
   };
 }
 
@@ -482,10 +519,19 @@ export function scrubberInfo(hs: Header[], nowLocal: number, th: Thresholds, man
 // ---------- vysoké pO₂ (vlastní detekce)
 /** Vzorek je na dekompresní zastávce: po nejhlubším bodě v hloubce zastávky (do 3 m pod ní) nebo do 9 m (P). */
 /** Pokles tlaku diluentu při sestupu – od začátku ponoru po první dosažení 90 % max. hloubky (bar). */
+/** Tlak lahve pod touto hodnotou (bar) = mezitlak nebo výpadek údaje; pokles mezi vzorky nad PRESS_JUMP = výpadek. */
+export const PRESS_MIN = 20, PRESS_JUMP = 40;
+/** Úseky výpadku tlaku lahve (nesmyslný pokles proti poslednímu platnému tlaku) – pro graf: hodnoty nahradit mezerou. */
+export function pressGaps(p: (number | null)[]): (number | null)[] {
+  let last: number | null = null;
+  return p.map((v) => { if (v == null) return null; if (last != null && (v < PRESS_MIN || last - v > PRESS_JUMP)) return null; last = v; return v; });
+}
 export function dilDescent(d: Dive): number | null {
   const s = d.s, mx = Math.max(...s.depth), k = s.depth.findIndex((z) => z >= 0.9 * mx);
   if (k < 0 || mx < 3) return null;
   const a = s.dil.slice(0, k + 1).filter((v): v is number => v != null);
+  // výpadek tlaku (vysílač/DiveCAN přestal posílat platný tlak): nesmyslně nízká hodnota nebo skok – sestup nelze určit
+  if (a.some((v, i) => v < PRESS_MIN || (i > 0 && a[i - 1] - v > PRESS_JUMP))) return null;
   return a.length >= 2 ? Math.max(0, Math.round((a[0] - a[a.length - 1]) * 10) / 10) : null;
 }
 

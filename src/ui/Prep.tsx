@@ -1,7 +1,8 @@
 // Před a po ponoru (dřív „Předponorová příprava“): naměřené tlaky on-board lahví, off-board lahve (bailout, off-board O₂) a potvrzení kalibrace čidel.
 // Vyplňuje se typicky v rozpracovaném ponoru (večer před ponorem); po spárování s logem se tlaky on-board lahví porovnají s počítačem.
 import { useState } from "react";
-import { tankMix, tankVol, uid, type Prep, type PrepTank } from "../app/model";
+import { HYD_LABEL, gearVol, tankMix, tankVol, uid, type Prep, type PrepTank } from "../app/model";
+import { tankLabel } from "./Gear";
 import { saveSettings } from "../app/store";
 import { num, useStore } from "./common";
 
@@ -36,8 +37,21 @@ function TankRow({ t, set, del }: { t: PrepTank; set: (p: Partial<PrepTank>) => 
   const [editGas, setEditGas] = useState(!gk && !t.gas);
   const [o2, setO2] = useState(""), [he, setHe] = useState("");
   const used = t.bar != null && (t.same ? t.bar : t.end) != null ? t.bar - (t.same ? t.bar : t.end)! : null;
+  const st = useStore();
+  const gear = Object.values(st.lb.tanks || {}).filter((g) => !g.onboard);
+  const g = t.gearId ? st.lb.tanks?.[t.gearId] : undefined;
   return (
     <div className="prep-tank">
+      {gear.length > 0 && <div className="pt-row">
+        <select value={t.gearId || ""} onChange={(e) => {
+          const x = st.lb.tanks?.[e.target.value];
+          if (!x) { set({ gearId: undefined }); return; }
+          set({ gearId: x.id, name: TANKS.includes(x.kind) ? x.kind : "Jiná", vol: gearVol(x), gas: x.mix, bar: x.bar, ...(x.mix === "Argon" ? { role: "suit" as const } : {}) });
+        }}>
+          <option value="">lahev mimo Výstroj</option>{gear.map((x) => <option key={x.id} value={x.id}>{tankLabel(x)} · {x.mix}{x.bar != null ? ` · ${x.bar} bar` : ""}</option>)}
+        </select>
+        {g?.check && <span className="small c-warn">zkontrolovat tlak</span>}
+      </div>}
       <div className="pt-row">
         <select value={t.role} onChange={(e) => set({ role: e.target.value as PrepTank["role"] })}>
           <option value="bo">BO</option><option value="o2">O₂</option><option value="dil">Dil</option><option value="deco">Deko</option><option value="suit">Oblek</option><option value="other">Jiná</option>
@@ -76,6 +90,7 @@ function summary(p?: Prep): string {
   if (p.o2 != null) parts.push(`O₂ ${p.o2} bar`);
   if (p.dil != null) parts.push(`diluent ${p.dil} bar`);
   if (p.tanks?.length) parts.push(`${p.tanks.length} ${p.tanks.length === 1 ? "off-board lahev" : p.tanks.length < 5 ? "off-board lahve" : "off-board lahví"}`);
+  if (p.hyd) parts.push(`hydratace ${HYD_LABEL[p.hyd].toLowerCase()}`);
   const cal = [p.o2Cal && "O₂", p.co2Cal && "CO₂"].filter(Boolean);
   if (cal.length) parts.push(`kalibrace ${cal.join(" + ")}`);
   return parts.join(" · ") || "nevyplněno";
@@ -126,6 +141,11 @@ export function PrepCard({ prep, onChange, real, cc = true }: { prep?: Prep; onC
           {!tanks.length && lastTanks && <button className="btn small" onClick={() => upd({ tanks: lastTanks.map((t) => ({ ...t, id: uid(), bar: undefined })) })}>Lahve jako minule</button>}
         </div>
         <p className="note">Pod 100 bar žlutě, pod 50 bar červeně.</p>
+        <h3 className="subh">Hydratace</h3>
+        <div className="seg hyd">
+          {(["low", "mid", "good"] as const).map((k) => <button key={k} className={p.hyd === k ? "on" : ""} onClick={() => upd({ hyd: p.hyd === k ? undefined : k })}>{HYD_LABEL[k]}</button>)}
+        </div>
+        <p className="note">Jen informace k ponoru (nic se z ní nepočítá) – při případné nehodě může být důležitá.</p>
         {cc && <>
           <h3 className="subh">Kalibrace čidel</h3>
           <div className="prep-row">

@@ -2,6 +2,8 @@
 import { isCC } from "../core/rig";
 import { alerts, scrubberInfo } from "../core/analysis";
 import { compName, localNow } from "../app/store";
+import { noteWarns } from "../app/noteWarns";
+import { isHiddenW } from "../core/tags";
 import { CellPrompt, useCells, useCo2 } from "./Cells";
 import { useBatteries } from "./Batteries";
 import { fmtDate, go, num, useStore, type Screen } from "./common";
@@ -28,6 +30,10 @@ export function useWarnings() {
   const ccMetas = st.metas.filter((m) => isCC(m.h));
   const sc = ccMetas.length ? scrubberInfo(ccMetas.map((m) => m.h), localNow(), th, st.lb.settings.manualFill) : null;
   for (const a of sc?.alerts || []) add("scrub", "Scrubber", a.level, `${a.title}: ${a.text}`);
+  // poslední ponor: bailout a SurfGF při vynoření (podle údajů v „Před a po ponoru“ a nastavení)
+  const lastDive = st.metas[st.metas.length - 1];
+  if (lastDive && !st.guest) for (const w of noteWarns(lastDive, st.lb.notes[lastDive.id], st.lb.settings).filter((w) => !isHiddenW(w.title, st.lb.notes[lastDive.id]?.hideW)))
+    add("lastdive", "Poslední ponor", w.level, `${w.title} (${fmtDate(lastDive.start)}): ${w.text}`, { t: "dive", id: lastDive.id });
   if (ccMetas.length) c.status.forEach((s, k) => s.reasons.forEach((r) => {
     if (s.level !== "ok") add("cell" + (k + 1), `Čidlo ${k + 1}`, s.level === "info" ? "info" : s.level, r, { t: "cells", pos: k + 1 });
   }));

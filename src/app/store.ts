@@ -10,7 +10,8 @@ import { loadWeather, weatherAt } from "./weather";
 import * as db from "./db";
 import { decodeAny, readAny } from "../core/decoders";
 import { RIGS, defaultRig, diveType, isSupported, rigsForMode, type Rig } from "../core/rig";
-import { aliasKey, cleanForeign, emptyLogbook, resetLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
+import { gearTankApply, gearOnboardApply } from "./gearSync";
+import { aliasKey, cleanForeign, emptyLogbook, resetLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type GearTank, type GearReg, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
 export interface Pos { lat: number; lon: number; acc: number; at: number }
@@ -1121,6 +1122,7 @@ export async function linkDraft(draftId: string, diveId: string, auto = false) {
   };
   delete lb.drafts[draftId];
   lb.deleted[draftId] = Date.now();
+  gearTankApply(lb, diveId, st.metas.find((m) => m.id === diveId));
   await saveLb(lb);
   if (auto) toast(`Rozpracovaný ponor spárován s ponorem č. ${myNum(diveId)}`);
   // počasí z doby založení nahradit počasím v čase začátku ponoru na lokalitě (jinak na poslední poloze přípravy)
@@ -1243,7 +1245,50 @@ export const localNow = () => Math.floor(Date.now() / 1000) - new Date().getTime
 export function setNote(diveId: string, patch: Partial<DiveNote>) {
   const lb = structuredClone(st.lb);
   lb.notes[diveId] = Object.assign({ buddyIds: [], note: "" }, lb.notes[diveId], patch, { updated: Date.now() });
+  // zbytkový tlak lahví z Výstroje po ponoru (off-board lahve z „Před a po ponoru“)
+  if (patch.prep) gearTankApply(lb, diveId, st.metas.find((m) => m.id === diveId));
   return saveLb(lb);
+}
+
+// ---------- Výstroj: lahve a sestavy (automatiky)
+export function saveTank(t: Partial<GearTank> & { kind: string; vol: number; mix: string }): Promise<void> {
+  const lb = structuredClone(st.lb);
+  const id = t.id || uid();
+  lb.tanks = { ...(lb.tanks || {}), [id]: { ...(lb.tanks?.[id] || {}), ...t, id, updated: Date.now() } as GearTank };
+  // on-board lahev: její objem se používá pro výpočty spotřeby
+  const x = lb.tanks[id];
+  if (x.onboard) {
+    for (const o of Object.values(lb.tanks)) if (o.id !== id && o.onboard === x.onboard) lb.tanks[o.id] = { ...o, onboard: undefined, updated: Date.now() };
+    const cyl = lb.settings.cyl || { dil: 3, o2: 3 };
+    lb.settings = { ...lb.settings, cyl: { ...cyl, [x.onboard]: x.kind === "Dvojče" ? 2 * x.vol : x.vol }, updated: Date.now() };
+  }
+  return saveLb(lb);
+}
+export function deleteTank(id: string): Promise<void> {
+  const lb = structuredClone(st.lb);
+  if (lb.tanks) delete lb.tanks[id];
+  lb.deleted[id] = Date.now();
+  return saveLb(lb);
+}
+export function saveReg(r: Partial<GearReg> & { name: string }): Promise<void> {
+  const lb = structuredClone(st.lb);
+  const id = r.id || uid();
+  lb.regs = { ...(lb.regs || {}), [id]: { s1: {}, s2: {}, hoses: [], faults: [], ...(lb.regs?.[id] || {}), ...r, id, updated: Date.now() } as GearReg };
+  return saveLb(lb);
+}
+export function deleteReg(id: string): Promise<void> {
+  const lb = structuredClone(st.lb);
+  if (lb.regs) delete lb.regs[id];
+  lb.deleted[id] = Date.now();
+  return saveLb(lb);
+}
+/** Po načtení ponorů: tlak on-board lahví z posledního ponoru (DiveCAN / vysílač) do Výstroje. */
+export function gearOnboardSync(): Promise<void> | void {
+  if (st.guest || st.temp || !st.lb.tanks) return;
+  const last = ownMetas()[ownMetas().length - 1];
+  if (!last) return;
+  const lb = structuredClone(st.lb);
+  if (gearOnboardApply(lb, last)) return saveLb(lb);
 }
 
 export function findSiteByName(name: string): Site | undefined {

@@ -32,12 +32,15 @@ export function SettingsScreen() {
       </Sec>
 
       <Sec title="Výbava">
-        <label>Diluent – objem on-board lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.dil ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: v, o2: st.lb.settings.cyl?.o2 ?? 3 } }); }} /></label>
-        <label>O₂ – objem on-board lahve (l)<input inputMode="decimal" defaultValue={st.lb.settings.cyl?.o2 ?? 3} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { dil: st.lb.settings.cyl?.dil ?? 3, o2: v } }); }} /></label>
-        <p className="note">Externí lahve (S80 = 11,1 l, S40 = 5,7 l) se zadávají u ponoru v kartě Spotřeba plynu.</p>
+        <p className="note">Objemy on-board lahví a seznam lahví a automatik najdeš ve Výstroji.</p>
+        <button className="btn" onClick={() => tab({ t: "gear" })}>Výstroj ›</button>
+        <label>Spotřeba ve stresu pro výpočet bailoutu (l/min)<input inputMode="decimal" defaultValue={st.lb.settings.boSac ?? 20} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ boSac: v }); }} /></label>
+        <p className="note">Bailout po ponoru: potřeba plynu v nejhorším okamžiku ponoru proti BO a deko lahvím z „Před a po ponoru“.</p>
+        <label className="check"><input type="checkbox" checked={!st.lb.settings.surfGfOff} onChange={(e) => saveSettings({ surfGfOff: !e.target.checked })} /> SurfGF při vynoření (dlaždice, trend a upozornění)</label>
+        {!st.lb.settings.surfGfOff && <label>Hranice SurfGF při vynoření (%)<input inputMode="numeric" defaultValue={st.lb.settings.surfGfLim ?? 70} onBlur={(e) => { const v = Math.round(+e.target.value); if (v > 0 && v <= 150) saveSettings({ surfGfLim: v }); }} /></label>}
         <label>Spojit záznamy s povrchovým intervalem do (minuty, 0 = vypnuto)<input inputMode="decimal" defaultValue={st.lb.settings.segGap ?? 30} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v >= 0) saveSettings({ segGap: v }); }} /></label>
         <p className="note">Víc záznamů počítače jako jeden ponor (bazén, krátký suchý přechod). Záznamy se stejným číslem ponoru v Shearwater Cloudu se spojují vždy; v detailu ponoru jdou části ručně oddělit nebo spojit.</p>
-        <p className="note">Moje počítače (přístroj, rebreather, vysílače) nastavíš v DB → Databáze → Můj log.</p>
+        <p className="note">Moje počítače (přístroj, rebreather, vysílače) nastavíš v B&L → DB → Databáze → Můj log.</p>
         <button className="btn" onClick={() => tab({ t: "hub", sub: "db" })}>Moje počítače ›</button>
         <AliasCard kind="buddy" id={ME} title="Moje aliasy" />
         <label>Datum náplně scrubberu (jinak podle počítadla{fill ? `: ${fmtDate(fill.start)}` : ""})
@@ -51,7 +54,7 @@ export function SettingsScreen() {
       </Sec>
 
       <Sec title="Sdílení"><ShareInner />
-        <p className="note">Své jméno a sdílení svého logu najdeš v DB → Databáze → Můj log.</p>
+        <p className="note">Své jméno a sdílení svého logu najdeš v B&L → DB → Databáze → Můj log.</p>
       </Sec>
 
       <Sec title="Upozornění">

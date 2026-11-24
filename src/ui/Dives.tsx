@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize, type Alert } from "../core/analysis";
+import { BTN_NAMES, pressGaps, bailoutSeries, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize, type Alert } from "../core/analysis";
 import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
@@ -12,6 +12,7 @@ import { RIGS, hasDeco, isCC, pscrLoopPo2, supplyPo2, type Rig } from "../core/r
 import { compName, getState, rigChoices, rigInfo, setDiveRig, typeBreakdown } from "../app/store";
 import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, tab, useBackLayer, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
+import { bailoutOf, noteWarns, surfGfOf, BO_SAC } from "../app/noteWarns";
 import { co2BadRanges, co2Valid, dilVents, effortOf, gasDensity, workloadIndex, workloadSkip, type EffortBase } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
 import { ChartDefs, LineChart, TissueMap, ZoomCtx } from "./Chart";
@@ -344,8 +345,9 @@ function diveTagsOfMeta(metas: Meta[], m: Meta, th: Parameters<typeof cellDiveWa
   const cw = idx >= 0 && isCC(m.h) ? cellDiveWarnings(metas, idx, th) : []; // čidla jen u CC ponorů
   const hi = po2HiLevel(m.sum, th);
   const late = th.spLateWarn && m.sum.spLate != null && m.sum.spLate > (th.spLateMin ?? 2);
-  const hide = getState().lb.notes[m.id]?.hideW;
-  return diveTagsOf([...(m.warns || []), ...cw, ...(hi ? [{ level: hi, title: "Vysoké pO₂ (vlastní detekce)" }] : []), ...(late ? [{ level: "warn", title: "Pozdní přepnutí na vysoký setpoint" }] : [])].filter((w) => !isHiddenW(w.title, hide)));
+  const gs = getState(), hide = gs.lb.notes[m.id]?.hideW;
+  const nw = gs.guest ? [] : noteWarns(m, gs.lb.notes[m.id], gs.lb.settings);
+  return diveTagsOf([...(m.warns || []), ...cw, ...nw, ...(hi ? [{ level: hi, title: "Vysoké pO₂ (vlastní detekce)" }] : []), ...(late ? [{ level: "warn", title: "Pozdní přepnutí na vysoký setpoint" }] : [])].filter((w) => !isHiddenW(w.title, hide)));
 }
 
 /** Nejzávažnější úroveň tagů pro rámeček kompaktního řádku. */
@@ -455,17 +457,24 @@ function Co2Verdict({ d }: { d: Dive }) {
   const note = st.lb.notes[d.id] || { buddyIds: [], note: "", updated: 0 };
   const max = Math.max(0, ...d.s.co2.filter((v): v is number => v != null));
   const set = (v: "fault" | "real" | undefined) => {
-    const hide = (note.hideW || []).filter((k) => k !== "c:CO₂");
-    setNote(d.id, { co2: v, hideW: v === "fault" ? [...hide, "c:CO₂"] : hide });
+    const had = (note.hideW || []).includes("c:CO₂");
+    if (v === "fault") {
+      // skrýt upozornění CO₂ – a zapamatovat si, jestli skrytí přidala tato volba
+      setNote(d.id, { co2: v, hideW: had ? note.hideW : [...(note.hideW || []), "c:CO₂"], co2Hid: had ? !!note.co2Hid : true });
+    } else {
+      // zrušení poruchy vrátí jen skrytí, které přidala sama (ruční skrytí zůstane)
+      const hideW = note.co2Hid ? (note.hideW || []).filter((k) => k !== "c:CO₂") : note.hideW;
+      setNote(d.id, { co2: v, hideW, co2Hid: undefined });
+    }
   };
   return (
     <div className="co2v">
-      <small className="muted">CO₂ v tomto ponoru:{max > CO2_SUSPECT && !note.co2 ? ` maximum ${num(max, 1)} mbar je nad ${CO2_SUSPECT} mbar – nejspíš porucha čidla (?).` : ""}</small>
-      <div className="row">
-        <button className={"btn small" + (note.co2 === "fault" ? " on" : "")} onClick={() => set(note.co2 === "fault" ? undefined : "fault")}>Porucha čidla CO₂{note.co2 === "fault" ? " ✓" : ""}</button>
+      {max > CO2_SUSPECT && !note.co2 && <small className="c-warn">Maximum {num(max, 1)} mbar je nad {CO2_SUSPECT} mbar – nejspíš porucha čidla (?).</small>}
+      <div className="co2v-btns">
+        <button className={"btn small" + (note.co2 === "fault" ? " on" : "")} onClick={() => set(note.co2 === "fault" ? undefined : "fault")}>Porucha čidla{note.co2 === "fault" ? " ✓" : ""}</button>
         <button className={"btn small" + (note.co2 === "real" ? " on" : "")} onClick={() => set(note.co2 === "real" ? undefined : "real")}>Skutečné CO₂{note.co2 === "real" ? " ✓" : ""}</button>
       </div>
-      {note.co2 === "fault" && <small className="muted">Ponor se nezapočítává do statistik CO₂ a jeho upozornění CO₂ jsou skrytá.</small>}
+      <p className="note">Porucha čidla: ponor se nezapočítá do statistik CO₂ a jeho upozornění CO₂ se skryjí. Skutečné CO₂: potvrdí hodnotu nad {CO2_SUSPECT} mbar jako skutečnou, aby se započítala (běžné hodnoty se počítají vždy). Opětovné klepnutí volbu zruší.</p>
     </div>
   );
 }
@@ -624,7 +633,7 @@ function GasUseCard({ meta, note }: { id: string; meta: Meta; note?: DiveNote })
       <AllTanks meta={meta} note={note} cyl={cyl} rate={rate} />
       {row("dil", "Diluent")}
       {row("o2", "O₂")}
-      <p className="note">Spotřeba z on-board lahve = součet poklesů tlaku (malé nárůsty z ohřátí se odečtou, větší nárůst nebo mezitlak = externí plyn). Externí a doplňkové lahve zadáváš v sekci Před a po ponoru. Objemy on-board lahví nastavíš v Nastavení.</p>
+      <p className="note">Spotřeba z on-board lahve = součet poklesů tlaku (malé nárůsty z ohřátí se odečtou, větší nárůst nebo mezitlak = externí plyn). Externí a doplňkové lahve zadáváš v sekci Před a po ponoru. Objemy on-board lahví nastavíš ve Výstroji.</p>
     </Card>
   );
 }
@@ -704,11 +713,27 @@ function PartsCard({ meta }: { meta: Meta }) {
   );
 }
 
+/** Potřeba bailoutu v čase (odhad P) proti plynu v bailout lahvích. */
+function BailoutCard({ d, bo }: { d: Dive; bo: NonNullable<ReturnType<typeof bailoutOf>> }) {
+  const st = useStore();
+  const sac = st.lb.settings.boSac || BO_SAC;
+  const need = bailoutSeries(d).map((k) => (k == null ? null : Math.round(k * sac)));
+  return (
+    <section className="card" id="bo-card">
+      <h2>Bailout</h2>
+      <LineChart t={d.s.t} height={150} series={[{ label: "Potřeba", color: "#ffb74d", values: need, unit: "l", width: 2 },
+        ...(bo.have != null ? [{ label: "S sebou", color: "#81c784", values: d.s.t.map(() => bo.have), unit: "l", dash: "4 3" }] : [])]} />
+      <p className="note">Odhad (P): kolik plynu by bylo potřeba při přechodu na bailout v každém okamžiku – 1 min řešení problému v hloubce, výstup 9 m/min a zbytek TTS na zastávkách, při spotřebě {sac} l/min (Nastavení → Výbava). S sebou = BO a deko lahve z „Před a po ponoru“ (tlak před × objem). Nejhůř v {dur(bo.t)}: potřeba {bo.need} l{bo.have != null ? `, s sebou ${bo.have} l` : ""}.</p>
+    </section>
+  );
+}
+
 function LogTab({ id, d }: { id: string; d: Dive | null }) {
   const st = useStore();
   const lb = st.lb;
   const meta = viewMetas().find((m) => m.id === id) || st.metas.find((m) => m.id === id)!;
   const note = lb.notes[id] || { buddyIds: [], note: "", updated: 0 };
+  const sg = surfGfOf(meta, lb.settings), bo = isCC(meta.h) ? bailoutOf(meta, note, lb.settings) : null;
   const idx = st.metas.findIndex((m) => m.id === id);
   const base = useEffortBase();
   const warns = mergeCellAlerts([...(d ? diveWarnings(d, summarize(d), lb.settings.th, base) : []).map((w) => {
@@ -719,7 +744,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
     const prev = same[k - 1], next = same[k + 1];
     const extra = [prev && meta.h.start - prev.h.end < 36 * 3600 && !bad(prev) ? "Předchozí ponor byl v pořádku – typicky orosení po předchozím ponoru, obvykle do druhého dne vyschne." : "", bad(next) ? "Opakuje se i v dalším ponoru – zvaž výměnu čidla." : ""].filter(Boolean).join(" ");
     return extra ? { ...w, text: w.text.replace(" Tyto úseky", ` ${extra} Tyto úseky`) } : w;
-  }), ...(isCC(meta.h) ? cellDiveWarnings(st.metas, idx, lb.settings.th) : []), ...(d ? rigAlerts(d, lb.settings.th) : [])]);
+  }), ...(isCC(meta.h) ? cellDiveWarnings(st.metas, idx, lb.settings.th) : []), ...(d ? rigAlerts(d, lb.settings.th) : []), ...(st.guest ? [] : noteWarns(meta, note, lb.settings))]);
   // dlaždice Scrubber: před → po ponoru · stáří náplně; barva podle zbývajícího času, stáří a hlášení CO₂
   const scr = (() => {
     const th = lb.settings.th, lim = th.scrubLeftMin ?? 90;
@@ -763,13 +788,17 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
           ["Setpoint", <SpTile meta={meta} />],
           ["Hustota plynu", <span className="use">{num(meta.sum.densMax, 1)} g/l<small>max · hranice 5,2 / 6,2</small></span>],
-          ["Proplach", <span className="use">{meta.sum.vents}×<small>{meta.sum.dilDesc != null ? `sestup ${num(meta.sum.dilDesc, 0)} bar` : "mimo sestup"}</small></span>],
+          ["Proplach", <span className="use">{meta.sum.vents}×<small>{meta.sum.dilDesc != null ? `sestup ${num(meta.sum.dilDesc, 0)} bar` : "sestup –"}</small></span>],
+          ...(sg ? [["SurfGF", <span className="use"><span className={sg.over ? "c-warn" : ""}>{sg.gf} %</span><small>při vynoření · hranice {sg.lim} %{sg.shallowMin != null ? ` · mělko ${sg.shallowMin} min` : ""}</small></span>] as [string, React.ReactNode]] : []),
+          ...(bo && !st.guest ? [["Bailout", bo.have == null ? <span className="use">–<small>{bo.tanks ? "doplň tlak a lahev v Před a po ponoru" : "bailout nezadán"}</small></span>
+            : <span className="use"><span className={bo.reserve! < 0 ? "c-bad" : bo.reserve! < 20 ? "c-warn" : ""}>{bo.reserve! >= 0 ? "+" : ""}{bo.reserve} %</span><small>potřeba {bo.need} l · s sebou {bo.have} l</small></span>, () => document.getElementById("bo-card")?.scrollIntoView({ behavior: "smooth" })] as [string, React.ReactNode, () => void]] : []),
         ]} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
       {!st.guest && <SuggestCard meta={meta} />}
       {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} real={{ dil: meta.sum.dilStart, o2: meta.sum.o2Start }} cc={isCC(meta.h)} />}
       {isCC(meta.h) ? <GasUseCard id={id} meta={meta} note={note} /> : <SupplyGasCard id={id} meta={meta} note={note} />}
+      {bo && !st.guest && d && <BailoutCard d={d} bo={bo} />}
       <BuddyDivesCard meta={meta} />
       {st.guest && <button className="btn danger guest-del" onClick={async () => {
         if (!await ask("Smazat tento ponor z cizího logu? Při dalším importu stejného souboru se znovu přidá.", { danger: true, ok: "Smazat" })) return;
@@ -1051,7 +1080,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
       </>}
       {hasPress && <>
       <div data-chart="press"><Card title="Tlak v láhvích">
-        <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: s.dil, unit: "bar" }, { label: "O₂", color: C[2], values: s.o2p, unit: "bar" }]} extra={depthExtra} />
+        <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: pressGaps(s.dil), unit: "bar" }, { label: "O₂", color: C[2], values: pressGaps(s.o2p), unit: "bar" }]} extra={depthExtra} />
         <ChartEvents warns={warns} keys={["press"]} focus={focus} />
         <Desc k="press"><p className="note">Hodnota kolem 8–11 bar u O₂ odpovídá mezitlaku prvního stupně, ne tlaku v láhvi.</p></Desc>
       </Card></div>

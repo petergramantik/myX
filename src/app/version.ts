@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.43";
+export const APP_VERSION = "1.44-dev.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44-dev.1", date: "2026-11-24", title: "Výstroj, bailout, SurfGF, trend čidel (dev)", items: [
+    "Nová záložka Výstroj: lahve (Dvojče, směs, zbytkový tlak, revize, O₂ čisté), on-board lahve rebreatheru, automatiky (1. a 2. stupeň se servisem, hadice), závady a jejich řešení; termíny jen ve Výstroji.",
+    "Lahve z Výstroje v „Před a po ponoru“ – tlak po ponoru se zapíše k lahvi; zavřená lahev se nepřepíše („zkontrolovat“).",
+    "DB je nově třetí přepínač v B&L.",
+    "Detail ponoru: Bailout (potřeba v nejhorším okamžiku proti bailout lahvím, graf) a SurfGF při vynoření; upozornění BO a GF; trend SurfGF na Přehledu (vypínatelné).",
+    "O₂ čidla: trend citlivosti a linearity od instalace s včasným varováním.",
+    "Hydratace v „Před a po ponoru“; CO₂: tlačítka Porucha čidla / Skutečné CO₂ vedle sebe s vysvětlením, zrušení vrací jen vlastní skrytí; výpadek tlaku lahve = mezera v grafu a „sestup –“; objemy lahví parťáka pod sebou.",
+  ] },
   { version: "1.43", date: "2026-11-22", title: "Můj log, spotřeba ve srovnání, čidlo CO₂, řazení", items: [
     "DB → Databáze: první karta „Můj log“ – tvoje jméno (všude místo „Já“), období, počítače s Akcemi (přístroj, rebreather, vysílače, odebrat); Sdílet můj log: Vše nebo Vybrat ponory, malý odkaz na původní export Cloudu.",
     "Srovnání: spotřeba O₂ a diluentu (bary, s objemem litry a l/min), diluent při sestupu, graf tlaků on-board lahví; objem lahve parťáka jde zadat ve srovnání.",

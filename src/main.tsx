@@ -4,7 +4,7 @@ import { IS_DEV } from "./app/db";
 import { DialogHost } from "./ui/Dialog";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { init, locate, peekPop, scheduleSync, syncNow, takeShared, toast } from "./app/store";
+import { gearOnboardSync, init, locate, peekPop, scheduleSync, syncNow, takeShared, toast } from "./app/store";
 
 import { back, go, onBeforePop, tab, useBackLayer, useScreen, useStore, type Screen } from "./ui/common";
 import { OverviewScreen } from "./ui/Overview";
@@ -17,6 +17,7 @@ import { BatteriesScreen } from "./ui/Batteries";
 import { closeGuest, closeTempOwn, openTempOwn, createDraft, localNow, moveDraft, guestIndexLoad, logName, myDisplayName, openGuest, ownerName, type GuestLog } from "./app/store";
 import { WarningsScreen, useWarnings } from "./ui/Warnings";
 import { Co2Screen } from "./ui/Cells";
+import { GearScreen } from "./ui/Gear";
 import { CompareHub, CompareScreen } from "./ui/Compare";
 import { OwnerPicker } from "./ui/Owner";
 import { APP_VERSION } from "./app/version";
@@ -39,7 +40,7 @@ class Guard extends Component<{ children: ReactNode }, { err: Error | null }> {
 
 const TABS: [Screen, string, string][] = [
   [{ t: "home" }, "Přehled", "◉"], [{ t: "dives" }, "Ponory", "≋"], [{ t: "buddies" }, "B&L", "☺"],
-  [{ t: "hub" }, "DB", "⇄"], [{ t: "settings" }, "Nastavení", "⚙"],
+  [{ t: "gear" }, "Výstroj", "◍"], [{ t: "settings" }, "Nastavení", "⚙"],
 ];
 
 /** Titulek Přehledu: jméno aktivního logu ›, klepnutím výběr mezi mým logem a uloženými cizími (jen čtení). */
@@ -90,7 +91,8 @@ function screenName(s: Screen, st: ReturnType<typeof useStore>): string {
     case "help": return "Nápověda";
     case "co2": return "Čidlo CO₂";
     case "cmp": return "Porovnání";
-    case "hub": return s.sub === "db" ? "Databáze" : "Srovnání";
+    case "hub": return "B&L";
+    case "gear": return "Výstroj";
   }
 }
 
@@ -113,10 +115,11 @@ function Body({ s }: { s: Screen }) {
     case "co2": return <Co2Screen />;
     case "cmp": return <CompareScreen id={s.id} other={s.other} />;
     case "hub": return <CompareHub sub={s.sub} who={s.who} />;
+    case "gear": return <GearScreen sub={s.sub} id={s.id} />;
   }
 }
 
-const isTab = (s: Screen) => s.t !== "warn" && (s.t === "sites" || TABS.some(([t]) => t.t === s.t && !("site" in s && s.site) && !("buddy" in s && s.buddy)));
+const isTab = (s: Screen) => s.t !== "warn" && (s.t === "sites" || s.t === "hub" || TABS.some(([t]) => t.t === s.t && !("site" in s && s.site) && !("buddy" in s && s.buddy)));
 
 // Zpět z ponoru parťáka (otevřeného z mého ponoru) zavře jeho log
 onBeforePop((from, to) => peekPop(from as { t: string; id?: string }, to as { t: string; id?: string }));
@@ -125,7 +128,9 @@ function App() {
   const s = useScreen();
   const st = useStore();
   // DB a Nastavení vždy s mými daty – otevřený cizí log se při vstupu zavře
-  useEffect(() => { if ((s.t === "settings" || s.t === "hub") && st.guest) closeGuest(); }, [s.t]);
+  useEffect(() => { if ((s.t === "settings" || s.t === "hub" || s.t === "gear") && st.guest) closeGuest(); }, [s.t]);
+  // Výstroj: tlak on-board lahví z posledního ponoru
+  useEffect(() => { if (st.ready) gearOnboardSync(); }, [st.ready, st.metas.length, Object.keys(st.lb.tanks || {}).length]);
   useEffect(() => {
     init().then(async () => {
       if (!new URLSearchParams(location.search).has("shared")) return;
@@ -199,7 +204,7 @@ function App() {
       </main>
       <nav className="tabs-bottom">
         {TABS.map(([t, l, ic]) => (
-          <button key={l} className={s.t === t.t || (t.t === "dives" && s.t === "dive") || (t.t === "buddies" && ["buddy", "sites", "site"].includes(s.t)) || (t.t === "hub" && s.t === "cmp") ? "on" : ""} onClick={() => tab(t)}>
+          <button key={l} className={s.t === t.t || (t.t === "dives" && s.t === "dive") || (t.t === "buddies" && ["buddy", "sites", "site", "hub", "cmp"].includes(s.t)) ? "on" : ""} onClick={() => tab(t)}>
             <span>{ic}</span>{l}
           </button>
         ))}
