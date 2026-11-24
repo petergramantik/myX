@@ -1,10 +1,10 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.46-dev.1";
+export const APP_VERSION = "1.46";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.46-dev.1", date: "2026-11-24", title: "Stav výstroje, přidání lahví (dev)", items: [
+  { version: "1.46", date: "2026-11-24", title: "Stav výstroje, přidání lahví", items: [
     "Výstroj: pruh stavu nahoře podle podílu lahví a sestav v pořádku (5 stavů od „Výstroj v cajku, seš dobrej!“ po „Prodej to, než se něco stane :(“), vypínatelný v Nastavení.",
     "Lahve včetně RB jen přes ＋ Přidat lahev (i na Přehledu Výstroje); volba on-board pod druhem lahve předvyplní 3 l a plyn.",
   ] },
