@@ -1,6 +1,7 @@
 // Před a po ponoru (dřív „Předponorová příprava“): naměřené tlaky on-board lahví, off-board lahve (bailout, off-board O₂) a potvrzení kalibrace čidel.
 // Vyplňuje se typicky v rozpracovaném ponoru (večer před ponorem); po spárování s logem se tlaky on-board lahví porovnají s počítačem.
 import { useState } from "react";
+import { gasDisp } from "../app/gas";
 import { HYD_LABEL, gearVol, tankMix, tankVol, uid, type Prep, type PrepTank } from "../app/model";
 import { tankLabel } from "./Gear";
 import { rbAssign, saveSettings, saveTank } from "../app/store";
@@ -10,7 +11,7 @@ import { num, useStore } from "./common";
 
 /** Pod touto hodnotou počítač měří jen středotlak – lahev nebyla otevřená (P). */
 const CLOSED = 20;
-const CAL_GASES = ["vzduch", "O₂", "kalibrační plyn"];
+const CAL_GASES = ["AIR", "O₂", "kalibrační plyn"];
 /** Úroveň podle tlaku: pod 50 bar červeně, pod 100 bar žlutě. */
 const lvl = (bar?: number | null) => (bar == null ? "" : bar < 50 ? "c-bad" : bar < 100 ? "c-warn" : "");
 const todayIso = () => new Date().toLocaleDateString("sv-SE");
@@ -24,11 +25,11 @@ function BarInput({ value, onSave, placeholder }: { value?: number; onSave: (v?:
 }
 
 const TANKS = ["S40", "S80", "12 l", "3 l", "2,5 l"];
-const GASES = ["vzduch", "O₂", "EAN32", "EAN36", "EAN50", "TMX 21/35", "TMX 18/45", "TMX 15/55", "TMX 10/70", "Argon"];
+const GASES = ["AIR", "O₂", "EAN32", "EAN36", "EAN50", "TMX 21/35", "TMX 18/45", "TMX 15/55", "TMX 10/70", "Argon"];
 /** Plyn z poměru O₂/He: vzduch, O₂, EANxx nebo TMX a/b. */
-const gasName = (o2: number, he: number) => (he > 0 ? `TMX ${o2}/${he}` : o2 === 21 ? "vzduch" : o2 === 100 ? "O₂" : `EAN${o2}`);
+const gasName = (o2: number, he: number) => (he > 0 ? `TMX ${o2}/${he}` : o2 === 21 ? "AIR" : o2 === 100 ? "O₂" : `EAN${o2}`);
 /** Stávající textový zápis plynu → položka seznamu (nebo null = jiný). */
-const gasKnown = (g: string) => { if (GASES.includes(g)) return g; if (/^argon$/i.test(g.trim())) return "Argon"; const m = tankMix(g); if (!m) return null; const [o, h] = m.split("/").map(Number); const n = gasName(o, h); return GASES.includes(n) ? n : null; };
+const gasKnown = (g0: string) => { const g = gasDisp(g0); if (GASES.includes(g)) return g; if (/^argon$/i.test(g.trim())) return "Argon"; const m = tankMix(g); if (!m) return null; const [o, h] = m.split("/").map(Number); const n = gasName(o, h); return GASES.includes(n) ? n : null; };
 
 /** Řádek off-board lahve: role, lahev a plyn z nabídky; u „Jiná“ / „Jiný“ zadání, po vyplnění jen informační řádek. */
 function TankRow({ t, set, del }: { t: PrepTank; set: (p: Partial<PrepTank>) => void; del: () => void }) {
@@ -101,7 +102,7 @@ function summary(p?: Prep): string {
 export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: Prep; onChange: (p: Prep) => void; real?: { dil: number | null; o2: number | null }; cc?: boolean; /** u ponoru: přiřazení on-board lahví z Výstroje */ diveId?: string }) {
   const st = useStore();
   const [open, setOpen] = useState(false);
-  const [gas, setGas] = useState(st.lb.settings.co2Cal?.gas || "vzduch");
+  const [gas, setGas] = useState(gasDisp(st.lb.settings.co2Cal?.gas || "AIR"));
   const p: Prep = prep || {};
   const upd = (patch: Partial<Prep>) => onChange({ ...p, ...patch });
   const tanks = p.tanks || [];
@@ -164,7 +165,7 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
         <h3 className="subh">Off-board lahve</h3>
         {tanks.map((t) => <TankRow key={t.id} t={t} set={(p) => setTank(t.id, p)} del={() => upd({ tanks: tanks.filter((x) => x.id !== t.id) })} />)}
         <div className="row">
-          <button className="btn small" onClick={() => upd({ tanks: [...tanks, { id: uid(), role: tanks.length ? "o2" : "bo", name: tanks.length ? "S40" : "S80", gas: tanks.length ? "O₂" : "vzduch" }] })}>＋ Přidat lahev</button>
+          <button className="btn small" onClick={() => upd({ tanks: [...tanks, { id: uid(), role: tanks.length ? "o2" : "bo", name: tanks.length ? "S40" : "S80", gas: tanks.length ? "O₂" : "AIR" }] })}>＋ Přidat lahev</button>
           {!tanks.length && lastTanks && <button className="btn small" onClick={() => upd({ tanks: lastTanks.map((t) => ({ ...t, id: uid(), bar: undefined })) })}>Lahve jako minule</button>}
         </div>
         <p className="note">Pod 100 bar žlutě, pod 50 bar červeně.</p>

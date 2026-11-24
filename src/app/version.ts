@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44";
+export const APP_VERSION = "1.44.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44.1", date: "2026-11-24", title: "Úprava lahve, barvy plynů", items: [
+    "Výstroj → Lahve: u každé lahve rozbalovací „Upravit“; název lahve bíle a výrazně, plyn v barvě plynu.",
+    "AIR místo „vzduch“ všude u plynů; O₂ všude světle modře (lahve, profil, tlaky lahví, bailout).",
+  ] },
   { version: "1.44", date: "2026-11-24", title: "Výstroj, bailout podle plynů, SurfGF, trend čidel", items: [
     "Nová záložka Výstroj: lahve jako dlaždice v sekcích On-board, Stage, Twin, Mono, Argon a Plnění, seskupené podle plynu a řazené podle tlaku; stav OK / Doplnit / Prázdná / Ověřit / Revize; automatiky (1. a 2. stupeň se servisem, hadice), závady a jejich řešení; termíny revizí jen ve Výstroji.",
     "On-board lahve rebreatheru RB O2 n / RB DIL n: po ponoru se rozpozná, která lahev byla v rebreatheru, a převezme tlak na konci; nejednoznačné přiřazení se vybere v detailu ponoru. Lahve z Výstroje v „Před a po ponoru“ – zavřená lahev se nepřepíše („ověřit“).",

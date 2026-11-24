@@ -725,10 +725,18 @@ function BailoutCard({ d, bo, extra, focusT }: { d: Dive; bo: NonNullable<Return
   const plan = bailoutPlan(boProfile(d), tk, o);
   // profil končí s ponorem – doplnit prázdné hodnoty do délky všech vzorků (graf sdílí osu s profilem)
   const pad = (a: (number | null)[]) => [...a, ...d.s.t.slice(a.length).map(() => null)];
-  const col = (k: number, g: string) => (g === NO_GAS ? "#ef5350" : BO_COL[k % BO_COL.length]);
+  // barva podle druhu plynu; dva plyny téhož druhu (např. dva TMX) – druhý z náhradní palety
+  const used = new Set<string>();
+  const col = (k: number, g: string) => {
+    if (g === NO_GAS) return "#ef5350";
+    let c = GAS_COLOR[gasLabel(g).cls] as string;
+    if (used.has(c)) c = BO_COL[k % BO_COL.length];
+    used.add(c); return c;
+  };
+  const cols = plan.gases.map((g, k) => col(k, g));
   const series = !tk.length ? [] : plan.gases.flatMap((g, k) => [
-    { label: gasLabelOf(g), color: col(k, g), values: pad(plan.need[g]), unit: "l", width: 2 },
-    ...(g !== NO_GAS && plan.have[g] != null ? [{ label: `${gasLabelOf(g)} s sebou`, color: col(k, g), values: d.s.t.map(() => plan.have[g]), unit: "l", dash: "4 3", width: 1 }] : []),
+    { label: gasLabelOf(g), color: cols[k], values: pad(plan.need[g]), unit: "l", width: 2 },
+    ...(g !== NO_GAS && plan.have[g] != null ? [{ label: `${gasLabelOf(g)} s sebou`, color: cols[k], values: d.s.t.map(() => plan.have[g]), unit: "l", dash: "4 3", width: 1 }] : []),
   ]);
   const w = plan.worst;
   return (
@@ -738,7 +746,7 @@ function BailoutCard({ d, bo, extra, focusT }: { d: Dive; bo: NonNullable<Return
         series={series.length ? series : [{ label: "Potřeba", color: "#ffb74d", values: pad(plan.total), unit: "l", width: 2 }]} />
       {w && <p className="small">{bo.short ? <span className="c-warn">Nejhůř v {dur(w.t)}: {gasLabelOf(bo.short.gas)} – potřeba {bo.short.need} l, s sebou {bo.short.have} l, chybí {bo.short.short} l.</span>
         : <>Nejhůř v {dur(w.t)}: celkem {w.total} l{bo.have != null ? `, s sebou ${bo.have} l` : " – bailout lahve nezadány"}.</>}</p>}
-      <Desc k="bailout"><p className="note">Odhad (P): kolik plynu by bylo potřeba při přechodu na otevřený okruh v každém okamžiku – 1 min řešení problému v hloubce, výstup 9 m/min a zbytek TTS z počítače × {o.ttsMul} (dekomprese na OC je delší než na CCR) na zastávkách, spotřeba {o.sac} l/min. Potřeba se dělí podle plynů: každý úsek výstupu dostane dostupný plyn s nejvyšším podílem O₂ – vzduch do {o.airMax} m, EAN a O₂ podle MOD při pO₂ 1,6, trimix v celé hloubce; červeně úseky, kde žádný zadaný plyn dýchat nejde. Plnou čarou potřeba, čárkovaně co máš s sebou (BO a deko lahve z „Před a po ponoru“, tlak před × objem). Nastavení → Výbava: spotřeba, hloubka pro vzduch, násobek TTS.</p></Desc>
+      <Desc k="bailout"><p className="note">Odhad (P): kolik plynu by bylo potřeba při přechodu na otevřený okruh v každém okamžiku – 1 min řešení problému v hloubce, výstup 9 m/min a zbytek TTS z počítače × {o.ttsMul} (dekomprese na OC je delší než na CCR) na zastávkách, spotřeba {o.sac} l/min. Potřeba se dělí podle plynů: každý úsek výstupu dostane dostupný plyn s nejvyšším podílem O₂ – AIR do {o.airMax} m, EAN a O₂ podle MOD při pO₂ 1,6, trimix v celé hloubce; červeně úseky, kde žádný zadaný plyn dýchat nejde. Plnou čarou potřeba, čárkovaně co máš s sebou (BO a deko lahve z „Před a po ponoru“, tlak před × objem). Nastavení → Výbava: spotřeba, hloubka pro vzduch, násobek TTS.</p></Desc>
     </section>
   );
 }
@@ -1106,7 +1114,7 @@ function ChartsTab({ d, focus }: { d: Dive; focus?: ChartFocus | null }) {
       </>}
       {hasPress && <>
       <div data-chart="press"><Card title="Tlak v láhvích">
-        <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: C[0], values: pressGaps(s.dil), unit: "bar" }, { label: "O₂", color: C[2], values: pressGaps(s.o2p), unit: "bar" }]} extra={depthExtra} />
+        <LineChart t={s.t} focusT={fT("press")} series={[{ label: "Diluent", color: GAS_COLOR[gasLabel(gasSegments(d).map((g) => g.mix).find((m) => m !== "100/0") || "21/0").cls], values: pressGaps(s.dil), unit: "bar" }, { label: "O₂", color: GAS_COLOR.o2, values: pressGaps(s.o2p), unit: "bar" }]} extra={depthExtra} />
         <ChartEvents warns={warns} keys={["press"]} focus={focus} />
         <Desc k="press"><p className="note">Hodnota kolem 8–11 bar u O₂ odpovídá mezitlaku prvního stupně, ne tlaku v láhvi.</p></Desc>
       </Card></div>

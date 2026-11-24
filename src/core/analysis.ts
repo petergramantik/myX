@@ -372,7 +372,7 @@ export function gasLabel(mix: string): { label: string; cls: "air" | "tmx" | "nx
   if (o2 === 21) return { label: "AIR", cls: "air" };
   return { label: o2 > 21 ? `NX ${o2}` : `${o2}/0`, cls: o2 > 21 ? "nx" : "tmx" };
 }
-export const GAS_COLOR = { air: "#cfd8dc", tmx: "#bc8f6f", nx: "#c5c56a", o2: "#ffffff" } as const;
+export const GAS_COLOR = { air: "#cfd8dc", tmx: "#bc8f6f", nx: "#c5c56a", o2: "#81d4fa", ar: "#b39ddb" } as const;
 
 /** Potápěč je na dekompresní zastávce: má povinnost a je nejvýš 3 m pod hloubkou zastávky. */
 export const atStop = (d: Dive, i: number) => d.s.stop[i] > 0 && d.s.depth[i] <= d.s.stop[i] + 3;

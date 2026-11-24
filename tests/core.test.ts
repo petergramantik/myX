@@ -559,6 +559,8 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   ok(sg.gf === 58 && sg.shallowMin === 3, "SurfGF: GF99 v prvním vzorku u hladiny, mělko 3 min");
   // bailout: nejhorší okamžik – nejhlubší a nejdelší TTS
   const B = await import("../src/core/bailout");
+  const GS = await import("../src/app/gas");
+  ok(GS.gasDisp("vzduch") === "AIR" && GS.gasDisp("EAN50") === "EAN50" && GS.gasColorOf("O₂") === "#81d4fa" && GS.gasColorOf("vzduch") === GS.gasColorOf("AIR") && GS.gasColorOf("Argon") != null && B.gasLabelOf("21/0") === "AIR", "Plyny: AIR místo vzduch, barvy (O₂ světle modrá)");
   const prof = { t: [0, 60, 120, 180, 240], z: [0, 60, 60, 10, 0], tts: [0, 20, 30, 5, 0], stop: [0, 9, 12, 3, 0] };
   const o = { sac: 20, airMax: 40, ttsMul: 1 };
   // jen vzduch: v 60 m ho dýchat nejde → nedostatek „bez plynu“

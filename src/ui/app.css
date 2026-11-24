@@ -555,3 +555,9 @@ p.sub-role { margin: -6px 0 6px; font-size: 0.85em; }
 .tg-l { font-size: 0.72em; color: var(--muted, #8aa0b8); text-transform: uppercase; letter-spacing: 0.04em; margin: 2px 0 4px; }
 .tsec-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 14px 0 4px; }
 .tsec-h .subh { margin: 0; }
+
+/* Výstroj: název lahve bíle a výrazně, plyn v barvě plynu */
+.gear-tank h2.gear-name, .tanktile .ct-h b { color: #fff; font-weight: 700; }
+.gear-tank h2.gear-name { font-size: 1.15em; }
+.tanktile .ct-sub.tt-mix { font-weight: 600; font-size: 0.8em; }
+.gear-tank .ev-head { display: block; margin-top: 8px; }

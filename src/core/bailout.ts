@@ -33,7 +33,7 @@ export function gasMaxDepth(mix: string, airMax: number): number {
 export function gasLabelOf(mix: string): string {
   if (mix === NO_GAS) return "bez plynu";
   const { o, h } = mixOf(mix);
-  return h > 0 ? `TMX ${o}/${h}` : o === 21 ? "vzduch" : o === 100 ? "O₂" : `EAN${o}`;
+  return h > 0 ? `TMX ${o}/${h}` : o === 21 ? "AIR" : o === 100 ? "O₂" : `EAN${o}`;
 }
 
 /** Úseky výstupu z hloubky z: 1 min řešení problému, výstup 9 m/min po 3 m, zbytek TTS (× násobek) na zastávkách. */

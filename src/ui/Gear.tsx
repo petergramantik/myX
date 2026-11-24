@@ -1,6 +1,7 @@
 // Výstroj: moje lahve, sestavy (automatiky s hadicemi), revize a servisy, závady a jejich řešení.
 // Upozornění na termíny jsou jen tady – nepatří mezi upozornění k ponorům.
 import { useEffect, useState } from "react";
+import { gasColorOf, gasDisp } from "../app/gas";
 import { GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, tankMix, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
 import { deleteReg, deleteTank, ownMetas, saveReg, saveTank } from "../app/store";
 import { RB_TOL, rbMatch } from "../app/gearSync";
@@ -8,7 +9,7 @@ import { isCC } from "../core/rig";
 import { ask, askText as promptText } from "../app/dialog";
 import { Card, go, num, tab, useStore } from "./common";
 
-const GASES = ["vzduch", "O₂", "EAN32", "EAN36", "EAN50", "TMX 21/35", "TMX 18/45", "TMX 15/55", "TMX 10/70", "Argon"];
+const GASES = ["AIR", "O₂", "EAN32", "EAN36", "EAN50", "TMX 21/35", "TMX 18/45", "TMX 15/55", "TMX 10/70", "Argon"];
 const HOSE_TYPES: GearHose["type"][] = ["HP", "LP", "inflátor", "Swagelok"];
 const fmtD = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }) : "–");
 const fmtMs = (ms: number) => new Date(ms).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
@@ -69,13 +70,13 @@ function gasRank(mix: string): [number, number] {
 }
 /** Skupiny lahví v sekci: On-board nejdřív O₂, pak diluenty podle plynu; ostatní podle plynu. Ve skupině od nejvyššího tlaku. */
 export function tankGroups(list: GearTank[], sec: string): { key: string; label: string; tanks: GearTank[] }[] {
-  const key = (t: GearTank) => (sec === "onboard" && t.onboard === "o2" ? "0|O₂" : `${gasRank(t.mix).join(",")}|${t.mix}`);
+  const key = (t: GearTank) => (sec === "onboard" && t.onboard === "o2" ? "0|O₂" : `${gasRank(t.mix).join(",")}|${gasDisp(t.mix)}`);
   const map = new Map<string, GearTank[]>();
   for (const t of list) map.set(key(t), [...(map.get(key(t)) || []), t]);
   const rank = (k: string) => (k.startsWith("0|") ? [0, 0] : k.split("|")[0].split(",").map(Number));
   return [...map.entries()]
     .sort((a, b) => { const x = rank(a[0]), y = rank(b[0]); return x[0] - y[0] || x[1] - y[1]; })
-    .map(([k, ts]) => ({ key: k, label: k.split("|")[1], tanks: ts.sort((a, b) => (b.bar ?? -1) - (a.bar ?? -1) || tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true })) }));
+    .map(([k, ts]) => ({ key: k, label: gasDisp(k.split("|")[1]), tanks: ts.sort((a, b) => (b.bar ?? -1) - (a.bar ?? -1) || tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true })) }));
 }
 
 function TankTile({ t }: { t: GearTank }) {
@@ -83,7 +84,7 @@ function TankTile({ t }: { t: GearTank }) {
   return (
     <div className={"celltile tanktile " + s.lvl} onClick={() => tab({ t: "gear", sub: "tanks", id: t.id })}>
       <div className="ct-h"><b>{tankLabel(t)}</b><span className={"dot " + s.lvl} /></div>
-      <div className="ct-sub">{t.mix}</div>
+      <div className="ct-sub tt-mix" style={{ color: gasColorOf(t.mix) || undefined }}>{gasDisp(t.mix)}</div>
       <div className="ct-v">{t.bar != null ? t.bar : "–"}<small>bar</small></div>
       <div className={"ct-l " + s.lvl}>{s.label}</div>
     </div>
@@ -97,7 +98,7 @@ function RbAdd({ all, onlyMissing }: { all: GearTank[]; onlyMissing?: boolean })
   return (
     <span className="row">
       {(!onlyMissing || !hasO2) && <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: "O₂", onboard: "o2" })}>＋ RB O2</button>}
-      {(!onlyMissing || !hasDil) && <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: all.find((t) => t.onboard === "dil")?.mix || "vzduch", onboard: "dil" })}>＋ RB DIL</button>}
+      {(!onlyMissing || !hasDil) && <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: all.find((t) => t.onboard === "dil")?.mix || "AIR", onboard: "dil" })}>＋ RB DIL</button>}
     </span>
   );
 }
@@ -119,7 +120,7 @@ function GearHome() {
           <div className="card-h"><h2>{label}</h2>{k === "onboard" && <RbAdd all={all} onlyMissing />}</div>
           {list.length ? tankGroups(list, k).map((g) => (
             <div key={g.key} className="tgroup">
-              {tankGroups(list, k).length > 1 && <div className="tg-l">{g.label}</div>}
+              {tankGroups(list, k).length > 1 && <div className="tg-l" style={{ color: gasColorOf(g.label) || undefined }}>{g.label}</div>}
               <div className="cells">{g.tanks.map((t) => <TankTile key={t.id} t={t} />)}</div>
             </div>
           )) : <p className="muted small">Zatím žádné lahve rebreatheru.</p>}
@@ -180,7 +181,7 @@ function TankList({ open }: { open?: string }) {
         </div>
       );
     })}
-    {edit === "new" ? <Card title="Nová lahev"><TankForm init={{ kind: "S80", vol: 11.1, mix: "vzduch" }} onDone={() => setEdit(null)} /></Card>
+    {edit === "new" ? <Card title="Nová lahev"><TankForm init={{ kind: "S80", vol: 11.1, mix: "AIR" }} onDone={() => setEdit(null)} /></Card>
       : <button className="btn primary" onClick={() => setEdit("new")}>＋ Přidat lahev</button>}
     <p className="note">Dvojče = 2 ocelové lahve jako jedna lahev. Revize se dopočítá z poslední ({REV_YEARS} let), termín i interval jde změnit.</p>
   </>);
@@ -192,21 +193,22 @@ function TankCard({ t, edit, setEdit }: { t: GearTank; edit: boolean; setEdit: (
   const saveBar = () => { const n = Math.round(+bar.replace(",", ".")); if (bar.trim() && n >= 0 && n < 400 && (n !== t.bar || t.check)) saveTank({ ...t, bar: n, barAt: Date.now(), check: undefined }); };
   return (
     <section className="card gear-tank" id={"tank-" + t.id}>
-      <div className="card-h" onClick={() => setEdit(!edit)}><h2>{tankLabel(t)}</h2><span>{t.o2 ? <span className="pill info">O₂ čisté</span> : null}{t.onboard ? <span className="pill">on-board {t.onboard === "o2" ? "O₂" : "dil"}</span> : null}</span></div>
+      <div className="card-h"><h2 className="gear-name">{tankLabel(t)}</h2><span>{t.o2 ? <span className="pill info">O₂ čisté</span> : null}{t.onboard ? <span className="pill">on-board {t.onboard === "o2" ? "O₂" : "dil"}</span> : null}</span></div>
       <div className="gear-big">
-        <span className="gear-mix">{t.mix}</span>
+        <span className="gear-mix" style={{ color: gasColorOf(t.mix) || undefined }}>{gasDisp(t.mix)}</span>
         <span className="gear-bar"><input className={"bar-in " + lvlBar(t.bar)} type="number" inputMode="numeric" value={bar} placeholder="bar" onChange={(e) => setBar(e.target.value)} onBlur={saveBar} /> bar</span>
       </div>
       {t.check && <div className="reason warn">Ověřit tlak: {t.check.text}. <button className="btn small" onClick={() => saveTank({ ...t, check: undefined, barAt: Date.now() })}>Tlak sedí</button></div>}
       <small className="muted">{num(gearVol(t), 1)} l{t.use === "fill" ? " · plnění" : ""}{t.barAt ? ` · tlak z ${fmtMs(t.barAt)}` : ""} · revize <span className={DUE_CLS[ds]}>{fmtD(due)}</span>{t.revLast ? ` (poslední ${fmtD(t.revLast)})` : ""}</small>
       {t.note && <p className="small">{t.note}</p>}
+      <button className="ev-head" onClick={() => setEdit(!edit)}>{edit ? "▾" : "▸"} Upravit</button>
       {edit && <TankForm init={t} onDone={() => setEdit(false)} />}
     </section>
   );
 }
 
 function TankForm({ init, onDone }: { init: Partial<GearTank> & { kind: string; vol: number; mix: string }; onDone: () => void }) {
-  const [f, setF] = useState(init);
+  const [f, setF] = useState({ ...init, mix: gasDisp(init.mix) });
   const set = (p: Partial<GearTank>) => setF({ ...f, ...p });
   const customMix = !GASES.includes(f.mix);
   return (
