@@ -28,13 +28,13 @@ export function NoteEditor({ note, onChange, pos, real, cc, diveId, noPrep }: { 
   const topBuddies = top((n) => n.buddyIds || []).filter((id) => lb.buddies[id] && !note.buddyIds.includes(id)).slice(0, 3);
   return (
     <>
-      <Card title="Lokalita">
+      <Card title="B&L">
+        <h3 className="subh">Lokalita</h3>
         {site ? <Chip onClick={() => go({ t: "site", id: site.id })} onX={() => onChange({ siteId: undefined })}>📍 {site.name}</Chip>
           : <Picker items={siteItems} placeholder="Napiš název lokality" onPick={(sid) => onChange({ siteId: sid })}
               onCreate={async (name) => { const s = findSiteByName(name) || (await upsertSite({ name, lat: pos?.lat, lon: pos?.lon })); onChange({ siteId: s.id }); }} />}
         {!site && topSites.length > 0 && <div className="quick">{topSites.map((id) => <button key={id} className="btn small" onClick={() => onChange({ siteId: id })}>{lb.sites[id].name}</button>)}</div>}
-      </Card>
-      <Card title="S kým">
+        <h3 className="subh">S kým</h3>
         <div className="chips">{note.buddyIds.map((b) => lb.buddies[b] && <Chip key={b} onClick={() => go({ t: "buddy", id: b })} onX={() => onChange({ buddyIds: note.buddyIds.filter((x) => x !== b) })}>{lb.buddies[b].name}</Chip>)}</div>
         <Picker items={buddyItems} placeholder="Přidat parťáka" onPick={(bid) => onChange({ buddyIds: [...note.buddyIds, bid] })}
           onCreate={async (name) => { const b = findBuddyByName(name) || (await upsertBuddy({ name })); onChange({ buddyIds: [...new Set([...note.buddyIds, b.id])] }); }} />
@@ -43,8 +43,7 @@ export function NoteEditor({ note, onChange, pos, real, cc, diveId, noPrep }: { 
       {!noPrep && <PrepCard prep={note.prep} real={real} cc={cc} diveId={diveId} onChange={(prep) => onChange({ prep })} />}
       <Card title="Hodnocení">
         <RatingPicker value={note.rating} onChange={(rating) => onChange({ rating })} />
-      </Card>
-      <Card title="Poznámka">
+        <h3 className="subh">Poznámka</h3>
         <textarea value={text} rows={4} placeholder="Jak se ponor povedl, viditelnost, co jste viděli, problémy…" onChange={(e) => setText(e.target.value)} onBlur={() => text !== note.note && onChange({ note: text })} />
       </Card>
       {w && (

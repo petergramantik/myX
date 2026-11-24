@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
-import { BTN_NAMES, pressGaps, bailoutSeries, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize, type Alert } from "../core/analysis";
+import { BTN_NAMES, pressGaps, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize, type Alert } from "../core/analysis";
 import { ME, adoptForeign, aliasGuess, compModel, deleteGuestDives, toast, nearestPair, applySuggestion, diveHeads, loadDive, myNum, ownMetas, segInfo, setNote, setSegOverride, suggestionsFor, viewMetas, type Suggest } from "../app/store";
 import { cellDiveWarnings, mergeCellAlerts } from "../core/cells";
 import { computerWarnings } from "../core/compwarn";
@@ -13,7 +13,8 @@ import { compName, getState, rigChoices, rigInfo, setDiveRig, typeBreakdown } fr
 import { AlertBox, Card, ClearInput, KV, Picker, RATING, Tiles, back, fmtDate, fmtDateTime, go, hm, leaveY, num, tab, useBackLayer, useStore } from "./common";
 import { NoteEditor } from "./NoteEditor";
 import { PrepCard } from "./Prep";
-import { bailoutOf, noteWarns, surfGfOf, BO_SAC } from "../app/noteWarns";
+import { bailoutOf, boOpts, boTanks, noteWarns, surfGfOf, BO_SAC } from "../app/noteWarns";
+import { NO_GAS, bailoutPlan, boProfile, gasLabelOf } from "../core/bailout";
 import { co2BadRanges, co2Valid, dilVents, effortOf, gasDensity, workloadIndex, workloadSkip, type EffortBase } from "../core/effort";
 import { BuddyDivesCard, commonDives, type Common } from "./Compare";
 import { ChartDefs, LineChart, TissueMap, ZoomCtx } from "./Chart";
@@ -714,17 +715,30 @@ function PartsCard({ meta }: { meta: Meta }) {
   );
 }
 
-/** Potřeba bailoutu v čase (odhad P) proti plynu v bailout lahvích. */
+/** Potřeba bailoutu v čase podle plynů (odhad P) proti plynu v BO a deko lahvích. */
+const BO_COL = ["#4fc3f7", "#ffb74d", "#81c784", "#ce93d8", "#e57373", "#fff176"];
 function BailoutCard({ d, bo, extra, focusT }: { d: Dive; bo: NonNullable<ReturnType<typeof bailoutOf>>; extra?: Parameters<typeof LineChart>[0]["extra"]; focusT?: number }) {
   const st = useStore();
-  const sac = st.lb.settings.boSac || BO_SAC;
-  const need = bailoutSeries(d).map((k) => (k == null ? null : Math.round(k * sac)));
+  const m = st.metas.find((x) => x.id === d.id);
+  const o = m ? boOpts(m, st.lb.settings) : { sac: BO_SAC, airMax: 40, ttsMul: 1.5 };
+  const tk = boTanks(st.lb.notes[d.id]) || [];
+  const plan = bailoutPlan(boProfile(d), tk, o);
+  // profil končí s ponorem – doplnit prázdné hodnoty do délky všech vzorků (graf sdílí osu s profilem)
+  const pad = (a: (number | null)[]) => [...a, ...d.s.t.slice(a.length).map(() => null)];
+  const col = (k: number, g: string) => (g === NO_GAS ? "#ef5350" : BO_COL[k % BO_COL.length]);
+  const series = !tk.length ? [] : plan.gases.flatMap((g, k) => [
+    { label: gasLabelOf(g), color: col(k, g), values: pad(plan.need[g]), unit: "l", width: 2 },
+    ...(g !== NO_GAS && plan.have[g] != null ? [{ label: `${gasLabelOf(g)} s sebou`, color: col(k, g), values: d.s.t.map(() => plan.have[g]), unit: "l", dash: "4 3", width: 1 }] : []),
+  ]);
+  const w = plan.worst;
   return (
     <section className="card" id="bo-card">
       <h2>Bailout</h2>
-      <LineChart t={d.s.t} focusT={focusT} extra={extra} series={[{ label: "Potřeba", color: "#ffb74d", values: need, unit: "l", width: 2 },
-        ...(bo.have != null ? [{ label: "S sebou", color: "#81c784", values: d.s.t.map(() => bo.have), unit: "l", dash: "4 3" }] : [])]} />
-      <p className="note">Odhad (P): kolik plynu by bylo potřeba při přechodu na bailout v každém okamžiku – 1 min řešení problému v hloubce, výstup 9 m/min a zbytek TTS na zastávkách, při spotřebě {sac} l/min (Nastavení → Výbava). S sebou = BO a deko lahve z „Před a po ponoru“ (tlak před × objem). Nejhůř v {dur(bo.t)}: potřeba {bo.need} l{bo.have != null ? `, s sebou ${bo.have} l` : ""}.</p>
+      <LineChart t={d.s.t} focusT={focusT} extra={extra}
+        series={series.length ? series : [{ label: "Potřeba", color: "#ffb74d", values: pad(plan.total), unit: "l", width: 2 }]} />
+      {w && <p className="small">{bo.short ? <span className="c-warn">Nejhůř v {dur(w.t)}: {gasLabelOf(bo.short.gas)} – potřeba {bo.short.need} l, s sebou {bo.short.have} l, chybí {bo.short.short} l.</span>
+        : <>Nejhůř v {dur(w.t)}: celkem {w.total} l{bo.have != null ? `, s sebou ${bo.have} l` : " – bailout lahve nezadány"}.</>}</p>}
+      <Desc k="bailout"><p className="note">Odhad (P): kolik plynu by bylo potřeba při přechodu na otevřený okruh v každém okamžiku – 1 min řešení problému v hloubce, výstup 9 m/min a zbytek TTS z počítače × {o.ttsMul} (dekomprese na OC je delší než na CCR) na zastávkách, spotřeba {o.sac} l/min. Potřeba se dělí podle plynů: každý úsek výstupu dostane dostupný plyn s nejvyšším podílem O₂ – vzduch do {o.airMax} m, EAN a O₂ podle MOD při pO₂ 1,6, trimix v celé hloubce; červeně úseky, kde žádný zadaný plyn dýchat nejde. Plnou čarou potřeba, čárkovaně co máš s sebou (BO a deko lahve z „Před a po ponoru“, tlak před × objem). Nastavení → Výbava: spotřeba, hloubka pro vzduch, násobek TTS.</p></Desc>
     </section>
   );
 }
@@ -799,7 +813,8 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Proplach", <span className="use">{meta.sum.vents}×<small>{meta.sum.dilDesc != null ? `sestup ${num(meta.sum.dilDesc, 0)} bar` : "sestup –"}</small></span>],
           ...(sg ? [["SurfGF", <span className="use"><span className={sg.over ? "c-warn" : ""}>{sg.gf} %</span><small>při vynoření · hranice {sg.lim} %{sg.shallowMin != null ? ` · mělko ${sg.shallowMin} min` : ""}</small></span>] as [string, React.ReactNode]] : []),
           ...(bo && !st.guest ? [["Bailout", bo.have == null ? <span className="use">–<small>{bo.tanks ? "doplň tlak a lahev v Před a po ponoru" : "bailout nezadán"}</small></span>
-            : <span className="use"><span className={bo.reserve! < 0 ? "c-warn" : ""}>{bo.reserve! >= 0 ? "+" : ""}{bo.reserve} %</span><small>potřeba {bo.need} l · s sebou {bo.have} l</small></span>, () => showInChart({ chart: "bailout", from: meta.sum.boT || 0, to: meta.sum.boT || 0 })] as [string, React.ReactNode, () => void]] : []),
+            : bo.short ? <span className="use"><span className="c-warn">chybí {bo.short.short} l</span><small>{gasLabelOf(bo.short.gas)} · potřeba {bo.short.need} l, s sebou {bo.short.have} l</small></span>
+            : <span className="use"><span>{bo.reserve! >= 0 ? "+" : ""}{bo.reserve} %</span><small>potřeba {bo.need} l · s sebou {bo.have} l</small></span>, () => showInChart({ chart: "bailout", from: bo.t, to: bo.t })] as [string, React.ReactNode, () => void]] : []),
         ])} />
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}

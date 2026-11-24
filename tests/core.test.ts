@@ -558,8 +558,17 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   const sg = A.surfacing(mk([0, 20, 30, 20, 6, 3, 3, 0.5, 0], { gf99: [null, null, null, 40, 60, 66, 63, 58, 57] }));
   ok(sg.gf === 58 && sg.shallowMin === 3, "SurfGF: GF99 v prvním vzorku u hladiny, mělko 3 min");
   // bailout: nejhorší okamžik – nejhlubší a nejdelší TTS
-  const bo = A.bailoutNeed(mk([0, 30, 30, 10, 0], { tts: [0, 10, 20, 5, 0] }));
-  ok(bo != null && bo.t === 120 && bo.k > 30 && bo.k < 60, `Bailout: nejhorší v 2. min (${bo?.k} l na l/min)`);
+  const B = await import("../src/core/bailout");
+  const prof = { t: [0, 60, 120, 180, 240], z: [0, 60, 60, 10, 0], tts: [0, 20, 30, 5, 0], stop: [0, 9, 12, 3, 0] };
+  const o = { sac: 20, airMax: 40, ttsMul: 1 };
+  // jen vzduch: v 60 m ho dýchat nejde → nedostatek „bez plynu“
+  const p1 = B.bailoutPlan(prof, [{ mix: "21/0", liters: 2200 }], o);
+  ok(p1.worst?.gas === B.NO_GAS && p1.worst.short > 0, `Bailout: vzduch v 60 m nejde dýchat (${p1.worst?.gas} ${p1.worst?.short} l)`);
+  // TMX + EAN50: hluboko TMX, mělko EAN50; s dostatkem obou bez nedostatku
+  const p2 = B.bailoutPlan(prof, [{ mix: "21/35", liters: 4000 }, { mix: "50/0", liters: 2000 }], o);
+  ok(p2.gases.includes("21/35") && p2.gases.includes("50/0") && (p2.worst?.short ?? 0) <= 0 && p2.need["50/0"][2]! > 0, "Bailout: rozdělení TMX hluboko / EAN50 mělko, bez nedostatku");
+  const p3 = B.bailoutPlan(prof, [{ mix: "21/35", liters: 300 }, { mix: "50/0", liters: 2000 }], { ...o, ttsMul: 1.5 });
+  ok(p3.worst?.gas === "21/35" && p3.worst.short > 0, `Bailout: málo TMX → nedostatek TMX (${p3.worst?.short} l)`);
   // termíny revizí a servisů
   const M = await import("../src/app/model");
   ok(M.nextDue("2022-03-01", undefined, 5) === "2027-03-01" && M.nextDue("2022-03-01", "2026-01-01", 5) === "2026-01-01" && M.dueState("2000-01-01") === "over" && M.dueState(undefined) === "none", "Výstroj: příští termín a stav");

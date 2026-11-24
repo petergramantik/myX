@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44-dev.6";
+export const APP_VERSION = "1.44-dev.7";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44-dev.7", date: "2026-11-24", title: "Bailout podle plynů, panely B&L a Hodnocení (dev)", items: [
+    "Bailout po plynech: vzduch do nastavené hloubky (40 m), EAN a O₂ podle MOD, trimix všude; násobek TTS pro dekompresi na OC (1,5); graf po plynech se sbalitelným popisem, upozornění hlásí chybějící plyn.",
+    "Detail ponoru: Lokalita a S kým v panelu B&L, Hodnocení a Poznámka v panelu Hodnocení.",
+  ] },
   { version: "1.44-dev.6", date: "2026-11-24", title: "Detail ponoru: pořadí, bailout v Grafech (dev)", items: [
     "V kostce: Hloubka, Doba, O₂, Diluent, Max. pO₂, Max. pN₂, Baterie, Scrubber, pak ostatní.",
     "„Před a po ponoru“ hned pod grafem Profil a strop.",

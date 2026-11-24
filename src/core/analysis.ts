@@ -2,6 +2,7 @@
 import { isCC } from "./rig";
 import { computerWarnings, deviatingCell, type CompWarn } from "./compwarn";
 import { co2BadRanges, co2Plausibility, co2Valid, dilVents, effortOf, gasDensity, o2RateWindows, workloadBase, type EffortBase } from "./effort";
+import { boProfile, type BoProfile } from "./bailout";
 import type { Dive, Header } from "./shearwater";
 
 export interface Summary {
@@ -12,7 +13,7 @@ export interface Summary {
   ceilMax: number; ttsMax: number; gf99End: number | null; descMax: number; ascMax: number;
   batVMin: number; decoMin: number; decoModeMin: number; dilStart: number | null; dilEnd: number | null; o2Start: number | null; o2End: number | null; dilUsed: string;
   /** SurfGF při vynoření = GF99 Petrelu v prvním vzorku u hladiny (%), délka mělké části (< 7 m) před vynořením (min) */ surfGF?: number | null; shallowMin?: number | null;
-  /** bailout: nejhorší potřeba plynu na 1 l/min spotřeby (bar·min = litrů na l/min) a čas (s) */ boK?: number | null; boT?: number | null;
+  /** profil pro výpočet bailoutu (po 30 s: čas, hloubka, TTS, první zastávka) */ boP?: BoProfile;
 }
 
 /** SurfGF při vynoření: GF99 v prvním vzorku u hladiny po nejhlubším bodě (na hladině GF99 = SurfGF) a minuty mělčeji než 7 m před tím. */
@@ -25,27 +26,6 @@ export function surfacing(d: Dive): { gf: number | null; shallowMin: number | nu
   const gf = [s.gf99[k], s.gf99[k + 1], s.gf99[k + 2]].find((v) => v != null) ?? null;
   let j = k; while (j > imax && s.depth[j] < 7) j--;
   return { gf, shallowMin: Math.round((s.t[k] - s.t[Math.min(k, j + 1)]) / 60) };
-}
-
-/**
- * Potřeba bailoutu (P – zjednodušený odhad): v každém vzorku 1 min řešení problému v hloubce, výstup 9 m/min
- * při průměrném tlaku poloviny hloubky a zbytek TTS na zastávkách (průměrně tlak poloviny hloubky první zastávky, nejméně 3 m).
- * Vrací litry na 1 l/min povrchové spotřeby (stačí vynásobit spotřebou) a čas nejhoršího okamžiku.
- */
-export function bailoutSeries(d: Dive): (number | null)[] {
-  const s = d.s;
-  const P = (z: number) => (d.h.surfP || 1013) / 1000 + z * 0.0981 * (d.h.salinity || 1000) / 1000;
-  return s.depth.map((z, i) => {
-    if (s.t[i] > d.h.diveTimeS || z < 3) return null;
-    const travel = z / 9, rest = Math.max(0, (s.tts[i] || 0) - travel);
-    return Math.round((P(z) + travel * P(z / 2) + rest * P(Math.max(3, (s.stop[i] || 0) / 2))) * 10) / 10;
-  });
-}
-export function bailoutNeed(d: Dive): { k: number; t: number } | null {
-  const ks = bailoutSeries(d);
-  let best = { k: 0, t: 0 };
-  ks.forEach((k, i) => { if (k != null && k > best.k) best = { k, t: d.s.t[i] }; });
-  return best.k ? best : null;
 }
 
 const inDive = (d: Dive, i: number) => d.s.t[i] <= d.h.diveTimeS;
@@ -402,7 +382,7 @@ export const realStops = (d: Dive) => d.s.stop.map((v, i) => (atStop(d, i) ? v :
 export function summarize(d: Dive): Summary {
   const cs0 = cellSpread(d);
   const s = d.s, n = s.t.length;
-  const sf = surfacing(d), bo = bailoutNeed(d);
+  const sf = surfacing(d);
   const idx = [...Array(n).keys()].filter((i) => inDive(d, i));
   const deps = idx.map((i) => s.depth[i]);
   const rates: number[] = [];
@@ -442,7 +422,7 @@ export function summarize(d: Dive): Summary {
     decoMin: Math.round(idx.filter((i) => atStop(d, i)).length * (d.h.rateS || 5) / 60),
     decoModeMin: Math.round(idx.filter((i) => s.stop[i] > 0).length * (d.h.rateS || 5) / 60), dilStart: firstNum(s.dil), dilEnd: lastNum(s.dil), o2Start: firstNum(s.o2p), o2End: lastNum(s.o2p),
     dilUsed: [...new Set(s.o2.map((o, i) => `${o}/${s.he[i]}`))].join(", "),
-    surfGF: sf.gf, shallowMin: sf.shallowMin, boK: bo?.k ?? null, boT: bo?.t ?? null,
+    surfGF: sf.gf, shallowMin: sf.shallowMin, boP: boProfile(d, 30),
   };
 }
 
