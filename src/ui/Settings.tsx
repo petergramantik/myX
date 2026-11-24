@@ -29,7 +29,7 @@ export function SettingsScreen() {
     <div className="screen">
       <Sec title="Zobrazení">
         <label className="check"><input type="checkbox" checked={st.lb.settings.motto !== false} onChange={(e) => saveSettings({ motto: e.target.checked })} /> Hláška nad scrubberem („Všecko v cajku…“ / „Mám warningy…“)</label>
-        <label className="check"><input type="checkbox" checked={st.lb.settings.gearMotto !== false} onChange={(e) => saveSettings({ gearMotto: e.target.checked })} /> Pruh stavu výstroje nahoře ve Výstroji („Výstroj v cajku…“ podle podílu lahví a sestav v pořádku)</label>
+        <label className="check"><input type="checkbox" checked={st.lb.settings.gearMotto !== false} onChange={(e) => saveSettings({ gearMotto: e.target.checked })} /> Pruh stavu výstroje nahoře ve Výstroji („Výstroj v cajku…“ podle revizí, servisů a závad)</label>
       </Sec>
 
       <Sec title="Výbava">
