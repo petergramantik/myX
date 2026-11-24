@@ -1,3 +1,4 @@
+import { gasDisp } from "../app/gas";
 import { ask, askText } from "../app/dialog";
 import { useEffect, useRef, useState } from "react";
 import { cellStatus, cellTrend, trendReasons, detectCellEvents, type CellStatus } from "../core/cells";
@@ -161,10 +162,10 @@ function Co2Panel() {
   const x = useCo2();
   const [edit, setEdit] = useState(false);
   const [date, setDate] = useState(x.cal?.date || isoOf(localNow()));
-  const [gas, setGas] = useState(x.cal?.gas || "vzduch");
+  const [gas, setGas] = useState(gasDisp(x.cal?.gas || "AIR"));
   if (!x.last) return null;
   const lvl = x.on ? x.level : "none";
-  const GASES = ["vzduch", "O₂", "kalibrační plyn"];
+  const GASES = ["AIR", "O₂", "kalibrační plyn"];
   return (
     <div className={"pcell ptile " + lvl}>
       {x.lastSt === "suspect" && <div className="reason warn">Maximum {num(x.last.sum.co2Max!, 1)} mbar je nad {CO2_SUSPECT} mbar – nejspíš porucha čidla (?). V detailu ponoru (karta CO₂) ho potvrď jako skutečné, nebo označ jako poruchu.</div>}

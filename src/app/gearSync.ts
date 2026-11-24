@@ -81,7 +81,7 @@ export function rbNextName(lb: Logbook, role: RbRole): string {
   return `${RB_PREFIX[role]} ${nums.length ? Math.max(...nums) + 1 : 1}`;
 }
 
-const gasName = (mix: string | null) => { if (!mix) return "vzduch"; const [o, h] = mix.split("/").map(Number); return h > 0 ? `TMX ${o}/${h}` : o === 21 ? "vzduch" : o === 100 ? "O₂" : `EAN${o}`; };
+const gasName = (mix: string | null) => { if (!mix) return "AIR"; const [o, h] = mix.split("/").map(Number); return h > 0 ? `TMX ${o}/${h}` : o === 21 ? "AIR" : o === 100 ? "O₂" : `EAN${o}`; };
 
 /**
  * Po načtení ponorů (poslední ponor): chybějící on-board lahve založit (RB O2 1, RB DIL 1), lahve rozpoznat a převzít tlak.
