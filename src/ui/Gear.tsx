@@ -46,15 +46,15 @@ export function tankSec(t: GearTank): TSec {
   return "mono";
 }
 /** Stav lahve pro dlaždici: Prázdná / Revize (prošlá) červeně, Ověřit / Doplnit / Revize (brzy) žlutě, jinak OK. Plnicí lahve hlídají jen ověření a revizi. */
-export function tankState(t: GearTank): { lvl: "ok" | "warn" | "bad" | "none"; label: string } {
+/** Stav lahve: barva a štítek = plnost (a ověření tlaku); revize zvlášť (fialový pruh na dlaždici). */
+export function tankState(t: GearTank): { lvl: "ok" | "warn" | "bad" | "none"; label: string; rev: "over" | "soon" | null } {
   const ds = dueState(tankDue(t)), fill = t.use === "fill";
-  if (!fill && t.bar != null && t.bar < 50) return { lvl: "bad", label: "Prázdná" };
-  if (ds === "over") return { lvl: "bad", label: "Revize" };
-  if (t.check) return { lvl: "warn", label: "Ověřit" };
-  if (!fill && t.bar != null && t.bar < 100) return { lvl: "warn", label: "Doplnit" };
-  if (ds === "soon") return { lvl: "warn", label: "Revize" };
-  if (t.bar == null) return { lvl: "none", label: "Tlak?" };
-  return { lvl: "ok", label: "OK" };
+  const rev = ds === "over" || ds === "soon" ? ds : null;
+  if (!fill && t.bar != null && t.bar < 50) return { lvl: "bad", label: "Prázdná", rev };
+  if (t.check) return { lvl: "warn", label: "Ověřit", rev };
+  if (!fill && t.bar != null && t.bar < 100) return { lvl: "warn", label: "Doplnit", rev };
+  if (t.bar == null) return { lvl: "none", label: "Tlak?", rev };
+  return { lvl: "ok", label: "OK", rev };
 }
 
 /** Pořadí plynů ve skupinách: vzduch, EAN (podle O₂), TMX (podle O₂ sestupně), O₂, argon, ostatní. */
@@ -87,6 +87,7 @@ function TankTile({ t }: { t: GearTank }) {
       <div className="ct-sub tt-mix" style={{ color: gasColorOf(t.mix) || undefined }}>{gasDisp(t.mix)}</div>
       <div className="ct-v">{t.bar != null ? t.bar : "–"}<small>bar</small></div>
       <div className={"ct-l " + s.lvl}>{s.label}</div>
+      {s.rev && <div className={"tt-rev " + s.rev}><span>Revize {s.rev === "over" ? "po termínu" : fmtD(tankDue(t))}</span></div>}
     </div>
   );
 }
