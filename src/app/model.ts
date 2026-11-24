@@ -41,7 +41,7 @@ export interface Prep { o2?: number; dil?: number; tanks?: PrepTank[]; o2Cal?: n
 export const HYD_LABEL = { low: "Slabá", mid: "Střední", good: "Dobrá" } as const;
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
-  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** poloha z rozpracovaného ponoru (místo ponoru) */ pos?: { lat: number; lon: number }; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; /** CO₂ v ponoru: porucha čidla / potvrzené skutečné */ co2?: "fault" | "real"; /** skrytí „c:CO₂“ přidala volba Porucha čidla (při zrušení se vrátí jen ono) */ co2Hid?: boolean; updated: number;
+  ext?: ExtGas[]; useManual?: { dil?: number; o2?: number }; prep?: Prep; /** poloha z rozpracovaného ponoru (místo ponoru) */ pos?: { lat: number; lon: number }; /** skrytá upozornění: „t:název“ nebo „c:KATEGORIE“ */ hideW?: string[]; /** on-board lahve rebreatheru z Výstroje použité v ponoru (auto = rozpoznáno automaticky) */ rb?: { o2?: { id: string; auto?: boolean }; dil?: { id: string; auto?: boolean } }; /** CO₂ v ponoru: porucha čidla / potvrzené skutečné */ co2?: "fault" | "real"; /** skrytí „c:CO₂“ přidala volba Porucha čidla (při zrušení se vrátí jen ono) */ co2Hid?: boolean; updated: number;
 }
 /** Hodnota CO₂ nad touto mezí (mbar) je podezřelá (pravděpodobně porucha čidla), dokud ji uživatel nepotvrdí. */
 export const CO2_SUSPECT = 20;
@@ -84,7 +84,7 @@ export interface GearTank {
   id: string; kind: string; /** objem jedné lahve (l); u dvojčete jedné z dvojice */ vol: number; name?: string; mix: string;
   /** zbytkový tlak (bar) a kdy byl zadán / převzat z ponoru */ bar?: number; barAt?: number;
   /** po ponoru se tlak nepřepsal (lahev zavřená / tlak chybí) – zkontrolovat */ check?: { at: number; text: string };
-  /** poslední převzetí z ponoru (aby se při úpravě téhož ponoru tlak znovu nepřepisoval) */ fromDive?: { id: string; end?: number };
+  /** poslední převzetí z ponoru (aby se při úpravě téhož ponoru tlak znovu nepřepisoval); prev = tlak před převzetím (pro vrácení při změně přiřazení) */ fromDive?: { id: string; end?: number; prev?: { bar?: number; barAt?: number } };
   revLast?: string; revNext?: string; revYears?: number; o2?: boolean; note?: string; updated: number;
   /** on-board lahev rebreatheru (objem se bere pro výpočty spotřeby) */ onboard?: "o2" | "dil";
 }

@@ -10,7 +10,8 @@ import { loadWeather, weatherAt } from "./weather";
 import * as db from "./db";
 import { decodeAny, readAny } from "../core/decoders";
 import { RIGS, defaultRig, diveType, isSupported, rigsForMode, type Rig } from "../core/rig";
-import { gearTankApply, gearOnboardApply } from "./gearSync";
+import { isCC } from "../core/rig";
+import { gearTankApply, gearOnboardApply, rbApply, rbUnapply, rbNextName, type RbRole } from "./gearSync";
 import { aliasKey, cleanForeign, emptyLogbook, resetLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type GearTank, type GearReg, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
@@ -1255,10 +1256,10 @@ export function saveTank(t: Partial<GearTank> & { kind: string; vol: number; mix
   const lb = structuredClone(st.lb);
   const id = t.id || uid();
   lb.tanks = { ...(lb.tanks || {}), [id]: { ...(lb.tanks?.[id] || {}), ...t, id, updated: Date.now() } as GearTank };
-  // on-board lahev: její objem se používá pro výpočty spotřeby
+  // on-board lahev rebreatheru: bez názvu dostane RB O2 n / RB DIL n; objem pro výpočty spotřeby
   const x = lb.tanks[id];
   if (x.onboard) {
-    for (const o of Object.values(lb.tanks)) if (o.id !== id && o.onboard === x.onboard) lb.tanks[o.id] = { ...o, onboard: undefined, updated: Date.now() };
+    if (!x.name) lb.tanks[id] = { ...x, name: rbNextName(lb, x.onboard) };
     const cyl = lb.settings.cyl || { dil: 3, o2: 3 };
     lb.settings = { ...lb.settings, cyl: { ...cyl, [x.onboard]: x.kind === "Dvojče" ? 2 * x.vol : x.vol }, updated: Date.now() };
   }
@@ -1282,13 +1283,26 @@ export function deleteReg(id: string): Promise<void> {
   lb.deleted[id] = Date.now();
   return saveLb(lb);
 }
-/** Po načtení ponorů: tlak on-board lahví z posledního ponoru (DiveCAN / vysílač) do Výstroje. */
+/** Po načtení ponorů: on-board lahve z posledního CC ponoru – založit, rozpoznat, převzít tlak (DiveCAN / vysílač). */
 export function gearOnboardSync(): Promise<void> | void {
-  if (st.guest || st.temp || !st.lb.tanks) return;
-  const last = ownMetas()[ownMetas().length - 1];
+  if (st.guest || st.temp) return;
+  const cc = ownMetas().filter((m) => isCC(m.h));
+  const last = cc[cc.length - 1];
   if (!last) return;
   const lb = structuredClone(st.lb);
-  if (gearOnboardApply(lb, last)) return saveLb(lb);
+  if (gearOnboardApply(lb, last, true)) return saveLb(lb);
+}
+/** Ruční přiřazení on-board lahve k ponoru (null = zrušit): tlak převezme nová lahev, původní se vrátí. */
+export function rbAssign(diveId: string, role: RbRole, tankId: string | null): Promise<void> {
+  const m = st.metas.find((x) => x.id === diveId);
+  const lb = structuredClone(st.lb);
+  const old = lb.notes[diveId]?.rb?.[role]?.id;
+  if (m && old && old !== tankId) rbUnapply(lb, m, old);
+  const rb = { ...lb.notes[diveId]?.rb };
+  if (tankId) rb[role] = { id: tankId }; else delete rb[role];
+  lb.notes[diveId] = { buddyIds: [], note: "", ...lb.notes[diveId], rb, updated: Date.now() };
+  if (m && tankId) rbApply(lb, m, role, tankId);
+  return saveLb(lb);
 }
 
 export function findSiteByName(name: string): Site | undefined {

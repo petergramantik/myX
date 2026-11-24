@@ -568,9 +568,26 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   const lb = M.emptyLogbook();
   lb.tanks = { a: { id: "a", kind: "S80", vol: 11.1, mix: "vzduch", bar: 200, updated: 0 }, b: { id: "b", kind: "3 l", vol: 3, mix: "TMX 21/35", bar: 180, onboard: "dil", updated: 0 } };
   lb.notes.d1 = { buddyIds: [], note: "", updated: 1, prep: { tanks: [{ id: "x", role: "bo", name: "S80", gas: "vzduch", gearId: "a", bar: 200, end: 150 }] } };
-  const meta = { id: "d1", start: 1700000000, h: { diveTimeS: 3600 }, sum: { dilStart: 8, dilEnd: 8, o2Start: 190, o2End: 120 } } as unknown as Parameters<typeof G.gearOnboardApply>[1];
-  G.gearTankApply(lb, "d1", meta); G.gearOnboardApply(lb, meta);
+  const meta = { id: "d1", start: 1700000000, h: { diveTimeS: 3600 }, sum: { dilStart: 8, dilEnd: 8, o2Start: 190, o2End: 120, gases: [{ mix: "21/35", s: 3000 }] } } as unknown as Parameters<typeof G.gearOnboardApply>[1];
+  G.gearTankApply(lb, "d1", meta); G.gearOnboardApply(lb, meta, true);
   ok(lb.tanks.a.bar === 150 && lb.tanks.b.bar === 180 && !!lb.tanks.b.check, "Výstroj: off-board lahev převzala tlak po, zavřený diluent → zkontrolovat");
+  // A38: rozpoznání on-board lahve – diluent podle směsi a tlaku, O₂ se zavřenou lahví nejde
+  const lb2 = M.emptyLogbook();
+  lb2.tanks = {
+    a1: { id: "a1", name: "RB DIL 1", kind: "3 l", vol: 3, mix: "vzduch", bar: 150, onboard: "dil", updated: 0 },
+    a2: { id: "a2", name: "RB DIL 2", kind: "3 l", vol: 3, mix: "vzduch", bar: 180, onboard: "dil", updated: 0 },
+    t1: { id: "t1", name: "RB DIL 3", kind: "3 l", vol: 3, mix: "TMX 21/35", bar: 170, onboard: "dil", updated: 0 },
+    o1: { id: "o1", name: "RB O2 1", kind: "3 l", vol: 3, mix: "O₂", bar: 120, onboard: "o2", updated: 0 },
+    o2: { id: "o2", name: "RB O2 2", kind: "3 l", vol: 3, mix: "O₂", bar: 190, onboard: "o2", updated: 0 },
+  };
+  const mAir = { id: "d2", start: 1700100000, h: { diveTimeS: 3000 }, sum: { dilStart: 176, dilEnd: 150, o2Start: 8, o2End: 8, gases: [{ mix: "21/0", s: 3000 }] } } as unknown as Parameters<typeof G.gearOnboardApply>[1];
+  const mTmx = { ...mAir, id: "d3", sum: { ...mAir.sum, gases: [{ mix: "21/35", s: 3000 }] } } as typeof mAir;
+  ok(G.rbMatch(lb2, mAir, "dil").id === "a2" && G.rbMatch(lb2, mTmx, "dil").id === "t1" && G.rbMatch(lb2, mAir, "o2").id === null, "On-board lahve: diluent podle směsi a tlaku, O₂ se zavřenou lahví nerozpoznána");
+  G.gearOnboardApply(lb2, mAir, true);
+  ok(lb2.tanks.a2.bar === 150 && lb2.notes.d2?.rb?.dil?.id === "a2" && !lb2.notes.d2?.rb?.o2 && lb2.tanks.o1.bar === 120, "On-board lahve: přiřazený diluent převzal tlak, O₂ nepřiřazená");
+  const lb3 = M.emptyLogbook(); G.gearOnboardApply(lb3, mTmx, true);
+  const made = Object.values(lb3.tanks || {});
+  ok(made.length === 2 && made.some((t) => t.name === "RB O2 1" && !!t.check) && made.some((t) => t.name === "RB DIL 1" && t.mix === "TMX 21/35" && t.bar === 150), "On-board lahve: první založení RB O2 1 a RB DIL 1 z posledního ponoru");
   // trend čidla
   const C = await import("../src/core/cells");
   const D = 86400000, pts = [0, 10, 20, 30, 40, 50].map((d, i) => ({ t: d * D, mv: 50 - i * 2, lin: [1, 0.99, 0.98, 0.93, 0.92, 0.9][i] }));

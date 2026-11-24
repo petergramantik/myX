@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { HYD_LABEL, gearVol, tankMix, tankVol, uid, type Prep, type PrepTank } from "../app/model";
 import { tankLabel } from "./Gear";
-import { saveSettings } from "../app/store";
+import { rbAssign, saveSettings, saveTank } from "../app/store";
+import { diveDilMix, rbMatch } from "../app/gearSync";
+import { ask } from "../app/dialog";
 import { num, useStore } from "./common";
 
 /** Pod touto hodnotou počítač měří jen středotlak – lahev nebyla otevřená (P). */
@@ -96,7 +98,7 @@ function summary(p?: Prep): string {
   return parts.join(" · ") || "nevyplněno";
 }
 
-export function PrepCard({ prep, onChange, real, cc = true }: { prep?: Prep; onChange: (p: Prep) => void; real?: { dil: number | null; o2: number | null }; cc?: boolean }) {
+export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: Prep; onChange: (p: Prep) => void; real?: { dil: number | null; o2: number | null }; cc?: boolean; /** u ponoru: přiřazení on-board lahví z Výstroje */ diveId?: string }) {
   const st = useStore();
   const [open, setOpen] = useState(false);
   const [gas, setGas] = useState(st.lb.settings.co2Cal?.gas || "vzduch");
@@ -109,16 +111,41 @@ export function PrepCard({ prep, onChange, real, cc = true }: { prep?: Prep; onC
     .sort((a, b) => (b.updated || 0) - (a.updated || 0))[0]?.prep?.tanks;
   const worst = [p.o2, p.dil, ...tanks.map((t) => t.bar)].some((b) => b != null && b < 50) ? "c-bad" : [p.o2, p.dil, ...tanks.map((t) => t.bar)].some((b) => b != null && b < 100) ? "c-warn" : "";
 
+  // on-board lahev z Výstroje přiřazená k ponoru (automaticky rozpoznaná nebo ručně vybraná)
+  const meta = diveId ? st.metas.find((m) => m.id === diveId) : undefined;
+  const rbSel = (key: "o2" | "dil") => {
+    if (!meta) return null;
+    const list = Object.values(st.lb.tanks || {}).filter((t) => t.onboard === key).sort((a, b) => (a.name || "").localeCompare(b.name || "", "cs", { numeric: true }));
+    if (!list.length) return null;
+    const cur = st.lb.notes[meta.id]?.rb?.[key];
+    const why = !cur ? rbMatch(st.lb, meta, key).why : "";
+    return (
+      <div className="prep-row rb-row">
+        <span className="prep-l small muted">lahev</span>
+        <select value={cur?.id || ""} onChange={async (e) => {
+          const id = e.target.value || null;
+          await rbAssign(meta.id, key, id);
+          const t = id ? st.lb.tanks?.[id] : undefined, mix = diveDilMix(meta);
+          if (key === "dil" && t && mix && tankMix(t.mix) !== mix && await ask(`Směs v logu je ${mix}, u ${t.name} je ${t.mix}. Změnit směs lahve na ${mix}?`, { ok: "Změnit" }))
+            await saveTank({ ...t, mix: (() => { const [o, h] = mix.split("/").map(Number); return gasName(o, h); })() });
+        }}>
+          <option value="">{cur ? "nepřiřazeno" : "Která lahev?"}</option>{list.map((t) => <option key={t.id} value={t.id}>{t.name} · {t.mix}{t.bar != null ? ` · ${t.bar} bar` : ""}</option>)}
+        </select>
+        {cur?.auto ? <span className="small muted">auto</span> : !cur ? <span className="small c-warn">{why}</span> : null}
+      </div>
+    );
+  };
   const onboard = (key: "o2" | "dil", label: string) => {
     const r = real?.[key];
-    return (
+    return (<>
       <div className="prep-row">
         <span className="prep-l">{label}</span>
         <BarInput value={p[key]} onSave={(v) => upd({ [key]: v })} />
         <span className="muted small">{r != null && r < CLOSED ? <>bez změny <span title="počítač naměřil jen středotlak – lahev nebyla otevřená">(lahev zavřená)</span></>
           : r != null ? <>reálně <b className={lvl(r)}>{num(r, 0)} bar</b>{p[key] != null ? ` (${r - p[key]! >= 0 ? "+" : ""}${num(r - p[key]!, 0)})` : ""}</> : real ? "počítač tlak nezná" : ""}</span>
       </div>
-    );
+      {rbSel(key)}
+    </>);
   };
 
   return (

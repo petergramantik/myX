@@ -796,7 +796,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
       {!st.guest && <SuggestCard meta={meta} />}
-      {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} onChange={(p) => setNote(id, p)} real={{ dil: meta.sum.dilStart, o2: meta.sum.o2Start }} cc={isCC(meta.h)} />}
+      {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} diveId={id} onChange={(p) => setNote(id, p)} real={{ dil: meta.sum.dilStart, o2: meta.sum.o2Start }} cc={isCC(meta.h)} />}
       {isCC(meta.h) ? <GasUseCard id={id} meta={meta} note={note} /> : <SupplyGasCard id={id} meta={meta} note={note} />}
       {bo && !st.guest && d && <BailoutCard d={d} bo={bo} />}
       <BuddyDivesCard meta={meta} />

@@ -2,9 +2,11 @@
 // Upozornění na termíny jsou jen tady – nepatří mezi upozornění k ponorům.
 import { useState } from "react";
 import { GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
-import { deleteReg, deleteTank, ownMetas, saveReg, saveSettings, saveTank } from "../app/store";
+import { deleteReg, deleteTank, ownMetas, saveReg, saveTank } from "../app/store";
+import { RB_TOL, rbMatch } from "../app/gearSync";
+import { isCC } from "../core/rig";
 import { ask, askText as promptText } from "../app/dialog";
-import { Card, num, tab, useStore } from "./common";
+import { Card, go, num, tab, useStore } from "./common";
 
 const GASES = ["vzduch", "O₂", "EAN32", "EAN36", "EAN50", "TMX 21/35", "TMX 18/45", "TMX 15/55", "TMX 10/70", "Argon"];
 const HOSE_TYPES: GearHose["type"][] = ["HP", "LP", "inflátor", "Swagelok"];
@@ -33,11 +35,13 @@ export function GearScreen({ sub = "home", id }: { sub?: "home" | "tanks" | "reg
 // ---------- Přehled
 function GearHome() {
   const st = useStore();
-  const tanks = Object.values(st.lb.tanks || {}).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs"));
+  const all = Object.values(st.lb.tanks || {}).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }));
+  const tanks = all.filter((t) => !t.onboard);
   const regs = Object.values(st.lb.regs || {}).sort((a, b) => a.name.localeCompare(b.name, "cs"));
   return (<>
+    <OnboardCard tanks={all} />
     <Card title="Láhve" right={<button className="btn small" onClick={() => tab({ t: "gear", sub: "tanks" })}>Spravovat ›</button>}>
-      {!tanks.length && <p className="muted">Zatím žádné lahve. Přidej je v Láhve.</p>}
+      {!tanks.length && <p className="muted">Zatím žádné off-board lahve. Přidej je v Láhve.</p>}
       {tanks.map((t) => { const due = dueState(tankDue(t)); return (
         <div key={t.id} className="gear-row link" onClick={() => tab({ t: "gear", sub: "tanks", id: t.id })}>
           <span><b>{tankLabel(t)}</b>{t.onboard ? <small className="muted"> · on-board {t.onboard === "o2" ? "O₂" : "diluent"}</small> : null}{t.o2 ? <span className="pill info">O₂ čisté</span> : null}</span>
@@ -45,34 +49,37 @@ function GearHome() {
           {due !== "ok" && due !== "none" && <small className={DUE_CLS[due]}>revize {fmtD(tankDue(t))}</small>}
         </div>); })}
     </Card>
-    <OnboardCard tanks={tanks} />
     {regs.map((r) => <RegPanel key={r.id} r={r} />)}
     {!regs.length && <Card title="Sestavy"><p className="muted">Zatím žádné sestavy. Přidej automatiky v Automatiky.</p><button className="btn" onClick={() => tab({ t: "gear", sub: "regs" })}>Automatiky ›</button></Card>}
     <p className="note">Termíny revizí a servisů: 30 dní předem žlutě, po termínu červeně. Upozornění na ně jsou jen tady ve Výstroji.</p>
   </>);
 }
 
-/** On-board lahve rebreatheru: vazba na lahev z Výstroje nebo jen objem (pro výpočty spotřeby). */
+/** On-board lahve rebreatheru (RB O2 n / RB DIL n): přiřazení k poslednímu ponoru, tlak, přidání další lahve. */
 function OnboardCard({ tanks }: { tanks: GearTank[] }) {
   const st = useStore();
-  const cyl = st.lb.settings.cyl || { dil: 3, o2: 3 };
-  const row = (g: "o2" | "dil", label: string) => {
-    const linked = tanks.find((t) => t.onboard === g);
-    return (
-      <div className="prep-row">
-        <span className="prep-l">{label}</span>
-        <select value={linked?.id || ""} onChange={(e) => { const t = tanks.find((x) => x.id === e.target.value); if (t) saveTank({ ...t, onboard: g }); else if (linked) saveTank({ ...linked, onboard: undefined }); }}>
-          <option value="">jen objem</option>{tanks.map((t) => <option key={t.id} value={t.id}>{tankLabel(t)}</option>)}
-        </select>
-        {linked ? <span className="small muted">{num(gearVol(linked), 1)} l{linked.bar != null ? ` · ${linked.bar} bar` : ""}</span>
-          : <><input className="num-s" inputMode="decimal" defaultValue={cyl[g]} onBlur={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); if (v > 0) saveSettings({ cyl: { ...cyl, [g]: v } }); }} /><span className="small">l</span></>}
-      </div>
-    );
+  const cc = ownMetas().filter((m) => isCC(m.h));
+  const last = cc[cc.length - 1];
+  const rb = last ? st.lb.notes[last.id]?.rb : undefined;
+  const role = (g: "o2" | "dil", label: string) => {
+    const list = tanks.filter((t) => t.onboard === g).sort((a, b) => (a.name || "").localeCompare(b.name || "", "cs", { numeric: true }));
+    const un = last && list.length && !rb?.[g];
+    return (<>
+      <h3 className="subh">{label}</h3>
+      {list.map((t) => (
+        <div key={t.id} className="gear-row link" onClick={() => tab({ t: "gear", sub: "tanks", id: t.id })}>
+          <span><b>{tankLabel(t)}</b> <small className="muted">{num(gearVol(t), 1)} l</small>{rb?.[g]?.id === t.id ? <span className="pill info">poslední ponor</span> : null}</span>
+          <span className="gear-v"><b>{t.mix}</b> · <b className={lvlBar(t.bar)}>{t.bar != null ? `${t.bar} bar` : "– bar"}</b>{t.check ? <small className="c-warn"> zkontrolovat</small> : null}</span>
+        </div>
+      ))}
+      {un ? <div className="reason warn link" onClick={() => go({ t: "dive", id: last!.id })}>Ponor {fmtMs(last!.start * 1000)}: nepřiřazená lahev {label} ({rbMatch(st.lb, last!, g).why}) – vyber ji v detailu ponoru v „Před a po ponoru“ ›</div> : null}
+      <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: g === "o2" ? "O₂" : list[0]?.mix || "vzduch", onboard: g })}>＋ {g === "o2" ? "RB O2" : "RB DIL"}</button>
+    </>);
   };
   return (
     <Card title="On-board lahve rebreatheru">
-      {row("o2", "O₂")}{row("dil", "Diluent")}
-      <p className="note">Objem se používá pro výpočty spotřeby. U lahve z Výstroje se po každém ponoru převezme tlak na konci z počítače; když byla lahev zavřená (jen mezitlak) nebo tlak chybí, tlak se nepřepíše a u lahve bude „zkontrolovat“.</p>
+      {role("o2", "O₂")}{role("dil", "Diluent")}
+      <p className="note">Po každém ponoru myX rozpozná, která lahev byla v rebreatheru – diluent podle směsi z logu, pak podle tlaku na začátku ponoru proti zbytkovému tlaku (±{RB_TOL} bar). Přiřazená lahev převezme tlak na konci ponoru; zavřená (jen mezitlak) se nepřepíše a bude „zkontrolovat“. Když to nejde jednoznačně, vybereš lahev v detailu ponoru. Objem poslední upravené lahve se používá pro výpočty spotřeby.</p>
     </Card>
   );
 }
@@ -107,7 +114,7 @@ async function addFault(r: GearReg) {
 function TankList({ open }: { open?: string }) {
   const st = useStore();
   const [edit, setEdit] = useState<string | null>(open || null);
-  const tanks = Object.values(st.lb.tanks || {}).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs"));
+  const tanks = Object.values(st.lb.tanks || {}).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }));
   return (<>
     {tanks.map((t) => <TankCard key={t.id} t={t} edit={edit === t.id} setEdit={(v) => setEdit(v ? t.id : null)} />)}
     {edit === "new" ? <Card title="Nová lahev"><TankForm init={{ kind: "S80", vol: 11.1, mix: "vzduch" }} onDone={() => setEdit(null)} /></Card>

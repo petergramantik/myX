@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44-dev.1";
+export const APP_VERSION = "1.44-dev.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44-dev.2", date: "2026-11-24", title: "On-board lahve RB O2 / RB DIL (dev)", items: [
+    "On-board lahve rebreatheru jako lahve ve Výstroji (RB O2 n, RB DIL n); první dvě se založí z posledního ponoru.",
+    "Po ponoru se rozpozná, která lahev byla v rebreatheru (diluent podle směsi, pak tlaku; O₂ podle tlaku), a převezme tlak na konci; nejednoznačné přiřazení se vybere v detailu ponoru.",
+  ] },
   { version: "1.44-dev.1", date: "2026-11-24", title: "Výstroj, bailout, SurfGF, trend čidel (dev)", items: [
     "Nová záložka Výstroj: lahve (Dvojče, směs, zbytkový tlak, revize, O₂ čisté), on-board lahve rebreatheru, automatiky (1. a 2. stupeň se servisem, hadice), závady a jejich řešení; termíny jen ve Výstroji.",
     "Lahve z Výstroje v „Před a po ponoru“ – tlak po ponoru se zapíše k lahvi; zavřená lahev se nepřepíše („zkontrolovat“).",
