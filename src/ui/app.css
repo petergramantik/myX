@@ -587,3 +587,15 @@ p.sub-role { margin: -6px 0 6px; font-size: 0.85em; }
 .grp-box .chip { background: var(--panel); border: 1px solid var(--line); color: var(--muted); border-radius: 14px; padding: 4px 10px; font-size: 12px; }
 .grp-box .chip.on { background: #0277bd; color: #fff; border-color: #0288d1; }
 .grp-new input { width: 150px; padding: 4px 8px; font-size: 12px; }
+
+/* Láhve: odstup karet, štítky skupin vpravo dole, pruh revize s textem pod nimi */
+.tsec .tcards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.tsec .tcards .card { margin: 0; }
+.card.gear-tank:has(.tt-rev) { padding-bottom: 12px; }
+.card.gear-tank:has(.rev-bar) { padding-bottom: 0; }
+.tank-tags { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.tank-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; }
+.rev-bar { margin: 8px -14px 0; padding: 5px 14px; font-size: 12px; font-weight: 600; text-align: right; }
+.rev-bar.over { background: #6a1b7a; color: #f3e5f5; } .rev-bar.soon { background: #4a2a55; color: #e1bee7; }
+.grp-ord { font-weight: 400; font-size: 0.7em; }
+.grp-edit { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }

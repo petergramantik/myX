@@ -61,7 +61,7 @@ export interface Battery { id: string; pos: 1 | 2; maker: string; model?: string
 export interface HeadBatTh { headBatHours: number; headBatMonths: number } // 0 = vypnuto
 /** Ruční údaj o poslední kalibraci čidla CO₂ (log ji neukládá). */
 export interface Co2Cal { date: string; gas: string }
-export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; /** spotřeba ve stresu pro výpočet bailoutu (l/min), vzduch do hloubky (m), násobek TTS pro dekompresi na OC */ boSac?: number; boAirMax?: number; boTtsMul?: number; /** lahve mimo rebreather: „Doplnit“ pod tolika % plnicího tlaku; výchozí plnicí tlak (bar) */ fillPct?: number; fillBar?: number; /** SurfGF při vynoření: vypnuto / hranice upozornění (%) */ surfGfOff?: boolean; surfGfLim?: number; co2Cal?: Co2Cal | null; /** poslední potvrzená kalibrace čidel O₂ (z přípravy) */ o2Cal?: { date: string } | null; motto?: boolean; cyl?: { dil: number; o2: number }; /** objemy on-board lahví parťáků (l) podle počítače – pro srovnání spotřeby */ cylOf?: Record<string, { o2?: number; dil?: number }>; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; /** moje jméno ve sdíleném srovnání (místo „Já“) */ myName?: string; updated: number }
+export interface Settings { th: Thresholds & CellThresholds & HeadBatTh; manualFill: number | null; /** spotřeba ve stresu pro výpočet bailoutu (l/min), vzduch do hloubky (m), násobek TTS pro dekompresi na OC */ boSac?: number; boAirMax?: number; boTtsMul?: number; /** lahve mimo rebreather: „Doplnit“ pod tolika % plnicího tlaku; výchozí plnicí tlak (bar) */ fillPct?: number; fillBar?: number; /** pořadí skupin lahví (název → číslo) */ tankGroupOrd?: Record<string, number>; /** SurfGF při vynoření: vypnuto / hranice upozornění (%) */ surfGfOff?: boolean; surfGfLim?: number; co2Cal?: Co2Cal | null; /** poslední potvrzená kalibrace čidel O₂ (z přípravy) */ o2Cal?: { date: string } | null; motto?: boolean; cyl?: { dil: number; o2: number }; /** objemy on-board lahví parťáků (l) podle počítače – pro srovnání spotřeby */ cylOf?: Record<string, { o2?: number; dil?: number }>; spLateSet?: boolean; /** spojit záznamy s povrchovým intervalem do (min), 0 = vypnuto */ segGap?: number; /** ruční spojení / rozdělení: id záznamu → true = připojit k předchozímu, false = oddělit */ segOv?: Record<string, boolean>; /** „Baterii jsem vyměnil“: sériové číslo počítače → místní čas kliknutí (skryje upozornění do dalšího ponoru) */ batSwap?: Record<string, number>; /** moje jméno ve sdíleném srovnání (místo „Já“) */ myName?: string; updated: number }
 
 export interface Logbook {
   drafts: Record<string, Draft>;
@@ -101,6 +101,14 @@ export interface GearHose { id: string; len?: number; type: "HP" | "LP" | "infl�
 export interface GearFault { id: string; at: number; text: string; diveId?: string; fix?: { at: number; kind: "oprava" | "výměna"; text?: string } }
 /** Sestava = automatika (1. a 2. stupeň s hadicemi). */
 export interface GearReg { id: string; name: string; s1: GearStage; s2: GearStage; hoses: GearHose[]; o2?: boolean; faults: GearFault[]; note?: string; updated: number }
+/** Jak dlouho po termínu (revize): „3 roky“, „7 měsíců“, „méně než měsíc“ – roky zaokrouhlené, pod rok měsíce. */
+export function overdueText(due: string, now = Date.now()): string {
+  const m = Math.round((now - new Date(due).getTime()) / (30.44 * 86400000));
+  const cz = (n: number, a: string, b: string, c: string) => `${n} ${n === 1 ? a : n >= 2 && n <= 4 ? b : c}`;
+  if (m < 1) return "méně než měsíc";
+  if (m < 12) return cz(m, "měsíc", "měsíce", "měsíců");
+  return cz(Math.round(m / 12), "rok", "roky", "let");
+}
 export const REV_YEARS = 5, SVC_YEARS = 2, FILL_PCT = 85, FILL_BAR = 200, RB_LOW = 100;
 /** Pod jakým tlakem lahev „Doplnit“: on-board 100 bar, ostatní % plnicího tlaku (lahve na plnění se nehlídají → null). */
 export function tankLowBar(t: GearTank, set?: { fillPct?: number; fillBar?: number }): number | null {
