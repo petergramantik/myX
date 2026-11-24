@@ -1,10 +1,10 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44.3-dev.1";
+export const APP_VERSION = "1.44.3";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.44.3-dev.1", date: "2026-11-24", title: "Řazení lahví podle druhu (dev)", items: [
+  { version: "1.44.3", date: "2026-11-24", title: "Řazení lahví podle druhu, spolehlivější nasazení", items: [
     "Výstroj: lahev v pořádku má zelený rámeček (i s pruhem revize).",
     "On-board: O₂ a Diluent (diluenty seřazené podle plynu); ostatní lahve v podkategoriích podle druhu (S80, S40, 12 l, Dvojče…), uvnitř stejný plyn u sebe a od nejvyššího tlaku.",
   ] },
