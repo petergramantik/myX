@@ -1,7 +1,7 @@
 // Výstroj: moje lahve, sestavy (automatiky s hadicemi), revize a servisy, závady a jejich řešení.
 // Upozornění na termíny jsou jen tady – nepatří mezi upozornění k ponorům.
 import { useEffect, useState } from "react";
-import { GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
+import { GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, tankMix, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
 import { deleteReg, deleteTank, ownMetas, saveReg, saveTank } from "../app/store";
 import { RB_TOL, rbMatch } from "../app/gearSync";
 import { isCC } from "../core/rig";
@@ -56,6 +56,28 @@ export function tankState(t: GearTank): { lvl: "ok" | "warn" | "bad" | "none"; l
   return { lvl: "ok", label: "OK" };
 }
 
+/** Pořadí plynů ve skupinách: vzduch, EAN (podle O₂), TMX (podle O₂ sestupně), O₂, argon, ostatní. */
+function gasRank(mix: string): [number, number] {
+  const m = tankMix(mix);
+  if (/^argon$/i.test(mix.trim())) return [5, 0];
+  if (!m) return [6, 0];
+  const [o, h] = m.split("/").map(Number);
+  if (o === 100) return [4, 0];
+  if (h > 0) return [3, -o * 100 - h];
+  if (o === 21) return [1, 0];
+  return [2, o];
+}
+/** Skupiny lahví v sekci: On-board nejdřív O₂, pak diluenty podle plynu; ostatní podle plynu. Ve skupině od nejvyššího tlaku. */
+export function tankGroups(list: GearTank[], sec: string): { key: string; label: string; tanks: GearTank[] }[] {
+  const key = (t: GearTank) => (sec === "onboard" && t.onboard === "o2" ? "0|O₂" : `${gasRank(t.mix).join(",")}|${t.mix}`);
+  const map = new Map<string, GearTank[]>();
+  for (const t of list) map.set(key(t), [...(map.get(key(t)) || []), t]);
+  const rank = (k: string) => (k.startsWith("0|") ? [0, 0] : k.split("|")[0].split(",").map(Number));
+  return [...map.entries()]
+    .sort((a, b) => { const x = rank(a[0]), y = rank(b[0]); return x[0] - y[0] || x[1] - y[1]; })
+    .map(([k, ts]) => ({ key: k, label: k.split("|")[1], tanks: ts.sort((a, b) => (b.bar ?? -1) - (a.bar ?? -1) || tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true })) }));
+}
+
 function TankTile({ t }: { t: GearTank }) {
   const s = tankState(t);
   return (
@@ -65,6 +87,18 @@ function TankTile({ t }: { t: GearTank }) {
       <div className="ct-v">{t.bar != null ? t.bar : "–"}<small>bar</small></div>
       <div className={"ct-l " + s.lvl}>{s.label}</div>
     </div>
+  );
+}
+
+/** Přidání on-board lahve (RB O2 / RB DIL); onlyMissing = jen chybějící druh (Přehled). */
+function RbAdd({ all, onlyMissing }: { all: GearTank[]; onlyMissing?: boolean }) {
+  const hasO2 = all.some((t) => t.onboard === "o2"), hasDil = all.some((t) => t.onboard === "dil");
+  if (onlyMissing && hasO2 && hasDil) return null;
+  return (
+    <span className="row">
+      {(!onlyMissing || !hasO2) && <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: "O₂", onboard: "o2" })}>＋ RB O2</button>}
+      {(!onlyMissing || !hasDil) && <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: all.find((t) => t.onboard === "dil")?.mix || "vzduch", onboard: "dil" })}>＋ RB DIL</button>}
+    </span>
   );
 }
 
@@ -82,11 +116,13 @@ function GearHome() {
       if (!list.length && k !== "onboard") return null;
       return (
         <section key={k} className="card">
-          <div className="card-h"><h2>{label}</h2>{k === "onboard" && <span className="row">
-            <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: "O₂", onboard: "o2" })}>＋ RB O2</button>
-            <button className="btn small" onClick={() => saveTank({ kind: "3 l", vol: 3, mix: all.find((t) => t.onboard === "dil")?.mix || "vzduch", onboard: "dil" })}>＋ RB DIL</button>
-          </span>}</div>
-          {list.length ? <div className="cells">{list.map((t) => <TankTile key={t.id} t={t} />)}</div> : <p className="muted small">Zatím žádné lahve rebreatheru.</p>}
+          <div className="card-h"><h2>{label}</h2>{k === "onboard" && <RbAdd all={all} onlyMissing />}</div>
+          {list.length ? tankGroups(list, k).map((g) => (
+            <div key={g.key} className="tgroup">
+              {tankGroups(list, k).length > 1 && <div className="tg-l">{g.label}</div>}
+              <div className="cells">{g.tanks.map((t) => <TankTile key={t.id} t={t} />)}</div>
+            </div>
+          )) : <p className="muted small">Zatím žádné lahve rebreatheru.</p>}
           {k === "onboard" && unassigned.map((g) => (
             <div key={g} className="reason warn link" onClick={() => go({ t: "dive", id: last!.id })}>Ponor {fmtMs(last!.start * 1000)}: nepřiřazená lahev {g === "o2" ? "O₂" : "diluentu"} ({rbMatch(st.lb, last!, g).why}) – vyber ji v detailu ponoru v „Před a po ponoru“ ›</div>
           ))}
@@ -94,7 +130,7 @@ function GearHome() {
         </section>
       );
     })}
-    <div className="row"><button className="btn" onClick={() => tab({ t: "gear", sub: "tanks", id: "new" })}>＋ Přidat lahev</button><button className="btn" onClick={() => tab({ t: "gear", sub: "tanks" })}>Láhve ›</button></div>
+    <div className="row"><button className="btn" onClick={() => tab({ t: "gear", sub: "tanks" })}>Láhve ›</button></div>
     {regs.map((r) => <RegPanel key={r.id} r={r} />)}
     {!regs.length && <Card title="Sestavy"><p className="muted">Zatím žádné sestavy. Přidej automatiky v Automatiky.</p><button className="btn" onClick={() => tab({ t: "gear", sub: "regs" })}>Automatiky ›</button></Card>}
     <p className="note">Dlaždice: OK, Doplnit (pod 100 bar), Prázdná (pod 50 bar), Ověřit (tlak se po ponoru nepřepsal), Revize (30 dní předem žlutě, po termínu červeně). Upozornění na revize a servisy jsou jen tady ve Výstroji.</p>
@@ -134,7 +170,16 @@ function TankList({ open }: { open?: string }) {
   useEffect(() => { if (open && open !== "new") setTimeout(() => document.getElementById("tank-" + open)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }, [open]);
   const tanks = Object.values(st.lb.tanks || {}).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }));
   return (<>
-    {tanks.map((t) => <TankCard key={t.id} t={t} edit={edit === t.id} setEdit={(v) => setEdit(v ? t.id : null)} />)}
+    {SECS.map(([k, label]) => {
+      const list = tanks.filter((t) => tankSec(t) === k);
+      if (!list.length && k !== "onboard") return null;
+      return (
+        <div key={k} className="tsec">
+          <div className="tsec-h"><h3 className="subh">{label}</h3>{k === "onboard" && <RbAdd all={tanks} />}</div>
+          {tankGroups(list, k).map((g) => g.tanks.map((t) => <TankCard key={t.id} t={t} edit={edit === t.id} setEdit={(v) => setEdit(v ? t.id : null)} />))}
+        </div>
+      );
+    })}
     {edit === "new" ? <Card title="Nová lahev"><TankForm init={{ kind: "S80", vol: 11.1, mix: "vzduch" }} onDone={() => setEdit(null)} /></Card>
       : <button className="btn primary" onClick={() => setEdit("new")}>＋ Přidat lahev</button>}
     <p className="note">Dvojče = 2 ocelové lahve jako jedna lahev. Revize se dopočítá z poslední ({REV_YEARS} let), termín i interval jde změnit.</p>

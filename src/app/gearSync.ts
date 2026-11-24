@@ -23,7 +23,7 @@ export function gearTankApply(lb: Logbook, diveId: string, meta?: Meta): boolean
     const end = t.same ? t.bar : t.end;
     if (g.fromDive?.id === diveId && g.fromDive.end === end) continue;  // už převzato
     if ((g.barAt || 0) > endT * 1000 && g.fromDive?.id !== diveId) continue; // novější údaj (pozdější ponor nebo ruční zadání)
-    if (end == null) lb.tanks[g.id] = { ...g, check: { at: Date.now(), text: `po ponoru ${meta ? dd(meta.start) : ""} chybí tlak „po“ – ověř` }, fromDive: { id: diveId, end }, updated: Date.now() };
+    if (end == null) lb.tanks[g.id] = { ...g, check: { at: Date.now(), text: `po ponoru ${meta ? dd(meta.start) : ""} chybí tlak „po“` }, fromDive: { id: diveId, end }, updated: Date.now() };
     else lb.tanks[g.id] = { ...g, bar: end, barAt: endT * 1000, check: undefined, fromDive: { id: diveId, end }, updated: Date.now() };
     ch = true;
   }
@@ -64,7 +64,7 @@ export function rbApply(lb: Logbook, m: Meta, role: RbRole, id: string): void {
   const closed = end == null || end < CLOSED || (start != null && start < CLOSED);
   const prev = g.fromDive?.id === m.id ? g.fromDive.prev : { bar: g.bar, barAt: g.barAt };
   lb.tanks![id] = closed
-    ? { ...g, check: { at: Date.now(), text: `po ponoru ${dd(m.start)} ${end == null ? "počítač tlak nezná" : "lahev byla zavřená (jen mezitlak)"} – ověř` }, fromDive: { id: m.id, prev }, updated: Date.now() }
+    ? { ...g, check: { at: Date.now(), text: `po ponoru ${dd(m.start)} ${end == null ? "počítač tlak nezná" : "lahev byla zavřená (jen mezitlak)"}` }, fromDive: { id: m.id, prev }, updated: Date.now() }
     : { ...g, bar: Math.round(end!), barAt: endT, check: undefined, fromDive: { id: m.id, end: Math.round(end!), prev }, updated: Date.now() };
 }
 

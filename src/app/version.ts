@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44-dev.4";
+export const APP_VERSION = "1.44-dev.5";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.44-dev.5", date: "2026-11-24", title: "Skupiny lahví (dev)", items: [
+    "Výstroj: sekce i v Láhvích; uvnitř sekce skupiny (on-board O₂, pak diluenty podle plynu; ostatní podle plynu), řazení od nejvyššího tlaku. Tlačítka RB O2 / RB DIL na Přehledu jen když chybí, v Láhvích vždy.",
+  ] },
   { version: "1.44-dev.4", date: "2026-11-24", title: "Dlaždice lahví, popisky baterií (dev)", items: [
     "Přehled Výstroje: lahve jako dlaždice v sekcích On-board, Stage, Twin, Mono, Argon a Plnění; stav OK / Doplnit / Prázdná / Ověřit / Revize.",
     "Baterie v hlavě: nadpis Hlava 1 / Hlava 2, funkce (solenoid, HUD a výstup pO₂) menším šedým písmem pod ním.",
