@@ -1,10 +1,10 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.44.4-dev.1";
+export const APP_VERSION = "1.44.4";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.44.4-dev.1", date: "2026-11-24", title: "Doplnit podle plnicího tlaku (dev)", items: [
+  { version: "1.44.4", date: "2026-11-24", title: "Doplnit podle plnicího tlaku", items: [
     "Lahve mimo rebreather: „Doplnit“ pod 85 % plnicího tlaku (výchozí 200 bar; procenta a tlak v Nastavení → Výbava, u lahve vlastní plnicí tlak). On-board lahve dál pod 100 bar.",
   ] },
   { version: "1.44.3", date: "2026-11-24", title: "Řazení lahví podle druhu, spolehlivější nasazení", items: [
