@@ -1,10 +1,10 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.45-dev.1";
+export const APP_VERSION = "1.45";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.45-dev.1", date: "2026-11-24", title: "Skupiny lahví (dev)", items: [
+  { version: "1.45", date: "2026-11-24", title: "Skupiny lahví", items: [
     "Lahve ve vlastních skupinách (např. RB, Kurzy; lahev i ve více): přiřazení v Láhve → Upravit → Skupiny, na Přehledu Výstroje přepínač Typ / Skupiny, přejmenování a smazání skupiny.",
     "Karty lahví v Láhvích se stejnými barvami jako dlaždice (rámeček podle plnosti, fialový pruh revize, stav u tlaku).",
   ] },
