@@ -68,15 +68,17 @@ function gasRank(mix: string): [number, number] {
   if (o === 21) return [1, 0];
   return [2, o];
 }
-/** Skupiny lahví v sekci: On-board nejdřív O₂, pak diluenty podle plynu; ostatní podle plynu. Ve skupině od nejvyššího tlaku. */
+/** Skupiny lahví v sekci: On-board O₂ a Diluent; ostatní podle druhu lahve (S80, S40, …). Ve skupině seřazeno podle plynu
+ *  (stejný plyn u sebe: AIR, EAN, TMX, O₂, argon), v rámci plynu od nejvyššího tlaku. */
 export function tankGroups(list: GearTank[], sec: string): { key: string; label: string; tanks: GearTank[] }[] {
-  const key = (t: GearTank) => (sec === "onboard" && t.onboard === "o2" ? "0|O₂" : `${gasRank(t.mix).join(",")}|${gasDisp(t.mix)}`);
+  const kindOrd = (t: GearTank) => { const k = GEAR_TANK_KINDS.indexOf(t.kind); return (k < 0 ? 99 : k) * 1000 + t.vol; };
+  const key = (t: GearTank) => (sec === "onboard" ? (t.onboard === "o2" ? "0|O₂" : "1|Diluent") : `${kindOrd(t)}|${t.kind === "Dvojče" || t.kind === "Jiná" ? tankLabel({ ...t, name: undefined }) : t.kind}`);
   const map = new Map<string, GearTank[]>();
   for (const t of list) map.set(key(t), [...(map.get(key(t)) || []), t]);
-  const rank = (k: string) => (k.startsWith("0|") ? [0, 0] : k.split("|")[0].split(",").map(Number));
+  const byGas = (a: GearTank, b: GearTank) => { const x = gasRank(a.mix), y = gasRank(b.mix); return x[0] - y[0] || x[1] - y[1] || gasDisp(a.mix).localeCompare(gasDisp(b.mix)) || (b.bar ?? -1) - (a.bar ?? -1) || tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }); };
   return [...map.entries()]
-    .sort((a, b) => { const x = rank(a[0]), y = rank(b[0]); return x[0] - y[0] || x[1] - y[1]; })
-    .map(([k, ts]) => ({ key: k, label: gasDisp(k.split("|")[1]), tanks: ts.sort((a, b) => (b.bar ?? -1) - (a.bar ?? -1) || tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true })) }));
+    .sort((a, b) => +a[0].split("|")[0] - +b[0].split("|")[0])
+    .map(([k, ts]) => ({ key: k, label: k.split("|")[1], tanks: ts.sort(byGas) }));
 }
 
 function TankTile({ t }: { t: GearTank }) {
@@ -121,7 +123,7 @@ function GearHome() {
           <div className="card-h"><h2>{label}</h2>{k === "onboard" && <RbAdd all={all} onlyMissing />}</div>
           {list.length ? tankGroups(list, k).map((g) => (
             <div key={g.key} className="tgroup">
-              {tankGroups(list, k).length > 1 && <div className="tg-l" style={{ color: gasColorOf(g.label) || undefined }}>{g.label}</div>}
+              {tankGroups(list, k).length > 1 && <div className="tg-l">{g.label}</div>}
               <div className="cells">{g.tanks.map((t) => <TankTile key={t.id} t={t} />)}</div>
             </div>
           )) : <p className="muted small">Zatím žádné lahve rebreatheru.</p>}
@@ -135,7 +137,7 @@ function GearHome() {
     <div className="row"><button className="btn" onClick={() => tab({ t: "gear", sub: "tanks" })}>Láhve ›</button></div>
     {regs.map((r) => <RegPanel key={r.id} r={r} />)}
     {!regs.length && <Card title="Sestavy"><p className="muted">Zatím žádné sestavy. Přidej automatiky v Automatiky.</p><button className="btn" onClick={() => tab({ t: "gear", sub: "regs" })}>Automatiky ›</button></Card>}
-    <p className="note">Dlaždice: OK, Doplnit (pod 100 bar), Prázdná (pod 50 bar), Ověřit (tlak se po ponoru nepřepsal), Revize (30 dní předem žlutě, po termínu červeně). Upozornění na revize a servisy jsou jen tady ve Výstroji.</p>
+    <p className="note">Dlaždice: barva podle plnosti – OK (zeleně), Doplnit (pod 100 bar), Prázdná (pod 50 bar), Ověřit (tlak se po ponoru nepřepsal); revize jako fialový pruh dole (světlý 30 dní předem, sytý po termínu). Upozornění na revize a servisy jsou jen tady ve Výstroji.</p>
   </>);
 }
 
@@ -178,7 +180,7 @@ function TankList({ open }: { open?: string }) {
       return (
         <div key={k} className="tsec">
           <div className="tsec-h"><h3 className="subh">{label}</h3>{k === "onboard" && <RbAdd all={tanks} />}</div>
-          {tankGroups(list, k).map((g) => g.tanks.map((t) => <TankCard key={t.id} t={t} edit={edit === t.id} setEdit={(v) => setEdit(v ? t.id : null)} />))}
+          {tankGroups(list, k).map((g, _i, gs) => <div key={g.key}>{gs.length > 1 && <div className="tg-l">{g.label}</div>}{g.tanks.map((t) => <TankCard key={t.id} t={t} edit={edit === t.id} setEdit={(v) => setEdit(v ? t.id : null)} />)}</div>)}
         </div>
       );
     })}

@@ -568,3 +568,6 @@ p.sub-role { margin: -6px 0 6px; font-size: 0.85em; }
 .tt-rev.over { background: #ab47bc; } .tt-rev.soon { background: #ce93d8; }
 .tt-rev span { position: absolute; right: 8px; bottom: 5px; font-size: 0.62em; font-weight: 600; white-space: nowrap; }
 .tt-rev.over span { color: #ce93d8; } .tt-rev.soon span { color: #e1bee7; }
+
+/* Výstroj: lahev v pořádku (plnost) = zelený rámeček, i s pruhem revize */
+.celltile.tanktile.ok { border-color: var(--ok); }
