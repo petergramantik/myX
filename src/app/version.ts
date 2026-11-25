@@ -1,20 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.47-dev.3";
+export const APP_VERSION = "1.47";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.47-dev.3", date: "2026-11-25", title: "Tlak lahve bez historie (dev)", items: [
-    "Výběr lahve u ponoru: lahev bez záznamu před ponorem ukáže aktuální tlak s poznámkou „nyní“ (bez ✓ potvrzení).",
-  ] },
-  { version: "1.47-dev.2", date: "2026-11-25", title: "Před ponorem – úpravy (dev)", items: [
-    "Výběr lahve přes celou šířku (✕ vedle), pod ním tlak a role; u on-board lahví tlak z Výstroje ve výběru i vedle tlaku z logu.",
-    "Při rozporu tlaku z logu a Výstroje (nad 15 bar) tlačítko Potvrdit – zapíše kontrolu do historie lahve.",
-    "Po ponoru: u lahve s novějším záznamem (plnění, kontrola, další ponor) upozornění, že se tlak ve Výstroji nepřepíše.",
-  ] },
-  { version: "1.47-dev.1", date: "2026-11-25", title: "Před a po ponoru, historie lahví (dev)", items: [
-    "Před a po ponoru ve dvou částech: Před ponorem (lahve z Výstroje, tlak ✓ potvrdit nebo naměřený, „oblek“, hydratace, kalibrace) a Po ponoru (tlaky lahví, které počítač neměří, „jenom oblek“).",
-    "Výstroj: tlak lahve z historie (kontroly, plnění, ponory) – poslední událost vyhrává, starší ponor nepřepíše pozdější údaj; tlačítka Kontrola a Historie.",
+  { version: "1.47", date: "2026-11-25", title: "Před a po ponoru, historie lahví, oblek", items: [
+    "Před a po ponoru ve dvou částech: Před ponorem – lahve z Výstroje (výběr přes celou šířku, tlak ✓ potvrdit nebo naměřený, u on-board tlak z logu i z Výstroje, Potvrdit při rozporu nad 15 bar), „oblek“, hydratace, kalibrace; Po ponoru – tlaky lahví, které počítač neměří, „jenom oblek“, upozornění na novější záznam ve Výstroji.",
+    "Výstroj: tlak lahve z historie (kontroly, plnění, ponory) – poslední událost vyhrává, starší ponor nepřepíše pozdější údaj; tlačítka Kontrola (✓ tlak sedí, nový tlak, plnění se směsí) a Historie.",
     "Spotřeba na oblek v detailu ponoru a průměr na Přehledu.",
   ] },
   { version: "1.46.1", date: "2026-11-24", title: "Stav výstroje bez tlaků", items: [
