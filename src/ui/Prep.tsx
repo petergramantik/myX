@@ -41,6 +41,14 @@ function barBefore(lb: Logbook, id: string, t0?: number): number | undefined {
   return ev.length ? ev[ev.length - 1].bar! : undefined;
 }
 
+/** Tlak do výběru lahve: před ponorem, bez historie před ponorem aktuální („nyní“). */
+function optBar(lb: Logbook, id: string, t0?: number): string {
+  const b = barBefore(lb, id, t0);
+  if (b != null) return ` · ${b} bar`;
+  const now = lb.tanks?.[id]?.bar;
+  return now != null && t0 != null ? ` · ${now} bar (nyní)` : "";
+}
+
 /** Novější záznam lahve než konec ponoru (plnění, kontrola, jiný ponor) – tlak po ponoru se do Výstroje nepřepíše. */
 function laterNote(lb: Logbook, id: string | undefined, diveId?: string): string | null {
   if (!id || !diveId) return null;
@@ -83,7 +91,7 @@ function TankPre({ t, set, del, t0 }: { t: PrepTank; set: (p: Partial<PrepTank>)
           if (!x) { set({ gearId: undefined }); return; }
           set({ gearId: x.id, name: TANKS.includes(x.kind) ? x.kind : "Jiná", vol: gearVol(x), gas: gasDisp(x.mix), bar: undefined, ...(/^argon$/i.test(x.mix) ? { role: "suit" as const } : tankMix(x.mix) === "100/0" && t.role === "bo" ? { role: "deco" as const } : {}) });
         }}>
-          <option value="">{gear.length ? "lahev mimo Výstroj" : "lahev (Výstroj je prázdná)"}</option>{gear.map((x) => { const b = barBefore(st.lb, x.id, t0); return <option key={x.id} value={x.id}>{tankLabel(x)} · {gasDisp(x.mix)}{b != null ? ` · ${b} bar` : ""}</option>; })}
+          <option value="">{gear.length ? "lahev mimo Výstroj" : "lahev (Výstroj je prázdná)"}</option>{gear.map((x) => <option key={x.id} value={x.id}>{tankLabel(x)} · {gasDisp(x.mix)}{optBar(st.lb, x.id, t0)}</option>)}
         </select>
         <button className="btn small" aria-label="Odebrat" onClick={del}>✕</button>
       </div>
@@ -184,7 +192,7 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
         if (key === "dil" && t && mix && tankMix(t.mix) !== mix && await ask(`Směs v logu je ${mix}, u ${t.name} je ${gasDisp(t.mix)}. Změnit směs lahve na ${mix}?`, { ok: "Změnit" }))
           await saveTank({ ...t, mix: (() => { const [o, h] = mix.split("/").map(Number); return gasName(o, h); })() });
       }}>
-        <option value="">{cur ? "nepřiřazeno" : "Která lahev?"}</option>{list.map((t) => { const b = barBefore(st.lb, t.id, t0); return <option key={t.id} value={t.id}>{t.name} · {gasDisp(t.mix)}{b != null ? ` · ${b} bar` : ""}</option>; })}
+        <option value="">{cur ? "nepřiřazeno" : "Která lahev?"}</option>{list.map((t) => <option key={t.id} value={t.id}>{t.name} · {gasDisp(t.mix)}{optBar(st.lb, t.id, t0)}</option>)}
       </select>
     </>);
   };
@@ -198,7 +206,7 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
         <div className="prep-row"><span className="prep-l">{label}</span>{cur?.auto ? <span className="small muted">auto</span> : why ? <span className="small c-warn">{why}</span> : null}</div>
         <div className="pt-row pt-full">{rbSel(key)}</div>
         {rr != null && rr >= CLOSED
-          ? <div className="prep-row"><span className="prep-l small muted">tlak</span><span><b>{rr} bar</b> <span className="small muted">z logu{mg != null ? ` · Výstroj ${mg} bar` : ""}</span></span></div>
+          ? <div className="prep-row"><span className="prep-l small muted">tlak</span><span><b>{rr} bar</b> <span className="small muted">z logu{mg != null ? ` · Výstroj ${mg} bar` : cur && st.lb.tanks?.[cur.id]?.bar != null ? ` · Výstroj nyní ${st.lb.tanks[cur.id]!.bar} bar` : ""}</span></span></div>
           : <div className="prep-row"><span className="prep-l small muted">tlak</span><StartBar value={typed} mg={mg} onSave={(v) => upd({ [key]: v })} /></div>}
         {rr != null && rr >= CLOSED && diff && (p[confKey] === rr
           ? <div className="small c-ok">✓ {rr} bar potvrzeno (rozdíl proti Výstroji {rr - mg! > 0 ? "+" : ""}{rr - mg!} bar)</div>
