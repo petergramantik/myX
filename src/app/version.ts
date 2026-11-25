@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.47-dev.1";
+export const APP_VERSION = "1.47-dev.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.47-dev.2", date: "2026-11-25", title: "Před ponorem – úpravy (dev)", items: [
+    "Výběr lahve přes celou šířku (✕ vedle), pod ním tlak a role; u on-board lahví tlak z Výstroje ve výběru i vedle tlaku z logu.",
+    "Při rozporu tlaku z logu a Výstroje (nad 15 bar) tlačítko Potvrdit – zapíše kontrolu do historie lahve.",
+    "Po ponoru: u lahve s novějším záznamem (plnění, kontrola, další ponor) upozornění, že se tlak ve Výstroji nepřepíše.",
+  ] },
   { version: "1.47-dev.1", date: "2026-11-25", title: "Před a po ponoru, historie lahví (dev)", items: [
     "Před a po ponoru ve dvou částech: Před ponorem (lahve z Výstroje, tlak ✓ potvrdit nebo naměřený, „oblek“, hydratace, kalibrace) a Po ponoru (tlaky lahví, které počítač neměří, „jenom oblek“).",
     "Výstroj: tlak lahve z historie (kontroly, plnění, ponory) – poslední událost vyhrává, starší ponor nepřepíše pozdější údaj; tlačítka Kontrola a Historie.",

@@ -1323,11 +1323,11 @@ export function rbAssign(diveId: string, role: RbRole, tankId: string | null): P
   return saveLb(lb);
 }
 /** Kontrola lahve: potvrzení tlaku nebo nový tlak (plnění se směsí). */
-export function tankCheck(id: string, bar: number, fill?: boolean, mix?: string): Promise<void> {
+export function tankCheck(id: string, bar: number, fill?: boolean, mix?: string, at = Date.now()): Promise<void> {
   const lb = structuredClone(st.lb);
   const t = lb.tanks?.[id];
   if (!t) return Promise.resolve();
-  const checks = [...(t.checks || (t.bar != null ? [{ at: t.barAt || t.updated, bar: t.bar }] : [])), { at: Date.now(), bar, ...(fill ? { fill: true } : {}), ...(mix ? { mix } : {}) }];
+  const checks = [...(t.checks || (t.bar != null ? [{ at: t.barAt || t.updated, bar: t.bar }] : [])), { at, bar, ...(fill ? { fill: true } : {}), ...(mix ? { mix } : {}) }];
   lb.tanks![id] = { ...t, checks, ...(mix ? { mix } : {}), updated: Date.now() };
   return saveLb(lb);
 }

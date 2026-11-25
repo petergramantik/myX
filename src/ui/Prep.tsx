@@ -5,7 +5,7 @@ import { useState } from "react";
 import { gasDisp } from "../app/gas";
 import { HYD_LABEL, gearVol, prepSuitOnly, tankMix, tankVol, uid, type Logbook, type Prep, type PrepTank } from "../app/model";
 import { tankLabel } from "./Gear";
-import { ownMetas, rbAssign, saveSettings, saveTank } from "../app/store";
+import { ownMetas, rbAssign, saveSettings, saveTank, tankCheck } from "../app/store";
 import { diveDilMix, onboardPress, rbMatch, tankEvents } from "../app/gearSync";
 import { ask } from "../app/dialog";
 import { num, useStore } from "./common";
@@ -41,6 +41,18 @@ function barBefore(lb: Logbook, id: string, t0?: number): number | undefined {
   return ev.length ? ev[ev.length - 1].bar! : undefined;
 }
 
+/** Novější záznam lahve než konec ponoru (plnění, kontrola, jiný ponor) – tlak po ponoru se do Výstroje nepřepíše. */
+function laterNote(lb: Logbook, id: string | undefined, diveId?: string): string | null {
+  if (!id || !diveId) return null;
+  const m = ownMetas().find((x) => x.id === diveId);
+  if (!m) return null;
+  const t1 = (m.start + m.h.diveTimeS) * 1000;
+  const e = tankEvents(lb, ownMetas(), id).find((x) => x.at > t1 && x.diveId !== diveId);
+  if (!e) return null;
+  const d = new Date(e.at).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+  return `Ve Výstroji se nepřepíše – ${e.kind === "fill" ? `${d} plnění na ${e.bar} bar` : e.kind === "check" ? `${d} kontrola ${e.bar} bar` : `použita v ponoru ${d}`}`;
+}
+
 /** Tlak před ponorem: vlastní zadání, nebo potvrzení tlaku z Výstroje. */
 function StartBar({ value, mg, onSave }: { value?: number; mg?: number; onSave: (v?: number) => void }) {
   return (<>
@@ -65,16 +77,13 @@ function TankPre({ t, set, del, t0 }: { t: PrepTank; set: (p: Partial<PrepTank>)
   const argon = /^\s*argon\s*$/i.test(t.gas), isO2 = tankMix(t.gas) === "100/0";
   return (
     <div className="prep-tank">
-      <div className="pt-row">
-        <select value={t.gearId || ""} onChange={(e) => {
+      <div className="pt-row pt-full">
+        <select className="pt-gear" value={t.gearId || ""} onChange={(e) => {
           const x = st.lb.tanks?.[e.target.value];
           if (!x) { set({ gearId: undefined }); return; }
           set({ gearId: x.id, name: TANKS.includes(x.kind) ? x.kind : "Jiná", vol: gearVol(x), gas: gasDisp(x.mix), bar: undefined, ...(/^argon$/i.test(x.mix) ? { role: "suit" as const } : tankMix(x.mix) === "100/0" && t.role === "bo" ? { role: "deco" as const } : {}) });
         }}>
-          <option value="">{gear.length ? "lahev mimo Výstroj" : "lahev (Výstroj je prázdná)"}</option>{gear.map((x) => <option key={x.id} value={x.id}>{tankLabel(x)} · {gasDisp(x.mix)}{x.bar != null ? ` · ${x.bar} bar` : ""}</option>)}
-        </select>
-        <select value={t.role} onChange={(e) => set({ role: e.target.value as PrepTank["role"] })}>
-          <option value="bo">BO</option><option value="deco">Deko</option><option value="o2">O₂</option><option value="dil">Dil</option><option value="suit">Oblek</option><option value="other">Jiná</option>
+          <option value="">{gear.length ? "lahev mimo Výstroj" : "lahev (Výstroj je prázdná)"}</option>{gear.map((x) => { const b = barBefore(st.lb, x.id, t0); return <option key={x.id} value={x.id}>{tankLabel(x)} · {gasDisp(x.mix)}{b != null ? ` · ${b} bar` : ""}</option>; })}
         </select>
         <button className="btn small" aria-label="Odebrat" onClick={del}>✕</button>
       </div>
@@ -97,6 +106,9 @@ function TankPre({ t, set, del, t0 }: { t: PrepTank; set: (p: Partial<PrepTank>)
       )}
       <div className="pt-row">
         <span className="muted small">tlak</span><StartBar value={t.bar} mg={mg} onSave={(b) => set({ bar: b })} />
+        <select className="pt-role" value={t.role} onChange={(e) => set({ role: e.target.value as PrepTank["role"] })}>
+          <option value="bo">BO</option><option value="deco">Deko</option><option value="o2">O₂</option><option value="dil">Dil</option><option value="suit">Oblek</option><option value="other">Jiná</option>
+        </select>
       </div>
       {!isO2 && !argon && t.role !== "suit" && <label className="small inline same"><input type="checkbox" checked={!!t.suit} onChange={(e) => set({ suit: e.target.checked, ...(e.target.checked ? {} : { suitOnly: undefined }) })} />oblek (lahev plní i oblek)</label>}
       {g?.check && <div className="small c-warn">Ve Výstroji: ověřit tlak ({g.check.text}).</div>}
@@ -105,7 +117,7 @@ function TankPre({ t, set, del, t0 }: { t: PrepTank; set: (p: Partial<PrepTank>)
 }
 
 /** Po ponoru – externí lahev: tlak po, beze změny, jenom oblek. */
-function TankPost({ t, set }: { t: PrepTank; set: (p: Partial<PrepTank>) => void }) {
+function TankPost({ t, set, diveId }: { t: PrepTank; set: (p: Partial<PrepTank>) => void; diveId?: string }) {
   const v = tankVol(t);
   const end = t.same ? t.bar : t.end;
   const used = t.bar != null && end != null ? t.bar - end : null;
@@ -120,6 +132,7 @@ function TankPost({ t, set }: { t: PrepTank; set: (p: Partial<PrepTank>) => void
         <label className="small inline same"><input type="checkbox" checked={!!t.same} onChange={(e) => set({ same: e.target.checked, end: e.target.checked ? t.bar : undefined })} />beze změny</label>
         <span className="muted small">{used != null && v ? `${used} bar · ${num(used * v, 0)} l${suitOnly ? " oblek" : ""}` : ""}</span>
       </div>
+      {(() => { const n = laterNote(st.lb, t.gearId, diveId); return n && <div className="small muted later">{n}</div>; })()}
       {t.suit && <label className="small inline same"><input type="checkbox" checked={!!t.suitOnly} onChange={(e) => set({ suitOnly: e.target.checked || undefined })} />jenom oblek (celý úbytek = plnění obleku)</label>}
     </div>
   );
@@ -163,7 +176,7 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
     const cur = rbCur(key);
     const why = meta && !cur ? rbMatch(st.lb, meta, key).why : "";
     return (<>
-      <select value={cur?.id || ""} onChange={async (e) => {
+      <select className="pt-gear" value={cur?.id || ""} onChange={async (e) => {
         const id = e.target.value || null;
         if (!meta) { upd({ [key === "o2" ? "o2Tank" : "dilTank"]: id || undefined }); return; }
         await rbAssign(meta.id, key, id);
@@ -171,20 +184,25 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
         if (key === "dil" && t && mix && tankMix(t.mix) !== mix && await ask(`Směs v logu je ${mix}, u ${t.name} je ${gasDisp(t.mix)}. Změnit směs lahve na ${mix}?`, { ok: "Změnit" }))
           await saveTank({ ...t, mix: (() => { const [o, h] = mix.split("/").map(Number); return gasName(o, h); })() });
       }}>
-        <option value="">{cur ? "nepřiřazeno" : "Která lahev?"}</option>{list.map((t) => <option key={t.id} value={t.id}>{t.name} · {gasDisp(t.mix)}</option>)}
+        <option value="">{cur ? "nepřiřazeno" : "Která lahev?"}</option>{list.map((t) => { const b = barBefore(st.lb, t.id, t0); return <option key={t.id} value={t.id}>{t.name} · {gasDisp(t.mix)}{b != null ? ` · ${b} bar` : ""}</option>; })}
       </select>
-      {cur?.auto ? <span className="small muted">auto</span> : why ? <span className="small c-warn">{why}</span> : null}
     </>);
   };
   const obPre = (key: "o2" | "dil", label: string) => {
     const cur = rbCur(key), mg = cur ? barBefore(st.lb, cur.id, t0) : undefined;
-    const r = real?.[key], typed = p[key];
+    const r = real?.[key], typed = p[key], confKey = key === "o2" ? "o2Conf" : "dilConf";
+    const why = meta && !cur && rbList(key).length ? rbMatch(st.lb, meta, key).why : "";
+    const rr = r != null ? Math.round(r) : null, diff = rr != null && mg != null && Math.abs(rr - mg) > 15;
     return (
       <div className="prep-ob">
-        <div className="prep-row"><span className="prep-l">{label}</span>{rbSel(key)}</div>
-        {r != null && r >= CLOSED
-          ? <div className="prep-row"><span className="prep-l small muted">tlak</span><span><b>{num(r, 0)} bar</b> <span className="small muted">z logu</span>{mg != null && Math.abs(r - mg) > 15 ? <span className="small c-warn"> – Výstroj měla {mg} bar (plnění, nebo jiná lahev?)</span> : ""}</span></div>
+        <div className="prep-row"><span className="prep-l">{label}</span>{cur?.auto ? <span className="small muted">auto</span> : why ? <span className="small c-warn">{why}</span> : null}</div>
+        <div className="pt-row pt-full">{rbSel(key)}</div>
+        {rr != null && rr >= CLOSED
+          ? <div className="prep-row"><span className="prep-l small muted">tlak</span><span><b>{rr} bar</b> <span className="small muted">z logu{mg != null ? ` · Výstroj ${mg} bar` : ""}</span></span></div>
           : <div className="prep-row"><span className="prep-l small muted">tlak</span><StartBar value={typed} mg={mg} onSave={(v) => upd({ [key]: v })} /></div>}
+        {rr != null && rr >= CLOSED && diff && (p[confKey] === rr
+          ? <div className="small c-ok">✓ {rr} bar potvrzeno (rozdíl proti Výstroji {rr - mg! > 0 ? "+" : ""}{rr - mg!} bar)</div>
+          : <div className="small c-warn">Liší se od Výstroje o {rr - mg! > 0 ? "+" : ""}{rr - mg!} bar (plnění, vysílač, nebo jiná lahev?) <button className="btn small" onClick={async () => { upd({ [confKey]: rr }); if (cur && t0 != null) await tankCheck(cur.id, rr, false, undefined, t0 - 60000); }}>Potvrdit {rr} bar</button></div>)}
       </div>
     );
   };
@@ -197,6 +215,7 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
         {ob?.src === "log" ? <span className="small">{ob.start} → <b>{ob.end} bar</b> <span className="muted">z logu</span></span>
           : <><BarInput value={p[endKey]} placeholder="bar" onSave={(v) => upd({ [endKey]: v })} />
             <span className="small muted">{!meta ? "po nahrání logu se při otevřené lahvi doplní z počítače" : ob?.closed ? "lahev byla zavřená – zadej tlak" : "počítač tlak nezná – zadej tlak"}</span></>}
+        {(() => { const n = laterNote(st.lb, rbCur(key)?.id, meta?.id); return n && <div className="small muted later">{n}</div>; })()}
       </div>
     );
   };
@@ -250,7 +269,7 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
         <div className="prep-sec">
           <h3 className="prep-h">Po ponoru</h3>
           {cc && <>{obPost("o2", "O₂")}{obPost("dil", "Diluent")}</>}
-          {tanks.map((t) => <TankPost key={t.id} t={t} set={(x) => setTank(t.id, x)} />)}
+          {tanks.map((t) => <TankPost key={t.id} t={t} diveId={meta?.id} set={(x) => setTank(t.id, x)} />)}
           {!tanks.length && !cc && <p className="muted small">Žádné lahve – přidej je v části Před ponorem.</p>}
           <p className="note">Doplň tlak u lahví, které počítač neměří (zavřená on-board lahev, externí lahve). Tlaky po ponoru se převezmou do Výstroje – u staršího ponoru jen u lahví, které od té doby nebyly použity ani kontrolovány.</p>
         </div>

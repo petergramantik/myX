@@ -39,7 +39,7 @@ export function tankMix(g: string): string | null {
   return null;
 }
 /** Předponorová příprava: naměřené tlaky (bar) on-board lahví, off-board lahve a potvrzení kalibrace (ms). */
-export interface Prep { o2?: number; dil?: number; /** tlak on-board lahve po ponoru zadaný ručně (zavřená lahev, počítač tlak nezná) */ o2End?: number; dilEnd?: number; /** on-board lahve z Výstroje vybrané v rozpracovaném ponoru (po spárování → DiveNote.rb) */ o2Tank?: string; dilTank?: string; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string }; /** hydratace před ponorem (jen informace) */ hyd?: "low" | "mid" | "good" }
+export interface Prep { o2?: number; dil?: number; /** tlak on-board lahve po ponoru zadaný ručně (zavřená lahev, počítač tlak nezná) */ o2End?: number; dilEnd?: number; /** on-board lahve z Výstroje vybrané v rozpracovaném ponoru (po spárování → DiveNote.rb) */ o2Tank?: string; dilTank?: string; /** potvrzený tlak z logu při rozporu s Výstrojí */ o2Conf?: number; dilConf?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string }; /** hydratace před ponorem (jen informace) */ hyd?: "low" | "mid" | "good" }
 export const HYD_LABEL = { low: "Slabá", mid: "Střední", good: "Dobrá" } as const;
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
