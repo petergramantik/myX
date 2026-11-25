@@ -1,11 +1,12 @@
-// Před a po ponoru (dřív „Předponorová příprava“): naměřené tlaky on-board lahví, off-board lahve (bailout, off-board O₂) a potvrzení kalibrace čidel.
-// Vyplňuje se typicky v rozpracovaném ponoru (večer před ponorem); po spárování s logem se tlaky on-board lahví porovnají s počítačem.
+// Před a po ponoru: „Před ponorem“ – lahve (on-board z Výstroje, externí) s tlakem potvrzeným z Výstroje nebo naměřeným,
+// hydratace a kalibrace; „Po ponoru“ – tlaky lahví, které počítač neměří (zavřená on-board, externí), a „jenom oblek“.
+// Tlaky se převezmou do Výstroje přes historii lahve (gearSync).
 import { useState } from "react";
 import { gasDisp } from "../app/gas";
-import { HYD_LABEL, gearVol, tankMix, tankVol, uid, type Prep, type PrepTank } from "../app/model";
+import { HYD_LABEL, gearVol, prepSuitOnly, tankMix, tankVol, uid, type Logbook, type Prep, type PrepTank } from "../app/model";
 import { tankLabel } from "./Gear";
-import { rbAssign, saveSettings, saveTank } from "../app/store";
-import { diveDilMix, rbMatch } from "../app/gearSync";
+import { ownMetas, rbAssign, saveSettings, saveTank } from "../app/store";
+import { diveDilMix, onboardPress, rbMatch, tankEvents } from "../app/gearSync";
 import { ask } from "../app/dialog";
 import { num, useStore } from "./common";
 
@@ -31,60 +32,99 @@ const gasName = (o2: number, he: number) => (he > 0 ? `TMX ${o2}/${he}` : o2 ===
 /** Stávající textový zápis plynu → položka seznamu (nebo null = jiný). */
 const gasKnown = (g0: string) => { const g = gasDisp(g0); if (GASES.includes(g)) return g; if (/^argon$/i.test(g.trim())) return "Argon"; const m = tankMix(g); if (!m) return null; const [o, h] = m.split("/").map(Number); const n = gasName(o, h); return GASES.includes(n) ? n : null; };
 
-/** Řádek off-board lahve: role, lahev a plyn z nabídky; u „Jiná“ / „Jiný“ zadání, po vyplnění jen informační řádek. */
-function TankRow({ t, set, del }: { t: PrepTank; set: (p: Partial<PrepTank>) => void; del: () => void }) {
+/** Tlak lahve z Výstroje před ponorem (poslední událost před začátkem ponoru; bez ponoru aktuální tlak). */
+function barBefore(lb: Logbook, id: string, t0?: number): number | undefined {
+  const t = lb.tanks?.[id];
+  if (!t) return undefined;
+  if (t0 == null) return t.bar;
+  const ev = tankEvents(lb, ownMetas(), id).filter((e) => e.at < t0 && e.bar != null);
+  return ev.length ? ev[ev.length - 1].bar! : undefined;
+}
+
+/** Tlak před ponorem: vlastní zadání, nebo potvrzení tlaku z Výstroje. */
+function StartBar({ value, mg, onSave }: { value?: number; mg?: number; onSave: (v?: number) => void }) {
+  return (<>
+    <BarInput key={value ?? "x"} value={value} placeholder={mg != null ? String(mg) : "bar"} onSave={onSave} />
+    {mg != null && value == null && <button className="btn small" onClick={() => onSave(mg)}>✓ {mg} bar</button>}
+    {mg != null && value != null && (value === mg ? <span className="small c-ok">✓ jako ve Výstroji</span> : <span className="small muted">Výstroj {mg} bar – nový tlak se uloží jako kontrola</span>)}
+  </>);
+}
+
+/** Před ponorem – externí lahev: lahev z Výstroje (nebo vlastní), role, tlak, oblek. */
+function TankPre({ t, set, del, t0 }: { t: PrepTank; set: (p: Partial<PrepTank>) => void; del: () => void; t0?: number }) {
   const known = TANKS.includes(t.name);
   const v = tankVol(t);
   const gk = gasKnown(t.gas);
   const [editVol, setEditVol] = useState(!known && !v);
   const [editGas, setEditGas] = useState(!gk && !t.gas);
   const [o2, setO2] = useState(""), [he, setHe] = useState("");
-  const used = t.bar != null && (t.same ? t.bar : t.end) != null ? t.bar - (t.same ? t.bar : t.end)! : null;
   const st = useStore();
-  const gear = Object.values(st.lb.tanks || {}).filter((g) => !g.onboard);
+  const gear = Object.values(st.lb.tanks || {}).filter((g) => !g.onboard).sort((a, b) => tankLabel(a).localeCompare(tankLabel(b), "cs", { numeric: true }));
   const g = t.gearId ? st.lb.tanks?.[t.gearId] : undefined;
+  const mg = g ? barBefore(st.lb, g.id, t0) : undefined;
+  const argon = /^\s*argon\s*$/i.test(t.gas), isO2 = tankMix(t.gas) === "100/0";
   return (
     <div className="prep-tank">
-      {gear.length > 0 && <div className="pt-row">
+      <div className="pt-row">
         <select value={t.gearId || ""} onChange={(e) => {
           const x = st.lb.tanks?.[e.target.value];
           if (!x) { set({ gearId: undefined }); return; }
-          set({ gearId: x.id, name: TANKS.includes(x.kind) ? x.kind : "Jiná", vol: gearVol(x), gas: x.mix, bar: x.bar, ...(x.mix === "Argon" ? { role: "suit" as const } : {}) });
+          set({ gearId: x.id, name: TANKS.includes(x.kind) ? x.kind : "Jiná", vol: gearVol(x), gas: gasDisp(x.mix), bar: undefined, ...(/^argon$/i.test(x.mix) ? { role: "suit" as const } : tankMix(x.mix) === "100/0" && t.role === "bo" ? { role: "deco" as const } : {}) });
         }}>
-          <option value="">lahev mimo Výstroj</option>{gear.map((x) => <option key={x.id} value={x.id}>{tankLabel(x)} · {x.mix}{x.bar != null ? ` · ${x.bar} bar` : ""}</option>)}
+          <option value="">{gear.length ? "lahev mimo Výstroj" : "lahev (Výstroj je prázdná)"}</option>{gear.map((x) => <option key={x.id} value={x.id}>{tankLabel(x)} · {gasDisp(x.mix)}{x.bar != null ? ` · ${x.bar} bar` : ""}</option>)}
         </select>
-        {g?.check && <span className="small c-warn">ověřit tlak</span>}
-      </div>}
-      <div className="pt-row">
         <select value={t.role} onChange={(e) => set({ role: e.target.value as PrepTank["role"] })}>
-          <option value="bo">BO</option><option value="o2">O₂</option><option value="dil">Dil</option><option value="deco">Deko</option><option value="suit">Oblek</option><option value="other">Jiná</option>
+          <option value="bo">BO</option><option value="deco">Deko</option><option value="o2">O₂</option><option value="dil">Dil</option><option value="suit">Oblek</option><option value="other">Jiná</option>
         </select>
+        <button className="btn small" aria-label="Odebrat" onClick={del}>✕</button>
+      </div>
+      {!g && <div className="pt-row">
         <select value={known ? t.name : "Jiná"} onChange={(e) => { const x = e.target.value; if (x === "Jiná") { set({ name: "Jiná", vol: undefined }); setEditVol(true); } else { set({ name: x, vol: undefined }); setEditVol(false); } }}>
           {TANKS.map((x) => <option key={x}>{x}</option>)}<option>Jiná</option>
         </select>
         <select value={gk ?? "_jiny"} onChange={(e) => { const x = e.target.value; if (x === "_jiny") { setEditGas(true); return; } setEditGas(false); set({ gas: x, ...(x === "Argon" ? { role: "suit" as const } : {}) }); }}>
           {GASES.map((x) => <option key={x}>{x}</option>)}<option value="_jiny">Jiný</option>
         </select>
-        <button className="btn small" aria-label="Odebrat" onClick={del}>✕</button>
-      </div>
-      {(editVol || editGas) && <div className="pt-row">
+      </div>}
+      {!g && (editVol || editGas) && <div className="pt-row">
         {editVol && <><input className="tank-vol" inputMode="decimal" placeholder="objem" defaultValue={v ?? ""} onBlur={(e) => { const x = parseFloat(e.target.value.replace(",", ".")); if (x > 0) { set({ name: "Jiná", vol: x }); setEditVol(false); } }} /><span className="small muted">l</span></>}
         {editGas && <><input className="tank-vol" inputMode="numeric" placeholder="O₂ %" value={o2} onChange={(e) => setO2(e.target.value)} />
           <input className="tank-vol" inputMode="numeric" placeholder="He %" value={he} onChange={(e) => setHe(e.target.value)} />
           <button className="btn small" onClick={() => { const a = Math.round(+o2), h = Math.round(+he || 0); if (a > 0 && a <= 100 && h >= 0 && a + h <= 100) { set({ gas: gasName(a, h) }); setEditGas(false); } }}>OK</button></>}
       </div>}
-      {(!known || !gk) && !editVol && !editGas && (
+      {!g && (!known || !gk) && !editVol && !editGas && (
         <div className="pt-info small muted" onClick={() => { if (!known) setEditVol(true); if (!gk) setEditGas(true); }}>{!known ? `Jiná ${v ? num(v, 1) + " l" : "?"}` : t.name}{!gk ? ` · ${t.gas || "plyn?"}` : ""} <span className="link">upravit</span></div>
       )}
       <div className="pt-row">
-        <span className="muted small">před</span><BarInput value={t.bar} onSave={(b) => set({ bar: b })} />
-        <span className="muted small">po</span>{t.same ? <span className="small">= {t.bar ?? "–"}</span> : <BarInput value={t.end} placeholder="bar" onSave={(b) => set({ end: b })} />}
-        <label className="small inline same"><input type="checkbox" checked={!!t.same} onChange={(e) => set({ same: e.target.checked, end: e.target.checked ? t.bar : undefined })} />beze změny</label>
-        <span className="muted small">{v ? `${num(v, 1)} l` : ""}{used != null && v ? ` · ${num(used * v, 0)} l` : ""}</span>
+        <span className="muted small">tlak</span><StartBar value={t.bar} mg={mg} onSave={(b) => set({ bar: b })} />
       </div>
+      {!isO2 && !argon && t.role !== "suit" && <label className="small inline same"><input type="checkbox" checked={!!t.suit} onChange={(e) => set({ suit: e.target.checked, ...(e.target.checked ? {} : { suitOnly: undefined }) })} />oblek (lahev plní i oblek)</label>}
+      {g?.check && <div className="small c-warn">Ve Výstroji: ověřit tlak ({g.check.text}).</div>}
     </div>
   );
 }
+
+/** Po ponoru – externí lahev: tlak po, beze změny, jenom oblek. */
+function TankPost({ t, set }: { t: PrepTank; set: (p: Partial<PrepTank>) => void }) {
+  const v = tankVol(t);
+  const end = t.same ? t.bar : t.end;
+  const used = t.bar != null && end != null ? t.bar - end : null;
+  const st = useStore();
+  const g = t.gearId ? st.lb.tanks?.[t.gearId] : undefined;
+  const suitOnly = prepSuitOnly(t);
+  return (
+    <div className="prep-tank post">
+      <div className="pt-row"><b className="small">{g ? tankLabel(g) : t.name}</b><span className="small muted">{ROLE[t.role]} · {gasDisp(t.gas)} · před {t.bar ?? "–"} bar</span></div>
+      <div className="pt-row">
+        <span className="muted small">po</span>{t.same ? <span className="small">= {t.bar ?? "–"}</span> : <BarInput value={t.end} placeholder="bar" onSave={(b) => set({ end: b })} />}
+        <label className="small inline same"><input type="checkbox" checked={!!t.same} onChange={(e) => set({ same: e.target.checked, end: e.target.checked ? t.bar : undefined })} />beze změny</label>
+        <span className="muted small">{used != null && v ? `${used} bar · ${num(used * v, 0)} l${suitOnly ? " oblek" : ""}` : ""}</span>
+      </div>
+      {t.suit && <label className="small inline same"><input type="checkbox" checked={!!t.suitOnly} onChange={(e) => set({ suitOnly: e.target.checked || undefined })} />jenom oblek (celý úbytek = plnění obleku)</label>}
+    </div>
+  );
+}
+const ROLE: Record<PrepTank["role"], string> = { bo: "BO", o2: "O₂", dil: "Dil", deco: "Deko", suit: "Oblek", other: "Jiná" };
 
 /** Krátké shrnutí pro sbalený stav. */
 function summary(p?: Prep): string {
@@ -111,42 +151,54 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
   const lastTanks = [...Object.values(st.lb.notes), ...Object.values(st.lb.drafts)].filter((n) => n.prep?.tanks?.length && n.prep !== prep)
     .sort((a, b) => (b.updated || 0) - (a.updated || 0))[0]?.prep?.tanks;
   const worst = [p.o2, p.dil, ...tanks.map((t) => t.bar)].some((b) => b != null && b < 50) ? "c-bad" : [p.o2, p.dil, ...tanks.map((t) => t.bar)].some((b) => b != null && b < 100) ? "c-warn" : "";
-
-  // on-board lahev z Výstroje přiřazená k ponoru (automaticky rozpoznaná nebo ručně vybraná)
   const meta = diveId ? st.metas.find((m) => m.id === diveId) : undefined;
+  const t0 = meta ? meta.start * 1000 : undefined;
+
+  // on-board lahev z Výstroje: u ponoru přiřazení (automatické / ruční), v rozpracovaném ponoru výběr v přípravě
+  const rbList = (key: "o2" | "dil") => Object.values(st.lb.tanks || {}).filter((t) => t.onboard === key).sort((a, b) => (a.name || "").localeCompare(b.name || "", "cs", { numeric: true }));
+  const rbCur = (key: "o2" | "dil") => (meta ? st.lb.notes[meta.id]?.rb?.[key] : p[key === "o2" ? "o2Tank" : "dilTank"] ? { id: p[key === "o2" ? "o2Tank" : "dilTank"]!, auto: false } : undefined);
   const rbSel = (key: "o2" | "dil") => {
-    if (!meta) return null;
-    const list = Object.values(st.lb.tanks || {}).filter((t) => t.onboard === key).sort((a, b) => (a.name || "").localeCompare(b.name || "", "cs", { numeric: true }));
+    const list = rbList(key);
     if (!list.length) return null;
-    const cur = st.lb.notes[meta.id]?.rb?.[key];
-    const why = !cur ? rbMatch(st.lb, meta, key).why : "";
+    const cur = rbCur(key);
+    const why = meta && !cur ? rbMatch(st.lb, meta, key).why : "";
+    return (<>
+      <select value={cur?.id || ""} onChange={async (e) => {
+        const id = e.target.value || null;
+        if (!meta) { upd({ [key === "o2" ? "o2Tank" : "dilTank"]: id || undefined }); return; }
+        await rbAssign(meta.id, key, id);
+        const t = id ? st.lb.tanks?.[id] : undefined, mix = diveDilMix(meta);
+        if (key === "dil" && t && mix && tankMix(t.mix) !== mix && await ask(`Směs v logu je ${mix}, u ${t.name} je ${gasDisp(t.mix)}. Změnit směs lahve na ${mix}?`, { ok: "Změnit" }))
+          await saveTank({ ...t, mix: (() => { const [o, h] = mix.split("/").map(Number); return gasName(o, h); })() });
+      }}>
+        <option value="">{cur ? "nepřiřazeno" : "Která lahev?"}</option>{list.map((t) => <option key={t.id} value={t.id}>{t.name} · {gasDisp(t.mix)}</option>)}
+      </select>
+      {cur?.auto ? <span className="small muted">auto</span> : why ? <span className="small c-warn">{why}</span> : null}
+    </>);
+  };
+  const obPre = (key: "o2" | "dil", label: string) => {
+    const cur = rbCur(key), mg = cur ? barBefore(st.lb, cur.id, t0) : undefined;
+    const r = real?.[key], typed = p[key];
     return (
-      <div className="prep-row rb-row">
-        <span className="prep-l small muted">lahev</span>
-        <select value={cur?.id || ""} onChange={async (e) => {
-          const id = e.target.value || null;
-          await rbAssign(meta.id, key, id);
-          const t = id ? st.lb.tanks?.[id] : undefined, mix = diveDilMix(meta);
-          if (key === "dil" && t && mix && tankMix(t.mix) !== mix && await ask(`Směs v logu je ${mix}, u ${t.name} je ${t.mix}. Změnit směs lahve na ${mix}?`, { ok: "Změnit" }))
-            await saveTank({ ...t, mix: (() => { const [o, h] = mix.split("/").map(Number); return gasName(o, h); })() });
-        }}>
-          <option value="">{cur ? "nepřiřazeno" : "Která lahev?"}</option>{list.map((t) => <option key={t.id} value={t.id}>{t.name} · {t.mix}{t.bar != null ? ` · ${t.bar} bar` : ""}</option>)}
-        </select>
-        {cur?.auto ? <span className="small muted">auto</span> : !cur ? <span className="small c-warn">{why}</span> : null}
+      <div className="prep-ob">
+        <div className="prep-row"><span className="prep-l">{label}</span>{rbSel(key)}</div>
+        {r != null && r >= CLOSED
+          ? <div className="prep-row"><span className="prep-l small muted">tlak</span><span><b>{num(r, 0)} bar</b> <span className="small muted">z logu</span>{mg != null && Math.abs(r - mg) > 15 ? <span className="small c-warn"> – Výstroj měla {mg} bar (plnění, nebo jiná lahev?)</span> : ""}</span></div>
+          : <div className="prep-row"><span className="prep-l small muted">tlak</span><StartBar value={typed} mg={mg} onSave={(v) => upd({ [key]: v })} /></div>}
       </div>
     );
   };
-  const onboard = (key: "o2" | "dil", label: string) => {
-    const r = real?.[key];
-    return (<>
+  const obPost = (key: "o2" | "dil", label: string) => {
+    const ob = meta ? onboardPress(meta, p, key) : null;
+    const endKey = key === "o2" ? "o2End" : "dilEnd";
+    return (
       <div className="prep-row">
         <span className="prep-l">{label}</span>
-        <BarInput value={p[key]} onSave={(v) => upd({ [key]: v })} />
-        <span className="muted small">{r != null && r < CLOSED ? <>bez změny <span title="počítač naměřil jen středotlak – lahev nebyla otevřená">(lahev zavřená)</span></>
-          : r != null ? <>reálně <b className={lvl(r)}>{num(r, 0)} bar</b>{p[key] != null ? ` (${r - p[key]! >= 0 ? "+" : ""}${num(r - p[key]!, 0)})` : ""}</> : real ? "počítač tlak nezná" : ""}</span>
+        {ob?.src === "log" ? <span className="small">{ob.start} → <b>{ob.end} bar</b> <span className="muted">z logu</span></span>
+          : <><BarInput value={p[endKey]} placeholder="bar" onSave={(v) => upd({ [endKey]: v })} />
+            <span className="small muted">{!meta ? "po nahrání logu se při otevřené lahvi doplní z počítače" : ob?.closed ? "lahev byla zavřená – zadej tlak" : "počítač tlak nezná – zadej tlak"}</span></>}
       </div>
-      {rbSel(key)}
-    </>);
+    );
   };
 
   return (
@@ -156,43 +208,52 @@ export function PrepCard({ prep, onChange, real, cc = true, diveId }: { prep?: P
       </div>
       {!open && <p className={"small " + (worst || "muted")} onClick={() => setOpen(true)}>{summary(prep)}</p>}
       {open && <>
-        {cc && <>
-          <h3 className="subh">On-board lahve</h3>
-          {onboard("o2", "O₂")}
-          {onboard("dil", "Diluent")}
-          {real && <p className="note">Reálný tlak = první údaj z počítače v ponoru.</p>}
-        </>}
-        <h3 className="subh">Off-board lahve</h3>
-        {tanks.map((t) => <TankRow key={t.id} t={t} set={(p) => setTank(t.id, p)} del={() => upd({ tanks: tanks.filter((x) => x.id !== t.id) })} />)}
-        <div className="row">
-          <button className="btn small" onClick={() => upd({ tanks: [...tanks, { id: uid(), role: tanks.length ? "o2" : "bo", name: tanks.length ? "S40" : "S80", gas: tanks.length ? "O₂" : "AIR" }] })}>＋ Přidat lahev</button>
-          {!tanks.length && lastTanks && <button className="btn small" onClick={() => upd({ tanks: lastTanks.map((t) => ({ ...t, id: uid(), bar: undefined })) })}>Lahve jako minule</button>}
-        </div>
-        <p className="note">Pod 100 bar žlutě, pod 50 bar červeně.</p>
-        <h3 className="subh">Hydratace</h3>
-        <div className="seg hyd">
-          {(["low", "mid", "good"] as const).map((k) => <button key={k} className={p.hyd === k ? "on" : ""} onClick={() => upd({ hyd: p.hyd === k ? undefined : k })}>{HYD_LABEL[k]}</button>)}
-        </div>
-        <p className="note">Jen informace k ponoru (nic se z ní nepočítá) – při případné nehodě může být důležitá.</p>
-        {cc && <>
-          <h3 className="subh">Kalibrace čidel</h3>
-          <div className="prep-row">
-            <span className="prep-l">Čidla O₂</span>
-            {p.o2Cal ? <span>✓ potvrzeno {fmtAt(p.o2Cal)} <button className="btn small" onClick={() => upd({ o2Cal: undefined })}>✕</button></span>
-              : <button className="btn small" onClick={async () => { upd({ o2Cal: Date.now() }); await saveSettings({ o2Cal: { date: todayIso() } }); }}>Potvrdit kalibraci</button>}
+        <div className="prep-sec">
+          <h3 className="prep-h">Před ponorem</h3>
+          {cc && <>
+            <h4 className="subh">On-board lahve</h4>
+            {obPre("o2", "O₂")}
+            {obPre("dil", "Diluent")}
+          </>}
+          <h4 className="subh">Externí lahve</h4>
+          {tanks.map((t) => <TankPre key={t.id} t={t} t0={t0} set={(x) => setTank(t.id, x)} del={() => upd({ tanks: tanks.filter((x) => x.id !== t.id) })} />)}
+          <div className="row">
+            <button className="btn small" onClick={() => upd({ tanks: [...tanks, { id: uid(), role: tanks.length ? "deco" : "bo", name: "S80", gas: tanks.length ? "O₂" : "AIR" }] })}>＋ Přidat lahev</button>
+            {!tanks.length && lastTanks && <button className="btn small" onClick={() => upd({ tanks: lastTanks.map((t) => ({ ...t, id: uid(), bar: undefined, end: undefined, same: undefined, suitOnly: undefined })) })}>Lahve jako minule</button>}
           </div>
-          <div className="prep-row">
-            <span className="prep-l">Čidlo CO₂</span>
-            {p.co2Cal ? <span>✓ {p.co2Cal.gas} · {fmtAt(p.co2Cal.at)} <button className="btn small" onClick={() => upd({ co2Cal: undefined })}>✕</button></span>
-              : <>
-                <select value={CAL_GASES.includes(gas) ? gas : "jiný"} onChange={(e) => setGas(e.target.value === "jiný" ? "" : e.target.value)}>
-                  {CAL_GASES.map((g) => <option key={g}>{g}</option>)}<option>jiný</option>
-                </select>
-                {!CAL_GASES.includes(gas) && <input className="tank-gas" value={gas} placeholder="1 % CO₂" onChange={(e) => setGas(e.target.value)} />}
-                <button className="btn small" onClick={async () => { const g = gas || "jiný"; upd({ co2Cal: { at: Date.now(), gas: g } }); await saveSettings({ co2Cal: { date: todayIso(), gas: g } }); }}>Potvrdit</button>
-              </>}
+          <p className="note">Tlak předvyplní Výstroj – potvrď ✓, nebo zadej naměřený (nový tlak se ve Výstroji uloží jako kontrola). U lahve, která plní i oblek, zaškrtni „oblek“.</p>
+          <h4 className="subh">Hydratace</h4>
+          <div className="seg hyd">
+            {(["low", "mid", "good"] as const).map((k) => <button key={k} className={p.hyd === k ? "on" : ""} onClick={() => upd({ hyd: p.hyd === k ? undefined : k })}>{HYD_LABEL[k]}</button>)}
           </div>
-        </>}
+          <p className="note">Jen informace k ponoru (nic se z ní nepočítá) – při případné nehodě může být důležitá.</p>
+          {cc && <>
+            <h4 className="subh">Kalibrace čidel</h4>
+            <div className="prep-row">
+              <span className="prep-l">Čidla O₂</span>
+              {p.o2Cal ? <span>✓ potvrzeno {fmtAt(p.o2Cal)} <button className="btn small" onClick={() => upd({ o2Cal: undefined })}>✕</button></span>
+                : <button className="btn small" onClick={async () => { upd({ o2Cal: Date.now() }); await saveSettings({ o2Cal: { date: todayIso() } }); }}>Potvrdit kalibraci</button>}
+            </div>
+            <div className="prep-row">
+              <span className="prep-l">Čidlo CO₂</span>
+              {p.co2Cal ? <span>✓ {p.co2Cal.gas} · {fmtAt(p.co2Cal.at)} <button className="btn small" onClick={() => upd({ co2Cal: undefined })}>✕</button></span>
+                : <>
+                  <select value={CAL_GASES.includes(gas) ? gas : "jiný"} onChange={(e) => setGas(e.target.value === "jiný" ? "" : e.target.value)}>
+                    {CAL_GASES.map((g) => <option key={g}>{g}</option>)}<option>jiný</option>
+                  </select>
+                  {!CAL_GASES.includes(gas) && <input className="tank-gas" value={gas} placeholder="1 % CO₂" onChange={(e) => setGas(e.target.value)} />}
+                  <button className="btn small" onClick={async () => { const g = gas || "jiný"; upd({ co2Cal: { at: Date.now(), gas: g } }); await saveSettings({ co2Cal: { date: todayIso(), gas: g } }); }}>Potvrdit</button>
+                </>}
+            </div>
+          </>}
+        </div>
+        <div className="prep-sec">
+          <h3 className="prep-h">Po ponoru</h3>
+          {cc && <>{obPost("o2", "O₂")}{obPost("dil", "Diluent")}</>}
+          {tanks.map((t) => <TankPost key={t.id} t={t} set={(x) => setTank(t.id, x)} />)}
+          {!tanks.length && !cc && <p className="muted small">Žádné lahve – přidej je v části Před ponorem.</p>}
+          <p className="note">Doplň tlak u lahví, které počítač neměří (zavřená on-board lahev, externí lahve). Tlaky po ponoru se převezmou do Výstroje – u staršího ponoru jen u lahví, které od té doby nebyly použity ani kontrolovány.</p>
+        </div>
       </>}
     </section>
   );

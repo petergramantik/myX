@@ -1,6 +1,7 @@
-// Výstroj ↔ ponory: zbytkový tlak lahví po ponoru. Zavřená lahev (beze změny bez tlaku, mezitlak v logu, chybějící tlak)
-// tlak nepřepíše – u lahve se objeví „Ověřit“. On-board lahve rebreatheru (RB O2 n / RB DIL n) se po ponoru rozpoznají
-// podle směsi diluentu z logu a tlaku na začátku ponoru proti zbytkovému tlaku lahve.
+// Výstroj ↔ ponory: tlak lahve = poslední událost v čase z historie – kontroly (ruční zadání, potvrzení, plnění) a ponory
+// (tlak před a po z „Před a po ponoru“, u on-board lahví z logu). Starší ponor tak přepíše tlak jen tehdy, když lahev
+// později nebyla použita ani kontrolována; oprava nebo smazání ponoru se promítne samo. Chybějící tlak po ponoru → „Ověřit“.
+// On-board lahve rebreatheru (RB O2 n / RB DIL n) se po ponoru rozpoznají podle směsi diluentu z logu a tlaku na začátku.
 import { tankMix, uid, type GearTank, type Logbook, type Meta } from "./model";
 
 /** Pod touto hodnotou počítač měří jen mezitlak (lahev zavřená). */
@@ -11,20 +12,66 @@ const dd = (sec: number) => new Date(sec * 1000).toLocaleDateString("cs-CZ", { d
 export type RbRole = "o2" | "dil";
 export const RB_PREFIX: Record<RbRole, string> = { o2: "RB O2", dil: "RB DIL" };
 
-/** Off-board lahve z „Před a po ponoru“ s vazbou na Výstroj → zbytkový tlak. Vrací true, když se něco změnilo. */
-export function gearTankApply(lb: Logbook, diveId: string, meta?: Meta): boolean {
-  const prep = lb.notes[diveId]?.prep;
-  if (!prep?.tanks?.length || !lb.tanks) return false;
-  const endT = meta ? meta.start + meta.h.diveTimeS : Math.floor(Date.now() / 1000);
+/** Událost lahve v historii (odvozená z kontrol a ponorů). */
+export interface TankEvent { at: number; kind: "check" | "fill" | "start" | "end"; bar: number | null; diveId?: string; src?: "log" | "typed"; mix?: string; why?: string }
+
+/** Tlak on-board lahve v ponoru: z logu (otevřená lahev), jinak zadaný v „Před a po ponoru“. */
+export function onboardPress(m: Meta, prep: Logbook["notes"][string]["prep"], role: RbRole): { start: number | null; end: number | null; src: "log" | "typed" | null; closed: boolean } {
+  const ls = role === "o2" ? m.sum.o2Start : m.sum.dilStart, le = role === "o2" ? m.sum.o2End : m.sum.dilEnd;
+  const ts = role === "o2" ? prep?.o2 : prep?.dil, te = role === "o2" ? prep?.o2End : prep?.dilEnd;
+  const sOk = ls != null && ls >= CLOSED, eOk = sOk && le != null && le >= CLOSED;
+  const start = sOk ? Math.round(ls!) : ts ?? null, end = eOk ? Math.round(le!) : te ?? null;
+  return { start, end, src: eOk ? "log" : start != null || end != null ? "typed" : null, closed: ls != null && ls < CLOSED, startLog: sOk } as { start: number | null; end: number | null; src: "log" | "typed" | null; closed: boolean; startLog?: boolean };
+}
+
+/** Historie lahve: kontroly a ponory (od nejstarší). */
+export function tankEvents(lb: Logbook, metas: Meta[], id: string): TankEvent[] {
+  const t = lb.tanks?.[id];
+  if (!t) return [];
+  const ev: TankEvent[] = (t.checks || []).map((c) => ({ at: c.at, kind: c.fill ? "fill" : "check", bar: c.bar, mix: c.mix }));
+  const byId = new Map(metas.map((m) => [m.id, m]));
+  for (const [did, n] of Object.entries(lb.notes)) {
+    const m = byId.get(did);
+    if (!m) continue;
+    const t0 = m.start * 1000, t1 = (m.start + m.h.diveTimeS) * 1000;
+    for (const pt of n.prep?.tanks || []) {
+      if (pt.gearId !== id) continue;
+      const end = pt.same ? pt.bar : pt.end;
+      if (pt.bar != null) ev.push({ at: t0, kind: "start", bar: pt.bar, diveId: did, src: "typed" });
+      ev.push({ at: t1, kind: "end", bar: end ?? null, diveId: did, src: "typed", why: end == null ? "chybí tlak po ponoru" : undefined });
+    }
+    for (const role of ["o2", "dil"] as RbRole[]) {
+      if (n.rb?.[role]?.id !== id) continue;
+      const p = onboardPress(m, n.prep, role);
+      if (p.start != null) ev.push({ at: t0, kind: "start", bar: p.start, diveId: did, src: p.src || undefined });
+      ev.push({ at: t1, kind: "end", bar: p.end, diveId: did, src: p.src || undefined, why: p.end == null ? (p.closed ? "lahev byla zavřená (jen mezitlak) – zadej tlak po ponoru" : "počítač tlak nezná – zadej tlak po ponoru") : undefined });
+    }
+  }
+  return ev.sort((a, b) => a.at - b.at || (a.kind === "end" ? 1 : 0) - (b.kind === "end" ? 1 : 0));
+}
+
+/** Přepočet tlaků všech lahví z historie (kontroly + ponory). Vrací true, když se něco změnilo. */
+export function gearRecompute(lb: Logbook, metas: Meta[]): boolean {
   let ch = false;
-  for (const t of prep.tanks) {
-    const g = t.gearId ? lb.tanks[t.gearId] : undefined;
-    if (!g) continue;
-    const end = t.same ? t.bar : t.end;
-    if (g.fromDive?.id === diveId && g.fromDive.end === end) continue;  // už převzato
-    if ((g.barAt || 0) > endT * 1000 && g.fromDive?.id !== diveId) continue; // novější údaj (pozdější ponor nebo ruční zadání)
-    if (end == null) lb.tanks[g.id] = { ...g, check: { at: Date.now(), text: `po ponoru ${meta ? dd(meta.start) : ""} chybí tlak „po“` }, fromDive: { id: diveId, end }, updated: Date.now() };
-    else lb.tanks[g.id] = { ...g, bar: end, barAt: endT * 1000, check: undefined, fromDive: { id: diveId, end }, updated: Date.now() };
+  for (const t of Object.values(lb.tanks || {})) {
+    // převod: dosavadní tlak lahve = první kontrola
+    let x: GearTank = t;
+    if (!x.checks) { x = { ...x, checks: x.bar != null ? [{ at: x.barAt ?? x.updated ?? 0, bar: x.bar }] : [] }; }
+    const ev = tankEvents({ ...lb, tanks: { ...lb.tanks, [x.id]: x } }, metas, x.id);
+    const last = ev[ev.length - 1];
+    let bar = x.bar, barAt = x.barAt, check: GearTank["check"] = undefined, fromDive: GearTank["fromDive"] = undefined;
+    if (last) {
+      if (last.bar != null) { bar = last.bar; barAt = last.at; }
+      else {
+        const known = [...ev].reverse().find((e) => e.bar != null);
+        bar = known?.bar ?? undefined; barAt = known?.at;
+        check = { at: last.at, text: `po ponoru ${dd(last.at / 1000)} ${last.why || "chybí tlak po ponoru"}` };
+      }
+      if (last.diveId) fromDive = { id: last.diveId, end: last.bar ?? undefined };
+    }
+    const same = x === t && t.bar === bar && t.barAt === barAt && (t.check?.text ?? null) === (check?.text ?? null) && (t.fromDive?.id ?? null) === (fromDive?.id ?? null);
+    if (same) continue;
+    lb.tanks![x.id] = { ...x, bar, barAt, check: check ? { ...check, at: t.check?.text === check.text ? t.check.at : check.at } : undefined, fromDive, updated: Date.now() };
     ch = true;
   }
   return ch;
@@ -54,27 +101,6 @@ export function rbMatch(lb: Logbook, m: Meta, role: RbRole): { id: string | null
   return { id: null, why: near.length ? "víc lahví s podobným tlakem" : "tlak neodpovídá žádné lahvi (dotlakovaná?)" };
 }
 
-/** Převzetí tlaku na konci ponoru k on-board lahvi (zavřená = ověřit). */
-export function rbApply(lb: Logbook, m: Meta, role: RbRole, id: string): void {
-  const g = lb.tanks?.[id];
-  if (!g) return;
-  const endT = (m.start + m.h.diveTimeS) * 1000;
-  if ((g.barAt || 0) > endT && g.fromDive?.id !== m.id) return; // novější údaj
-  const start = role === "o2" ? m.sum.o2Start : m.sum.dilStart, end = role === "o2" ? m.sum.o2End : m.sum.dilEnd;
-  const closed = end == null || end < CLOSED || (start != null && start < CLOSED);
-  const prev = g.fromDive?.id === m.id ? g.fromDive.prev : { bar: g.bar, barAt: g.barAt };
-  lb.tanks![id] = closed
-    ? { ...g, check: { at: Date.now(), text: `po ponoru ${dd(m.start)} ${end == null ? "počítač tlak nezná" : "lahev byla zavřená (jen mezitlak)"}` }, fromDive: { id: m.id, prev }, updated: Date.now() }
-    : { ...g, bar: Math.round(end!), barAt: endT, check: undefined, fromDive: { id: m.id, end: Math.round(end!), prev }, updated: Date.now() };
-}
-
-/** Lahev přestala být přiřazená k ponoru: vrátit tlak, který měla před převzetím z tohoto ponoru. */
-export function rbUnapply(lb: Logbook, m: Meta, id: string): void {
-  const g = lb.tanks?.[id];
-  if (!g || g.fromDive?.id !== m.id) return;
-  lb.tanks![id] = { ...g, bar: g.fromDive.prev?.bar, barAt: g.fromDive.prev?.barAt, check: undefined, fromDive: undefined, updated: Date.now() };
-}
-
 /** Další volné číslo lahve (RB O2 n / RB DIL n). */
 export function rbNextName(lb: Logbook, role: RbRole): string {
   const nums = Object.values(lb.tanks || {}).map((t) => new RegExp(`^${RB_PREFIX[role]} (\\d+)$`).exec(t.name || "")?.[1]).filter(Boolean).map(Number);
@@ -84,7 +110,7 @@ export function rbNextName(lb: Logbook, role: RbRole): string {
 const gasName = (mix: string | null) => { if (!mix) return "AIR"; const [o, h] = mix.split("/").map(Number); return h > 0 ? `TMX ${o}/${h}` : o === 21 ? "AIR" : o === 100 ? "O₂" : `EAN${o}`; };
 
 /**
- * Po načtení ponorů (poslední ponor): chybějící on-board lahve založit (RB O2 1, RB DIL 1), lahve rozpoznat a převzít tlak.
+ * Po načtení ponorů (poslední ponor): chybějící on-board lahve založit (RB O2 1, RB DIL 1) a lahve rozpoznat (tlak pak z historie).
  * Vrací true, když se něco změnilo. Ponor s ručním přiřazením se znovu nerozpoznává.
  */
 export function gearOnboardApply(lb: Logbook, last: Meta, cc: boolean): boolean {
@@ -98,7 +124,6 @@ export function gearOnboardApply(lb: Logbook, last: Meta, cc: boolean): boolean 
       lb.tanks[id] = t; ch = true;
       // první založení: tlak z tohoto ponoru
       lb.notes[last.id] = { buddyIds: [], note: "", ...lb.notes[last.id], rb: { ...lb.notes[last.id]?.rb, [role]: { id, auto: true } }, updated: Date.now() };
-      rbApply(lb, last, role, id);
       continue;
     }
     const cur = lb.notes[last.id]?.rb?.[role];
@@ -106,7 +131,6 @@ export function gearOnboardApply(lb: Logbook, last: Meta, cc: boolean): boolean 
     const r = rbMatch(lb, last, role);
     if (!r.id) continue;
     lb.notes[last.id] = { buddyIds: [], note: "", ...lb.notes[last.id], rb: { ...lb.notes[last.id]?.rb, [role]: { id: r.id, auto: true } }, updated: Date.now() };
-    rbApply(lb, last, role, r.id);
     ch = true;
   }
   return ch;

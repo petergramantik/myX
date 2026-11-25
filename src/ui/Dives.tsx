@@ -1,3 +1,5 @@
+import { gasDisp } from "../app/gas";
+import { prepSuitOnly } from "../app/model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { BTN_NAMES, pressGaps, GAS_COLOR, dur, tpt, scrubberFill, po2HighZones, po2DilZones, po2HiLevel, cellCalibration, pressureAnalysis, cellSpread, diveWarnings, batSwapInfo, gasLabel, gasSegments, o2Doses, realStops, scrName, setpointChanges, summarize, type Alert } from "../core/analysis";
@@ -578,10 +580,18 @@ export function gasUseOf(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefin
  * bailouty se stejným plynem jako diluent se počítají do diluentu jen při zjištěném externím diluentu.
  */
 function prepExt(gas: "dil" | "o2", meta: Meta, note: DiveNote | undefined): ExtGas[] {
-  const tanks = (note?.prep?.tanks || []).map((t) => (t.same ? { ...t, end: t.bar } : t)).filter((t) => t.bar != null && t.end != null && tankVol(t));
+  const tanks = (note?.prep?.tanks || []).map((t) => (t.same ? { ...t, end: t.bar } : t)).filter((t) => t.bar != null && t.end != null && tankVol(t) && !prepSuitOnly(t));
   const dilMix = meta.sum.gases.map((g) => g.mix).find((m) => m !== "100/0");
   const pick = tanks.filter((t) => gas === "o2" ? t.role === "o2" : t.role === "dil" || (t.role === "bo" && extDetected(meta.sum.dilUse) && (tankMix(t.gas) ?? dilMix) === dilMix));
   return pick.map((t) => ({ id: t.id, gas, kind: t.name, vol: tankVol(t)!, start: t.bar, end: t.end }));
+}
+
+/** Plyn na plnění obleku: lahve „jenom oblek“ (argon, role Oblek, zaškrtnuté po ponoru). */
+export function suitUseOf(note: DiveNote | undefined): { l: number; tanks: { name: string; gas: string; l: number }[] } | null {
+  const ts = (note?.prep?.tanks || []).filter(prepSuitOnly).map((t) => ({ t, end: t.same ? t.bar : t.end, v: tankVol(t) })).filter((x) => x.t.bar != null && x.end != null && x.v);
+  if (!ts.length) return null;
+  const tanks = ts.map((x) => ({ name: x.t.name, gas: x.t.gas, l: Math.max(0, x.t.bar! - x.end!) * x.v! }));
+  return { l: tanks.reduce((a, b) => a + b.l, 0), tanks };
 }
 
 /** Externí plyn: snímač ukazuje mezitlak, tlak během ponoru výrazně vzrostl, nebo je zadaná externí lahev. */
@@ -635,6 +645,7 @@ function GasUseCard({ meta, note }: { id: string; meta: Meta; note?: DiveNote })
       <AllTanks meta={meta} note={note} cyl={cyl} rate={rate} />
       {row("dil", "Diluent")}
       {row("o2", "O₂")}
+      {(() => { const su = suitUseOf(note); return su && <div className="pcell ptile"><div className="pcell-h"><b>Oblek</b><span className="muted">{su.tanks.map((x) => `${gasDisp(x.gas)} ${x.name}`).join(", ")}</span></div><div className="use-big">{fmtL(su.l)}</div><small className="muted">lahve „jenom oblek“ – celý úbytek je plnění obleku</small></div>; })()}
       <p className="note">Spotřeba z on-board lahve = součet poklesů tlaku (malé nárůsty z ohřátí se odečtou, větší nárůst nebo mezitlak = externí plyn). Externí a doplňkové lahve zadáváš v sekci Před a po ponoru. Objemy on-board lahví nastavíš ve Výstroji.</p>
     </Card>
   );
@@ -652,6 +663,7 @@ function AllTanks({ meta, note, cyl, rate }: { meta: Meta; note?: DiveNote; cyl:
   const missing = tanks.filter((t) => t.bar == null || (!t.same && t.end == null) || !tankVol(t));
   const g = (gas: "dil" | "o2") => gasUseOf(gas, meta, note, cyl[gas], gas === "o2" ? rate : null);
   const role: Record<string, string> = { bo: "BO", o2: "O₂", dil: "Dil", deco: "Deko", suit: "Oblek", other: "Jiná" };
+  const su = suitUseOf(note);
   return (
     <div className="all-tanks">
       <table className="small">
@@ -659,12 +671,12 @@ function AllTanks({ meta, note, cyl, rate }: { meta: Meta; note?: DiveNote; cyl:
         <tbody>
           {onb("o2", "O₂")}{onb("dil", "Diluent")}
           {tanks.map((t) => { const v = tankVol(t), end = t.same ? t.bar : t.end, used = t.bar != null && end != null ? Math.max(0, t.bar - end) : null;
-            return <tr key={t.id} className={o2Ids.has(t.id) || dilIds.has(t.id) ? "" : "muted"} title={o2Ids.has(t.id) ? "počítá se do O₂" : dilIds.has(t.id) ? "počítá se do diluentu" : "jen informativně"}><td>{role[t.role]} {t.name} <span className="muted">{t.gas}</span></td><td>{v ? `${num(v, 1)} l` : "?"}</td><td>{t.bar ?? "–"} → {t.same ? "beze změny" : end ?? "–"}</td>
+            return <tr key={t.id} className={o2Ids.has(t.id) || dilIds.has(t.id) ? "" : "muted"} title={o2Ids.has(t.id) ? "počítá se do O₂" : dilIds.has(t.id) ? "počítá se do diluentu" : "jen informativně"}><td>{prepSuitOnly(t) ? "Oblek" : role[t.role]} {t.name} <span className="muted">{gasDisp(t.gas)}</span></td><td>{v ? `${num(v, 1)} l` : "?"}</td><td>{t.bar ?? "–"} → {t.same ? "beze změny" : end ?? "–"}</td>
               <td>{used != null ? `${used} bar${v ? ` · ${fmtL(used * v)}` : ""}` : "–"}</td></tr>; })}
         </tbody>
       </table>
       {missing.length ? <p className="note c-warn">Skutečnou spotřebu spočítám po vyplnění všech lahví – chybí {missing.map((t) => `${role[t.role]} ${t.name}: ${t.bar == null ? "tlak před" : !tankVol(t) ? "objem" : "tlak po ponoru (nebo beze změny)"}`).join(", ")}.</p>
-        : <p className="real-use"><b>Skutečná spotřeba:</b> O₂ {g("o2").total != null ? fmtL(g("o2").total!) : "–"} · diluent {g("dil").total != null ? fmtL(g("dil").total!) : "–"}</p>}
+        : <p className="real-use"><b>Skutečná spotřeba:</b> O₂ {g("o2").total != null ? fmtL(g("o2").total!) : "–"} · diluent {g("dil").total != null ? fmtL(g("dil").total!) : "–"}{su ? ` · oblek ${fmtL(su.l)}` : ""}</p>}
     </div>
   );
 }

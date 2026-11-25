@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { gasColorOf, gasDisp } from "../app/gas";
 import type { Settings } from "../app/model";
 import { overdueText, tankLowBar, FILL_BAR, GEAR_TANK_KINDS, REV_YEARS, SVC_YEARS, TWIN_VOLS, dueState, tankMix, gearKindVol, gearVol, nextDue, uid, type GearFault, type GearHose, type GearReg, type GearStage, type GearTank } from "../app/model";
-import { deleteReg, deleteTank, ownMetas, saveTankGroup, saveReg, saveTank } from "../app/store";
-import { RB_TOL, rbMatch } from "../app/gearSync";
+import { deleteReg, deleteTank, ownMetas, saveTankGroup, saveReg, saveTank, tankCheck } from "../app/store";
+import { RB_TOL, rbMatch, tankEvents } from "../app/gearSync";
 import { isCC } from "../core/rig";
 import { ask, askText as promptText } from "../app/dialog";
 import { Card, go, num, tab, useStore } from "./common";
@@ -259,17 +259,22 @@ function TankList({ open }: { open?: string }) {
 
 function TankCard({ t, edit, setEdit }: { t: GearTank; edit: boolean; setEdit: (v: boolean) => void }) {
   const due = tankDue(t), ds = dueState(due), stg = useStore().lb.settings, ts = tankState(t, stg);
-  const [bar, setBar] = useState(t.bar != null ? String(t.bar) : "");
-  const saveBar = () => { const n = Math.round(+bar.replace(",", ".")); if (bar.trim() && n >= 0 && n < 400 && (n !== t.bar || t.check)) saveTank({ ...t, bar: n, barAt: Date.now(), check: undefined }); };
+  const [chk, setChk] = useState(false), [hist, setHist] = useState(false);
   return (
     <section className={"card gear-tank tstate " + ts.lvl} id={"tank-" + t.id}>
       <div className="card-h"><h2 className="gear-name">{tankLabel(t)}</h2><span>{t.o2 ? <span className="pill info">O₂ čisté</span> : null}{t.onboard ? <span className="pill">on-board {t.onboard === "o2" ? "O₂" : "dil"}</span> : null}</span></div>
       <div className="gear-big">
         <span className="gear-mix" style={{ color: gasColorOf(t.mix) || undefined }}>{gasDisp(t.mix)}</span>
-        <span className="gear-bar"><input className={"bar-in " + lvlBar(t.bar, tankLowBar(t, stg))} type="number" inputMode="numeric" value={bar} placeholder="bar" onChange={(e) => setBar(e.target.value)} onBlur={saveBar} /> bar</span>
+        <span className="gear-bar"><b className={"gear-barv " + lvlBar(t.bar, tankLowBar(t, stg))}>{t.bar ?? "–"}</b> bar</span>
       </div>
       <div className={"ct-l " + ts.lvl}>{ts.label}</div>
-      {t.check && <div className="reason warn">Ověřit tlak: {t.check.text}. <button className="btn small" onClick={() => saveTank({ ...t, check: undefined, barAt: Date.now() })}>Tlak sedí</button></div>}
+      {t.check && <div className="reason warn">Ověřit tlak: {t.check.text}. Zadej ho v ponoru (Po ponoru), nebo přes Kontrolu.</div>}
+      <div className="row tank-acts">
+        <button className={"btn small" + (t.check ? " primary" : "")} onClick={() => setChk(!chk)}>Kontrola</button>
+        <button className="btn small" onClick={() => setHist(!hist)}>{hist ? "▾" : "▸"} Historie</button>
+      </div>
+      {chk && <TankCheckForm t={t} onDone={() => setChk(false)} />}
+      {hist && <TankHistory t={t} />}
       <small className="muted">{num(gearVol(t), 1)} l{t.use === "fill" ? " · plnění" : ""}{t.barAt ? ` · tlak z ${fmtMs(t.barAt)}` : ""} · revize <span className={ts.rev ? "c-rev " + ts.rev : DUE_CLS[ds]}>{fmtD(due)}</span>{t.revLast ? ` (poslední ${fmtD(t.revLast)})` : ""}</small>
       {t.note && <p className="small">{t.note}</p>}
       <button className="ev-head" onClick={() => setEdit(!edit)}>{edit ? "▾" : "▸"} Upravit</button>
@@ -277,6 +282,49 @@ function TankCard({ t, edit, setEdit }: { t: GearTank; edit: boolean; setEdit: (
       {t.groups?.length ? <div className="tank-tags">{t.groups.map((g) => <span key={g} className="tank-tag">{g}</span>)}</div> : null}
       {ts.rev && <div className={"rev-bar " + ts.rev}>Revize {ts.rev === "over" ? `${overdueText(due!)} po termínu` : fmtD(due)}</div>}
     </section>
+  );
+}
+
+/** Kontrola lahve: potvrdit aktuální tlak, nebo zadat nový (po plnění i se směsí). */
+function TankCheckForm({ t, onDone }: { t: GearTank; onDone: () => void }) {
+  const [bar, setBar] = useState(""), [fill, setFill] = useState(false), [mix, setMix] = useState(gasDisp(t.mix));
+  const n = Math.round(+bar.replace(",", ".")), okN = bar.trim() !== "" && n >= 0 && n < 400;
+  return (
+    <div className="tank-check">
+      {t.bar != null && <button className="btn" onClick={async () => { await tankCheck(t.id, t.bar!); onDone(); }}>✓ Tlak sedí ({t.bar} bar)</button>}
+      <div className="row">
+        <input className="bar-in" type="number" inputMode="numeric" placeholder="nový tlak" value={bar} onChange={(e) => setBar(e.target.value)} />
+        <label className="small inline"><input type="checkbox" checked={fill} onChange={(e) => setFill(e.target.checked)} />naplněno</label>
+      </div>
+      {fill && <label>Směs po plnění<select value={GASES.includes(mix) ? mix : "_"} onChange={(e) => setMix(e.target.value === "_" ? mix : e.target.value)}>{GASES.map((g) => <option key={g}>{g}</option>)}{!GASES.includes(mix) && <option value="_">{mix}</option>}</select></label>}
+      <div className="row">
+        <button className="btn primary" disabled={!okN} onClick={async () => { await tankCheck(t.id, n, fill, fill && mix !== gasDisp(t.mix) ? mix : undefined); onDone(); }}>Uložit tlak</button>
+        <button className="btn" onClick={onDone}>Zrušit</button>
+      </div>
+    </div>
+  );
+}
+
+/** Historie lahve: kontroly, plnění a ponory (od nejnovější). */
+function TankHistory({ t }: { t: GearTank }) {
+  const st = useStore();
+  const ev = tankEvents(st.lb, ownMetas(), t.id);
+  if (!ev.length) return <p className="muted small">Zatím žádná historie.</p>;
+  // ponor: začátek a konec v jednom řádku
+  const rows: { at: number; text: string; dive?: string; warn?: boolean }[] = [];
+  for (let i = ev.length - 1; i >= 0; i--) {
+    const e = ev[i];
+    if (e.kind === "end") {
+      const s = ev.slice(0, i).reverse().find((x) => x.kind === "start" && x.diveId === e.diveId);
+      const m = st.metas.find((x) => x.id === e.diveId);
+      rows.push({ at: e.at, dive: e.diveId, warn: e.bar == null, text: `Ponor${m ? ` ${fmtMs(m.start * 1000)}` : ""}: ${s?.bar ?? "?"} → ${e.bar ?? "? (chybí tlak po)"} bar${e.src === "log" ? " · z logu" : ""}` });
+    } else if (e.kind === "start") { if (!ev.slice(i + 1).some((x) => x.kind === "end" && x.diveId === e.diveId)) rows.push({ at: e.at, dive: e.diveId, text: `Ponor: před ${e.bar} bar` }); }
+    else rows.push({ at: e.at, text: `${e.kind === "fill" ? "Plnění" : "Kontrola"} ${fmtMs(e.at)}: ${e.bar} bar${e.mix ? ` · ${gasDisp(e.mix)}` : ""}` });
+  }
+  return (
+    <ul className="tank-hist small">
+      {rows.slice(0, 30).map((r, k) => <li key={k} className={(r.warn ? "c-warn " : "") + (r.dive ? "link" : "")} onClick={() => r.dive && go({ t: "dive", id: r.dive })}>{r.text}{k === 0 ? <span className="muted"> · aktuální</span> : ""}</li>)}
+    </ul>
   );
 }
 
