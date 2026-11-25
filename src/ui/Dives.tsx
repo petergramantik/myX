@@ -839,9 +839,9 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
       </Card>
       {d ? <ProfileCard d={d} /> : <p className="muted center">Dekóduji…</p>}
       {!st.guest && <PrepCard prep={note.prep} real={{ dil: meta.sum.dilStart, o2: meta.sum.o2Start }} cc={isCC(meta.h)} diveId={id} onChange={(prep) => setNote(id, { prep })} />}
+      {isCC(meta.h) ? <GasUseCard id={id} meta={meta} note={note} /> : <SupplyGasCard id={id} meta={meta} note={note} />}
       {!st.guest && <SuggestCard meta={meta} />}
       {st.guest ? <GuestNote note={note} /> : <NoteEditor note={note} noPrep onChange={(p) => setNote(id, p)} />}
-      {isCC(meta.h) ? <GasUseCard id={id} meta={meta} note={note} /> : <SupplyGasCard id={id} meta={meta} note={note} />}
       <BuddyDivesCard meta={meta} />
       {st.guest && <button className="btn danger guest-del" onClick={async () => {
         if (!await ask("Smazat tento ponor z cizího logu? Při dalším importu stejného souboru se znovu přidá.", { danger: true, ok: "Smazat" })) return;

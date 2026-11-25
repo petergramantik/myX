@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.47";
+export const APP_VERSION = "1.47.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.47.1", date: "2026-11-25", title: "Spotřeba plynu za Před a po ponoru", items: [
+    "Detail ponoru: panel Spotřeba plynu hned za „Před a po ponoru“.",
+  ] },
   { version: "1.47", date: "2026-11-25", title: "Před a po ponoru, historie lahví, oblek", items: [
     "Před a po ponoru ve dvou částech: Před ponorem – lahve z Výstroje (výběr přes celou šířku, tlak ✓ potvrdit nebo naměřený, u on-board tlak z logu i z Výstroje, Potvrdit při rozporu nad 15 bar), „oblek“, hydratace, kalibrace; Po ponoru – tlaky lahví, které počítač neměří, „jenom oblek“, upozornění na novější záznam ve Výstroji.",
     "Výstroj: tlak lahve z historie (kontroly, plnění, ponory) – poslední událost vyhrává, starší ponor nepřepíše pozdější údaj; tlačítka Kontrola (✓ tlak sedí, nový tlak, plnění se směsí) a Historie.",
