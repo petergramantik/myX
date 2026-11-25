@@ -5,7 +5,7 @@ import { alerts, scrubberInfo } from "../core/analysis";
 import { compName, computerCfg, rigInfo, setComputerRig, createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { CellTiles, useCells } from "./Cells";
-import { hasExt, suitUseOf } from "./Dives";
+import { gasUseOf, hasExt, suitUseOf } from "./Dives";
 import type { Meta } from "../app/model";
 import { BatteryTiles, useBatteries } from "./Batteries";
 import { BleDownload } from "./BleDownload";
@@ -207,8 +207,8 @@ export function OverviewScreen() {
           <Tiles hide={isCC(last.h) ? [] : ["Diluent", "O₂", "Max. CO₂"]} items={[
             ["Hloubka", <>{num(last.h.maxDepth)} m<small className="sub">prům. {num(last.sum.avgDepth)} m</small></>],
             ["Doba", <><span className="toggle" onClick={() => setHmDur(!hmDur)}>{hmDur ? hm(last.h.diveTimeS / 60) : `${Math.round(last.h.diveTimeS / 60)} min`}</span><small className="sub">{last.sum.decoMin ? `deko ${last.sum.decoMin} min` : "bez deko"}</small></>],
-            ["Diluent", <>{hasExt(last, lastNote, "dil") && <span className="extflag">EXT</span>}<span className="nw">{num(last.sum.dilStart, 0)} → {num(last.sum.dilEnd, 0)}</span><small className="sub">bar</small></>],
-            ["O₂", <>{hasExt(last, lastNote, "o2") && <span className="extflag">EXT</span>}<span className="nw">{num(last.sum.o2Start, 0)} → {num(last.sum.o2End, 0)}</span><small className="sub">bar{(last.sum.o2Start ?? 99) < 20 && (last.sum.o2End ?? 99) < 20 ? " · nejspíš mezitlak" : ""}</small></>],
+            ["Diluent", <LastGas m={last} gas="dil" />],
+            ["O₂", <LastGas m={last} gas="o2" />],
             ["Max. CO₂", last.sum.co2Max != null ? `${num(last.sum.co2Max, 2)} mbar` : "–"],
             ["Baterie", <BatteryMini />],
           ]} />
@@ -253,6 +253,20 @@ export function OverviewScreen() {
 
 /** Trend SurfGF při vynoření (z GF99 Petrelu u hladiny) s hranicí – vypínatelné v Nastavení → Výbava. */
 /** Spotřeba na oblek z ponorů s lahví „jenom oblek“. */
+/** Poslední ponor: tlak on-board lahve (z logu, nebo zadaný při zavřené lahvi) a skutečná spotřeba. */
+function LastGas({ m, gas }: { m: Meta; gas: "dil" | "o2" }) {
+  const st = useStore();
+  const note = st.lb.notes[m.id];
+  const g = gasUseOf(gas, m, note, st.lb.settings.cyl?.[gas] ?? 3);
+  const s0 = gas === "o2" ? m.sum.o2Start : m.sum.dilStart, s1 = gas === "o2" ? m.sum.o2End : m.sum.dilEnd;
+  const closed = (s0 ?? 99) < 20 && (s1 ?? 99) < 20;
+  return (<>
+    {hasExt(m, note, gas) && <span className="extflag">EXT</span>}
+    <span className="nw">{g.ob ? `${g.ob.start} → ${g.ob.end}` : `${num(s0, 0)} → ${num(s1, 0)}`}</span>
+    <small className="sub">bar{g.ob?.src === "typed" ? " · zadáno" : closed ? " · nejspíš mezitlak" : ""}{g.total != null ? ` · ${Math.round(g.total)} l` : ""}</small>
+  </>);
+}
+
 function SuitUse() {
   const st = useStore();
   const xs = st.metas.map((m) => ({ m, s: suitUseOf(st.lb.notes[m.id]) })).filter((x) => x.s && x.s.l > 0);
