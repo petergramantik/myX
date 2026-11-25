@@ -5,7 +5,7 @@ import { alerts, scrubberInfo } from "../core/analysis";
 import { compName, computerCfg, rigInfo, setComputerRig, createDraft, importDb, localNow, locate, nearestSite, toast, upsertSite } from "../app/store";
 import { AlertBox, Card, RATING, Tiles, fmtDate, fmtDateTime, go, hm, num, useStore } from "./common";
 import { CellTiles, useCells } from "./Cells";
-import { hasExt } from "./Dives";
+import { hasExt, suitUseOf } from "./Dives";
 import type { Meta } from "../app/model";
 import { BatteryTiles, useBatteries } from "./Batteries";
 import { BleDownload } from "./BleDownload";
@@ -230,6 +230,7 @@ export function OverviewScreen() {
         </Card>
       )}
       {!st.guest && <SurfGfTrend />}
+      {!st.guest && <SuitUse />}
       <div className="center"><BleDownload /><ImportButton /></div>
 
       <Card title="Kde jsem" onTitle={egg.tap} id="where">
@@ -251,6 +252,21 @@ export function OverviewScreen() {
 }
 
 /** Trend SurfGF při vynoření (z GF99 Petrelu u hladiny) s hranicí – vypínatelné v Nastavení → Výbava. */
+/** Spotřeba na oblek z ponorů s lahví „jenom oblek“. */
+function SuitUse() {
+  const st = useStore();
+  const xs = st.metas.map((m) => ({ m, s: suitUseOf(st.lb.notes[m.id]) })).filter((x) => x.s && x.s.l > 0);
+  if (!xs.length) return null;
+  const avg = xs.reduce((a, x) => a + x.s!.l, 0) / xs.length;
+  const perH = xs.reduce((a, x) => a + x.s!.l, 0) / (xs.reduce((a, x) => a + x.m.h.diveTimeS, 0) / 3600);
+  const last = xs[xs.length - 1];
+  return (
+    <Card title="Oblek">
+      <p><b>{Math.round(avg)} l</b> na ponor · {Math.round(perH)} l/h <span className="muted small">({xs.length} {xs.length === 1 ? "ponor" : xs.length < 5 ? "ponory" : "ponorů"} s lahví „jenom oblek“; poslední {fmtDate(last.m.start)}: {Math.round(last.s!.l)} l)</span></p>
+    </Card>
+  );
+}
+
 function SurfGfTrend() {
   const st = useStore();
   const set = st.lb.settings;

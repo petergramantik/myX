@@ -11,7 +11,7 @@ import * as db from "./db";
 import { decodeAny, readAny } from "../core/decoders";
 import { RIGS, defaultRig, diveType, isSupported, rigsForMode, type Rig } from "../core/rig";
 import { isCC } from "../core/rig";
-import { gearTankApply, gearOnboardApply, rbApply, rbUnapply, rbNextName, type RbRole } from "./gearSync";
+import { gearOnboardApply, gearRecompute, rbNextName, type RbRole } from "./gearSync";
 import { aliasKey, cleanForeign, emptyLogbook, resetLogbook, mergeLogbooks, uid, distKm, siteCoords, norm, META_V, type Alias, type GearTank, type GearReg, type Computer, type Logbook, type Meta, type Site, type Buddy, type DiveNote, type Draft, type Cell, type Battery, type WeatherSnap } from "./model";
 import { syncKey, workerUrl } from "./config";
 
@@ -188,6 +188,8 @@ export async function init() {
 
 async function saveLb(lb: Logbook) {
   if (st.guest) { toast("Cizí log je jen k prohlížení"); return; }
+  // tlaky lahví ve Výstroji z historie (kontroly + ponory)
+  if (lb.tanks && !st.temp) gearRecompute(lb, ownMetas());
   set({ lb });
   await db.put("kv", lb, "lb");
   scheduleSync();
@@ -1123,7 +1125,9 @@ export async function linkDraft(draftId: string, diveId: string, auto = false) {
   };
   delete lb.drafts[draftId];
   lb.deleted[draftId] = Date.now();
-  gearTankApply(lb, diveId, st.metas.find((m) => m.id === diveId));
+  // on-board lahve vybrané v rozpracovaném ponoru → přiřazení k ponoru
+  const pp = lb.notes[diveId].prep;
+  if (pp?.o2Tank || pp?.dilTank) lb.notes[diveId].rb = { ...(pp.o2Tank ? { o2: { id: pp.o2Tank } } : {}), ...(pp.dilTank ? { dil: { id: pp.dilTank } } : {}), ...lb.notes[diveId].rb };
   await saveLb(lb);
   if (auto) toast(`Rozpracovaný ponor spárován s ponorem č. ${myNum(diveId)}`);
   // počasí z doby založení nahradit počasím v čase začátku ponoru na lokalitě (jinak na poslední poloze přípravy)
@@ -1246,8 +1250,6 @@ export const localNow = () => Math.floor(Date.now() / 1000) - new Date().getTime
 export function setNote(diveId: string, patch: Partial<DiveNote>) {
   const lb = structuredClone(st.lb);
   lb.notes[diveId] = Object.assign({ buddyIds: [], note: "" }, lb.notes[diveId], patch, { updated: Date.now() });
-  // zbytkový tlak lahví z Výstroje po ponoru (off-board lahve z „Před a po ponoru“)
-  if (patch.prep) gearTankApply(lb, diveId, st.metas.find((m) => m.id === diveId));
   return saveLb(lb);
 }
 
@@ -1255,7 +1257,10 @@ export function setNote(diveId: string, patch: Partial<DiveNote>) {
 export function saveTank(t: Partial<GearTank> & { kind: string; vol: number; mix: string }): Promise<void> {
   const lb = structuredClone(st.lb);
   const id = t.id || uid();
-  lb.tanks = { ...(lb.tanks || {}), [id]: { ...(lb.tanks?.[id] || {}), ...t, id, updated: Date.now() } as GearTank };
+  const prev = lb.tanks?.[id];
+  lb.tanks = { ...(lb.tanks || {}), [id]: { ...(prev || {}), ...t, id, updated: Date.now() } as GearTank };
+  // tlak zadaný ve formuláři = kontrola
+  if (t.bar != null && t.bar !== prev?.bar) { const y = lb.tanks[id]; lb.tanks[id] = { ...y, checks: [...(prev?.checks || (prev?.bar != null ? [{ at: prev.barAt || prev.updated, bar: prev.bar }] : [])), { at: Date.now(), bar: t.bar }] }; }
   // on-board lahev rebreatheru: bez názvu dostane RB O2 n / RB DIL n; objem pro výpočty spotřeby
   const x = lb.tanks[id];
   if (x.onboard) {
@@ -1306,18 +1311,24 @@ export function gearOnboardSync(): Promise<void> | void {
   const last = cc[cc.length - 1];
   if (!last) return;
   const lb = structuredClone(st.lb);
-  if (gearOnboardApply(lb, last, true)) return saveLb(lb);
+  const a = gearOnboardApply(lb, last, true);
+  if (a || gearRecompute(lb, ownMetas())) return saveLb(lb);
 }
-/** Ruční přiřazení on-board lahve k ponoru (null = zrušit): tlak převezme nová lahev, původní se vrátí. */
+/** Ruční přiřazení on-board lahve k ponoru (null = zrušit); tlaky lahví se přepočítají z historie. */
 export function rbAssign(diveId: string, role: RbRole, tankId: string | null): Promise<void> {
-  const m = st.metas.find((x) => x.id === diveId);
   const lb = structuredClone(st.lb);
-  const old = lb.notes[diveId]?.rb?.[role]?.id;
-  if (m && old && old !== tankId) rbUnapply(lb, m, old);
   const rb = { ...lb.notes[diveId]?.rb };
   if (tankId) rb[role] = { id: tankId }; else delete rb[role];
   lb.notes[diveId] = { buddyIds: [], note: "", ...lb.notes[diveId], rb, updated: Date.now() };
-  if (m && tankId) rbApply(lb, m, role, tankId);
+  return saveLb(lb);
+}
+/** Kontrola lahve: potvrzení tlaku nebo nový tlak (plnění se směsí). */
+export function tankCheck(id: string, bar: number, fill?: boolean, mix?: string, at = Date.now()): Promise<void> {
+  const lb = structuredClone(st.lb);
+  const t = lb.tanks?.[id];
+  if (!t) return Promise.resolve();
+  const checks = [...(t.checks || (t.bar != null ? [{ at: t.barAt || t.updated, bar: t.bar }] : [])), { at, bar, ...(fill ? { fill: true } : {}), ...(mix ? { mix } : {}) }];
+  lb.tanks![id] = { ...t, checks, ...(mix ? { mix } : {}), updated: Date.now() };
   return saveLb(lb);
 }
 

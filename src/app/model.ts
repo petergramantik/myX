@@ -16,7 +16,9 @@ export interface WeatherSnap { at: number; temp: number; wind: number; gust: num
 /** Externí lahev připojená během ponoru (Petrel její tlak neměří). */
 export interface ExtGas { id: string; /** sup = zásobní plyn přístroje bez vysílačů (pSCR, OC…) */ gas: "dil" | "o2" | "sup"; kind: string; vol: number; start?: number; end?: number }
 /** Off-board lahev z předponorové přípravy (bailout, off-board O₂…). */
-export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "suit" | "other"; name: string; gas: string; /** lahev z Výstroje */ gearId?: string; bar?: number; /** tlak po ponoru */ end?: number; /** beze změny (lahev nepoužitá) – konec = začátek */ same?: boolean; /** objem (l); jinak z označení S80/S40… */ vol?: number }
+export interface PrepTank { id: string; role: "bo" | "o2" | "dil" | "deco" | "suit" | "other"; name: string; gas: string; /** lahev z Výstroje */ gearId?: string; /** lahev připojená i k obleku */ suit?: boolean; /** po ponoru: lahev jen na plnění obleku (celý úbytek = oblek) */ suitOnly?: boolean; bar?: number; /** tlak po ponoru */ end?: number; /** beze změny (lahev nepoužitá) – konec = začátek */ same?: boolean; /** objem (l); jinak z označení S80/S40… */ vol?: number }
+/** Lahev ponoru jen na oblek: argon, role Oblek nebo „jenom oblek“ po ponoru. */
+export const prepSuitOnly = (t: PrepTank) => t.role === "suit" || /^\s*argon\s*$/i.test(t.gas) || (!!t.suit && !!t.suitOnly);
 /** Objem lahve (l) z ručního zadání nebo z označení (S80, S40, 12 l…). */
 export function tankVol(t: { vol?: number; name: string }): number | null {
   if (t.vol) return t.vol;
@@ -37,7 +39,7 @@ export function tankMix(g: string): string | null {
   return null;
 }
 /** Předponorová příprava: naměřené tlaky (bar) on-board lahví, off-board lahve a potvrzení kalibrace (ms). */
-export interface Prep { o2?: number; dil?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string }; /** hydratace před ponorem (jen informace) */ hyd?: "low" | "mid" | "good" }
+export interface Prep { o2?: number; dil?: number; /** tlak on-board lahve po ponoru zadaný ručně (zavřená lahev, počítač tlak nezná) */ o2End?: number; dilEnd?: number; /** on-board lahve z Výstroje vybrané v rozpracovaném ponoru (po spárování → DiveNote.rb) */ o2Tank?: string; dilTank?: string; /** potvrzený tlak z logu při rozporu s Výstrojí */ o2Conf?: number; dilConf?: number; tanks?: PrepTank[]; o2Cal?: number; co2Cal?: { at: number; gas: string }; /** hydratace před ponorem (jen informace) */ hyd?: "low" | "mid" | "good" }
 export const HYD_LABEL = { low: "Slabá", mid: "Střední", good: "Dobrá" } as const;
 export interface DiveNote {
   siteId?: string; buddyIds: string[]; note: string; rating?: Rating; weather?: WeatherSnap;
@@ -80,6 +82,8 @@ export interface Logbook {
 }
 
 /** Lahev ve Výstroji. Dvojče = 2 ocelové lahve (objem jedné × 2) jako jedna lahev. */
+/** Kontrola lahve: potvrzený nebo nově zadaný tlak (plnění se směsí). */
+export interface TankCheck { at: number; bar: number; fill?: boolean; mix?: string }
 export interface GearTank {
   id: string; kind: string; /** objem jedné lahve (l); u dvojčete jedné z dvojice */ vol: number; name?: string; mix: string;
   /** zbytkový tlak (bar) a kdy byl zadán / převzat z ponoru */ bar?: number; barAt?: number;
@@ -90,6 +94,7 @@ export interface GearTank {
   /** účel: plnění (lahev na přepouštění plynu) */ use?: "fill";
   /** plnicí tlak lahve (bar); jinak výchozí z nastavení */ fillBar?: number;
   /** vlastní skupiny (např. RB, Kurzy); lahev může být ve více */ groups?: string[];
+  /** kontroly tlaku (ruční zadání, potvrzení, plnění); aktuální tlak = poslední událost z kontrol a ponorů */ checks?: TankCheck[];
 }
 export const GEAR_TANK_KINDS = ["S80", "S40", "12 l", "3 l", "2,5 l", "Dvojče", "Jiná"];
 export const TWIN_VOLS = [8, 10, 12, 15, 18];
