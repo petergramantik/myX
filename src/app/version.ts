@@ -1,10 +1,10 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.47.1-dev.1";
+export const APP_VERSION = "1.47.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.47.1-dev.1", date: "2026-11-25", title: "Spotřeba plynu za Před a po ponoru (dev)", items: [
+  { version: "1.47.1", date: "2026-11-25", title: "Spotřeba plynu za Před a po ponoru", items: [
     "Detail ponoru: panel Spotřeba plynu hned za „Před a po ponoru“.",
   ] },
   { version: "1.47", date: "2026-11-25", title: "Před a po ponoru, historie lahví, oblek", items: [
