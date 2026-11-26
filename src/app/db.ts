@@ -99,6 +99,25 @@ export async function del(store: string, key: string, name?: string): Promise<vo
   const db = await open(name);
   await req(db.transaction(store, "readwrite").objectStore(store).delete(key));
 }
+/** Všechny záznamy úložiště (klíč + hodnota) – pro zálohu. */
+export async function dump(store: string, name?: string): Promise<{ k: IDBValidKey; v: unknown }[]> {
+  const db = await open(name);
+  return new Promise((res, rej) => {
+    const out: { k: IDBValidKey; v: unknown }[] = [];
+    const c = db.transaction(store).objectStore(store).openCursor();
+    c.onsuccess = () => { const cur = c.result; if (cur) { out.push({ k: cur.key, v: cur.value }); cur.continue(); } else res(out); };
+    c.onerror = () => rej(c.error);
+  });
+}
+/** Zápis záznamu obnoveného ze zálohy, jen když klíč ještě neexistuje. */
+export async function putIfMissing(store: string, k: IDBValidKey, v: unknown, name?: string): Promise<boolean> {
+  if (memOnly) return false;
+  const db = await open(name);
+  const os = db.transaction(store, "readwrite").objectStore(store);
+  if ((await req(os.count(k))) > 0) return false;
+  await req(os.keyPath ? os.put(v) : os.put(v, k));
+  return true;
+}
 export async function clearAll(): Promise<void> {
   if (memOnly) return;
   const db = await open();

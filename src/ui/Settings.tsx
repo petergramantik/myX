@@ -1,3 +1,6 @@
+import { appUrl } from "../app/appurl";
+import type { Settings } from "../app/model";
+import { doBackup, fetchStats, lastBackup } from "../app/backup";
 import { LANG, LANGS, LOC, setLang, tr, type Lang } from "../app/i18n";
 import { ask, askText, choose } from "../app/dialog";
 import { AliasCard } from "./Sites";
@@ -109,11 +112,7 @@ export function SettingsScreen() {
       <Sec title="Data">
         <div className="col">
           <ImportButton />
-          <button className="btn" onClick={async () => {
-            const b = await exportBackup();
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(b); a.download = `myx-zaloha-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-          }}>Stáhnout zálohu</button>
+          <BackupBox />
           <button className="btn" onClick={() => fileRef.current?.click()}>Obnovit ze zálohy</button>
           <input ref={fileRef} type="file" hidden onChange={async (e) => {
             const f = e.target.files?.[0]; e.target.value = "";
@@ -130,6 +129,13 @@ export function SettingsScreen() {
           <button className="btn danger" onClick={async () => { if (await ask("Smazat všechna data v tomto telefonu?")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
         </div>
       </Sec>
+
+      <Sec title="Podpořit vývoj">
+        <p className="note">myX je zdarma a vzniká ve volném čase. Pokud ti pomáhá, můžeš vývoj podpořit dobrovolným příspěvkem.</p>
+        <a className="btn primary" href="https://buymeacoffee.com/petergramantik" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
+      </Sec>
+
+      {syncKey() && <StatsSec />}
 
       <Sec title="O aplikaci" open>
         <KV rows={[["Verze", <a onClick={() => go({ t: "about" })}>{APP_VERSION} – co je nového ›</a>], ["Ponorů v telefonu", st.metas.length]]} />
@@ -228,7 +234,9 @@ export function AboutScreen() {
   );
 }
 
-export const APP_URL = "https://petergramantik.github.io/myX/";
+export const APP_URL = appUrl();
+/** public/qr.svg kóduje tuto adresu – po přesunu na jinou doménu vygenerovat znovu. */
+const QR_URL = "https://petergramantik.github.io/myX/";
 
 /** Sdílení aplikace: systémové sdílení (nebo zkopírování odkazu) a QR kód. */
 function ShareInner() {
@@ -243,7 +251,7 @@ function ShareInner() {
   return (
     <>
       <button className="btn primary" onClick={share}>Sdílet aplikaci</button>
-      <img className="qr" src="qr.svg" alt={"QR kód: " + APP_URL} width={180} height={180} />
+      {APP_URL === QR_URL && <img className="qr" src="qr.svg" alt={"QR kód: " + APP_URL} width={180} height={180} />}
       <p className="center small"><a href={APP_URL}>{APP_URL.replace("https://", "")}</a></p>
       <p className="note">Každý má svá data jen ve svém zařízení. Svůj log pošleš parťákovi v záložce DB → Sdílet můj log.</p>
     </>
@@ -335,6 +343,44 @@ export function GuestCard() {
   );
 }
 
+
+/** Záloha: interval připomínky, poslední záloha, zálohovat teď (uložit / sdílet). */
+function BackupBox() {
+  const st = useStore();
+  const [last, setLast] = useState(lastBackup());
+  const go2 = async (how: "share" | "save") => { try { if (await doBackup(how)) { setLast(lastBackup()); toast("Záloha vytvořena"); } } catch (e) { toast((e as Error).message); } };
+  return (<>
+    <p className="note">Záloha obsahuje všechna tvoje data: ponory, lokality, parťáky, poznámky, Výstroj, čidla, baterie, nastavení i logy ostatních. Obnova ze zálohy data sloučí – nic nepřepíše.</p>
+    <KV rows={[["Poslední záloha", last ? new Date(last).toLocaleDateString(LOC) : "zatím žádná"]]} />
+    <label>Připomínat zálohu<select value={st.lb.settings.backupEvery || "month"} onChange={(e) => saveSettings({ backupEvery: e.target.value as Settings["backupEvery"] })}>
+      <option value="week">každý týden</option><option value="month">každý měsíc</option><option value="off">vypnuto</option>
+    </select></label>
+    <div className="row"><button className="btn" onClick={() => go2("save")}>Stáhnout zálohu</button><button className="btn" onClick={() => go2("share")}>Sdílet zálohu…</button></div>
+  </>);
+}
+
+/** Anonymní počítadlo spuštění – jen pro vlastníka (s klíčem synchronizace). */
+function StatsSec() {
+  const [d, setD] = useState<Record<string, Record<string, number>> | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => { fetchStats().then(setD).catch((e) => setErr((e as Error).message)); }, []);
+  const days = d ? Object.keys(d).sort().reverse() : [];
+  const sum = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0);
+  const byCc: Record<string, number> = {};
+  for (const x of days) for (const [cc, n] of Object.entries(d![x])) byCc[cc] = (byCc[cc] || 0) + n;
+  const total = Object.values(byCc).reduce((a, b) => a + b, 0);
+  return (
+    <Sec title="Přístupy">
+      {err ? <p className="c-warn small">{err}</p> : !d ? <p className="muted small">Načítám…</p> : !days.length ? <p className="muted small">Zatím žádné přístupy.</p> : <>
+        <p>Celkem <b>{total}</b> spuštění · posledních 7 dní <b>{days.slice(0, 7).reduce((a, x) => a + sum(d![x]), 0)}</b></p>
+        <table className="stats-t"><tbody>{Object.entries(byCc).sort((a, b) => b[1] - a[1]).map(([cc, n]) => <tr key={cc}><td data-noi18n>{cc}</td><td>{n}</td></tr>)}</tbody></table>
+        <h3 className="subh">Po dnech</h3>
+        <table className="stats-t"><tbody>{days.slice(0, 14).map((x) => <tr key={x}><td data-noi18n>{new Date(x).toLocaleDateString(LOC)}</td><td data-noi18n>{Object.entries(d![x]).map(([cc, n]) => `${cc} ${n}`).join(" · ")}</td><td>{sum(d![x])}</td></tr>)}</tbody></table>
+      </>}
+      <p className="note">Anonymní počet spuštění produkční verze (každé zařízení nejvýš jednou denně) podle země. Neukládá se IP adresa ani žádný identifikátor. Vidíš jen ty – karta se ukáže jen s klíčem synchronizace.</p>
+    </Sec>
+  );
+}
 
 /** Přepnutí mezi běžnou (produkční) a dev verzí. Dev verze běží na …/dev/, bez synchronizace, na vlastní kopii dat. */
 function DevSec() {

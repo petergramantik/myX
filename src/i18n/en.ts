@@ -1427,10 +1427,30 @@ export const EN: Record<string, string> = {
 "mlha": "fog",
 "nad": "above",
 "pod": "below",
-"nikdo": "nobody"
+"nikdo": "nobody",
+"Testovací verze": "Test version",
+"Záloha vytvořena": "Backup created",
+"💾 Je čas na zálohu dat": "💾 Time to back up your data",
+"Podpořit vývoj": "Support development",
+"myX je zdarma a vzniká ve volném čase. Pokud ti pomáhá, můžeš vývoj podpořit dobrovolným příspěvkem.": "myX is free and made in spare time. If it helps you, you can support its development with a voluntary contribution.",
+"Záloha obsahuje všechna tvoje data: ponory, lokality, parťáky, poznámky, Výstroj, čidla, baterie, nastavení i logy ostatních. Obnova ze zálohy data sloučí – nic nepřepíše.": "The backup contains all your data: dives, sites, buddies, notes, Gear, cells, batteries, settings and others' logs. Restoring merges the data – nothing is overwritten.",
+"Poslední záloha": "Last backup",
+"zatím žádná": "none yet",
+"Připomínat zálohu": "Backup reminder",
+"každý týden": "every week",
+"každý měsíc": "every month",
+"vypnuto": "off",
+"Sdílet zálohu…": "Share backup…",
+"Přístupy": "Visits",
+"Zatím žádné přístupy.": "No visits yet.",
+"spuštění · posledních 7 dní": "launches · last 7 days",
+"Po dnech": "By day",
+"Anonymní počet spuštění produkční verze (každé zařízení nejvýš jednou denně) podle země. Neukládá se IP adresa ani žádný identifikátor. Vidíš jen ty – karta se ukáže jen s klíčem synchronizace.": "Anonymous count of production launches (each device at most once a day) by country. No IP address or identifier is stored. Only you see it – the card appears only with the sync key."
 };
 /** názvy verzí v „Co je nového“ */
 export const EN_REL: Record<string, string> = {
+"Úplná záloha, příspěvek, BETA (dev)": "Full backup, support, BETA (dev)",
+"Úplná záloha, příspěvek, BETA": "Full backup, support, BETA",
 "Anglická verze (dev)": "English version (dev)",
 "Anglická verze": "English version",
 "Skutečná spotřeba ze zadaných lahví": "Actual gas use from entered cylinders",

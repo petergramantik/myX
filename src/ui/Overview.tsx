@@ -1,3 +1,4 @@
+import { backupDue, doBackup, lastBackup } from "../app/backup";
 import { DEC, LOC } from "../app/i18n";
 import { askText } from "../app/dialog";
 import { isCC } from "../core/rig";
@@ -41,6 +42,20 @@ function scrubLevel(sc: NonNullable<ReturnType<typeof scrubberInfo>>, scrubDays:
 
 /** Hláška nad scrubberem podle oranžových/červených stavů O₂ čidel, baterií a scrubberu (CO₂ se nepočítá). */
 let mottoHidden = false; // schová se do příštího spuštění aplikace
+/** Připomínka pravidelné zálohy (Nastavení → Data). */
+function BackupBar() {
+  const st = useStore();
+  const [, force] = useState(0);
+  if (!backupDue(st.lb.settings, st.metas.length)) return null;
+  const run = async (how: "share" | "save") => { try { if (await doBackup(how)) { toast("Záloha vytvořena"); force((x) => x + 1); } } catch (e) { toast((e as Error).message); } };
+  return (
+    <div className="bak-bar">
+      <span>💾 Je čas na zálohu dat{lastBackup() ? ` (poslední ${new Date(lastBackup()).toLocaleDateString(LOC)})` : ""}</span>
+      <span className="row"><button className="btn small" onClick={() => run("share")}>Sdílet</button><button className="btn small primary" onClick={() => run("save")}>Uložit</button></span>
+    </div>
+  );
+}
+
 function Motto() {
   const st = useStore();
   const [, force] = useState(0);
@@ -182,6 +197,7 @@ export function OverviewScreen() {
   return (
     <div className="screen">
       <Motto />
+      {!st.guest && <BackupBar />}
       {cc && <ScrubberTile />}
       {!cc && <ManualScrubTile />}
       {cc && <CellTiles />}

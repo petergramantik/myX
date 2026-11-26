@@ -1,9 +1,10 @@
 // Srovnání ponorů jako samostatná statická stránka HTML (bez skriptů, bez ID počítačů a surových dat) ke sdílení.
+import { appUrl } from "../app/appurl";
 import { LANG, tr } from "../app/i18n";
 import { toast } from "../app/store";
 import { choose } from "../app/dialog";
 
-const APP_URL = "https://petergramantik.github.io/myX/";
+const APP_URL = appUrl();
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /** Styly aplikace (jen pravidla, která stránka použije, + proměnné). */

@@ -3,8 +3,9 @@
 - S uživatelem komunikuj česky.
 - Nové požadavky zapisuj jen do číslovaného TODO listu (v chatu, ne do repozitáře). Implementuj až po pokynu „imp“ (nebo „im“).
 - Dvě větve: `main` = produkce (…/myX/), `dev` = dev verze (…/myX/dev/). Uživatel přepíná v Nastavení → Dev.
-- „imp“/„im“ implementuje do větve `dev` (nikdy přímo do `main`): `bun tests/core.test.ts` a `./build.sh` musí projít, commit a push do `dev`, a hned potom release do produkce (od 24. 11. 2026). Workflow „Dev verze“ spustí nasazení, které sestaví produkci (main) i dev (dev).
-- Před imp upozornit a nabídnout jen dev (release až po vyzkoušení), když změna mění formát/ukládání dat, synchronizaci a Worker, import a dekódování logu, stahování přes Bluetooth, analýzy pro upozornění, nebo by mohla aplikaci rozbít.
+- „imp“/„im“ implementuje do větve `dev` (nikdy přímo do `main`): `bun tests/core.test.ts` a `./build.sh` musí projít, commit a push do `dev`. Do produkce jen přes „release“ (od 26. 11. 2026 znovu – vývoj běží v dev). Workflow „Dev verze“ spustí nasazení, které sestaví produkci (main) i dev (dev).
+- Před release upozornit na rizikové změny (formát/ukládání dat, synchronizace a Worker, import a dekódování logu, Bluetooth, analýzy pro upozornění).
+- Adresa aplikace není v kódu natvrdo (`src/app/appurl.ts`, volitelně `window.MYX_APP_URL` v `public/config.js`); `public/qr.svg` kóduje produkční adresu – po přesunu na doménu vygenerovat znovu. Produkce má v záhlaví štítek BETA (testovací fáze), dev štítek DEV.
 - „release“ převede dev do produkce: sloučit `dev` do `main`, verzi bez „-dev“, push `main`. Nové funkce se do produkce nesmí dostat jinak než přes „release“. Výjimka: oprava chyby v produkci jen na výslovný pokyn („hotfix“) – commit do `main` a hned sloučit i do `dev`.
 - Verze: v `src/app/version.ts` zvýšit `APP_VERSION` a přidat nahoru položku do `RELEASES`. V dev „X.Y-dev.N“ (každé imp zvýší N), při release „X.Y“ (položky RELEASES z dev sloučit do jedné). Drobnosti zvyšují setinu, desetina jen u významných změn.
 - Dev verze: vlastní kopie dat v IndexedDB („dev-myx“, „dev-myx-guest“, zkopírováno z produkce), žádná synchronizace. Změna formátu dat v dev nesmí měnit produkční úložiště.

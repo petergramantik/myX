@@ -5,6 +5,7 @@ import { DialogHost } from "./ui/Dialog";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { startI18n } from "./app/i18n";
+import { hitOnce } from "./app/backup";
 import { gearOnboardSync, init, locate, peekPop, scheduleSync, syncNow, takeShared, toast } from "./app/store";
 
 import { back, go, onBeforePop, tab, useBackLayer, useScreen, useStore, type Screen } from "./ui/common";
@@ -132,6 +133,7 @@ function App() {
   useEffect(() => { if ((s.t === "settings" || s.t === "hub" || s.t === "gear") && st.guest) closeGuest(); }, [s.t]);
   // Výstroj: tlak on-board lahví z posledního ponoru
   useEffect(() => { if (st.ready) gearOnboardSync(); }, [st.ready, st.metas.length, Object.keys(st.lb.tanks || {}).length]);
+  useEffect(() => { if (st.ready) hitOnce(); }, [st.ready]);
   useEffect(() => {
     init().then(async () => {
       if (!new URLSearchParams(location.search).has("shared")) return;
@@ -177,7 +179,7 @@ function App() {
       <DialogHost />
       <header className="top">
         {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo" role="img" aria-label="myX" dangerouslySetInnerHTML={{ __html: LOGO_SVG }} />}
-        {IS_DEV && <span className="dev-badge" title="Dev verze – testovací, vlastní kopie dat, bez synchronizace">DEV</span>}
+        {IS_DEV ? <span className="dev-badge" title="Dev verze – testovací, vlastní kopie dat, bez synchronizace">DEV</span> : <span className="dev-badge beta-badge" title="Testovací verze">BETA</span>}
         {s.t === "home" || s.t === "dives" && !s.site && !s.buddy || s.t === "sites" || s.t === "buddies" ? <LogSwitch label={screenName(s, st)} /> : <h1>{title(s, st)}</h1>}
         <button className="warnbtn none helpbtn" onClick={() => (s.t === "help" ? back() : go({ t: "help" }))} aria-label="Nápověda">?</button>
         <button className={"warnbtn " + (w.worst || "none")} onClick={() => (s.t === "warn" ? back() : (setAnim("from-left"), go({ t: "warn" })))} aria-label="Varování">

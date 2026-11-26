@@ -1,9 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.48-dev.1";
+export const APP_VERSION = "1.48-dev.2";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.48-dev.2", date: "2026-11-26", title: "Úplná záloha, příspěvek, BETA (dev)", items: [
+    "Úplná záloha (i logy ostatních a nastavení zařízení), Sdílet zálohu…, připomínka zálohy na Přehledu (týdně / měsíčně / vypnuto).",
+    "Podpořit vývoj (Buy me a coffee) v Nastavení; anonymní počítadlo spuštění podle země (jen pro vlastníka).",
+    "Štítek BETA v záhlaví produkce; adresa aplikace bez natvrdo zapsané domény (příprava na vlastní doménu).",
+  ] },
   { version: "1.48-dev.1", date: "2026-11-26", title: "Anglická verze (dev)", items: [
     "Angličtina: celá aplikace včetně upozornění, analýz a nápovědy; volba jazyka v Nastavení → Zobrazení (výchozí podle jazyka telefonu). Datum a čísla podle jazyka.",
     "Hlášky neutrálně (bez humoru) – přepínač v Nastavení → Zobrazení, platí pro všechny jazyky.",
