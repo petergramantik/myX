@@ -4,6 +4,7 @@ import { IS_DEV } from "./app/db";
 import { DialogHost } from "./ui/Dialog";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { startI18n } from "./app/i18n";
 import { gearOnboardSync, init, locate, peekPop, scheduleSync, syncNow, takeShared, toast } from "./app/store";
 
 import { back, go, onBeforePop, tab, useBackLayer, useScreen, useStore, type Screen } from "./ui/common";
@@ -222,6 +223,7 @@ const noAutofill = (root: ParentNode) => root.querySelectorAll?.("input:not([typ
   el.setAttribute("data-form-type", "other"); el.setAttribute("data-lpignore", "true");
 });
 new MutationObserver(() => noAutofill(document)).observe(document.body, { childList: true, subtree: true });
+startI18n();
 createRoot(document.getElementById("root")!).render(<App />);
 
 // automatická aktualizace: nový service worker převezme stránku a ta se znovu načte

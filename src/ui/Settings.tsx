@@ -1,3 +1,4 @@
+import { LANG, LANGS, LOC, setLang, tr, type Lang } from "../app/i18n";
 import { ask, askText, choose } from "../app/dialog";
 import { AliasCard } from "./Sites";
 import { useEffect, useRef, useState } from "react";
@@ -7,6 +8,7 @@ import { OwnerPicker } from "./Owner";
 import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, adoptGuestAsOwn, ownComputers, removeOwnComputer, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
+import { EN_REL } from "../i18n/en";
 import { IS_DEV, copyProdToDev, devCopiedAt } from "../app/db";
 import { lastExport } from "../app/store";
 import { shareDb, shareDives } from "./share";
@@ -28,6 +30,8 @@ export function SettingsScreen() {
   return (
     <div className="screen">
       <Sec title="Zobrazení">
+        <label>Jazyk / Language<select data-noi18n value={LANG} onChange={(e) => setLang(e.target.value as Lang)}>{LANGS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>
+        <label className="check"><input type="checkbox" checked={!!st.lb.settings.mottoNeutral} onChange={(e) => saveSettings({ mottoNeutral: e.target.checked })} /> Hlášky neutrálně (bez humoru)</label>
         <label className="check"><input type="checkbox" checked={st.lb.settings.motto !== false} onChange={(e) => saveSettings({ motto: e.target.checked })} /> Hláška nad scrubberem („Všecko v cajku…“ / „Mám warningy…“)</label>
         <label className="check"><input type="checkbox" checked={st.lb.settings.gearMotto !== false} onChange={(e) => saveSettings({ gearMotto: e.target.checked })} /> Pruh stavu výstroje nahoře ve Výstroji („Výstroj v cajku…“ podle revizí, servisů a závad)</label>
       </Sec>
@@ -136,7 +140,7 @@ export function SettingsScreen() {
 
       <Sec title="Synchronizace">
         <p className="note">Vývojářská funkce: synchronizace a záloha přes vlastní Cloudflare Worker.</p>
-        <p className={"sync " + st.sync.state}>{st.sync.msg || "–"}{st.sync.at ? ` (${new Date(st.sync.at).toLocaleTimeString("cs-CZ")})` : ""}</p>
+        <p className={"sync " + st.sync.state}>{st.sync.msg || "–"}{st.sync.at ? ` (${new Date(st.sync.at).toLocaleTimeString(LOC)})` : ""}</p>
         <label>Adresa Workeru<input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://myx-sync.….workers.dev" /></label>
         <label>Klíč<input value={key} type="password" onChange={(e) => setKey(e.target.value)} /></label>
         <div className="row">
@@ -194,7 +198,7 @@ export function MyLogCard() {
       <div className="row">
         <button className="btn primary" disabled={!all.length} onClick={share}>Sdílet můj log</button>
       </div>
-      {last && <p className="note"><a onClick={() => shareDb(last.data, last.name, "Můj log")}>Poslat původní export Cloudu</a> (pro Shearwater Cloud; import {new Date(last.at).toLocaleDateString("cs-CZ")}, {last.count} ponorů)</p>}
+      {last && <p className="note"><a onClick={() => shareDb(last.data, last.name, "Můj log")}>Poslat původní export Cloudu</a> (pro Shearwater Cloud; import {new Date(last.at).toLocaleDateString(LOC)}, {last.count} ponorů)</p>}
       <p className="note">Další svůj počítač přidáš u jeho logu níže volbou „To je můj počítač“, nebo při prvním importu.</p>
     </section>
   );
@@ -213,10 +217,11 @@ function Sec({ title, children, open }: { title: string; children: React.ReactNo
 export function AboutScreen() {
   return (
     <div className="screen">
+      {LANG === "en" && <p className="note">Detailed release notes are in Czech (switch the language in Settings → Display).</p>}
       {RELEASES.map((r) => (
-        <Card key={r.version} title={`${r.version} – ${r.title}`}>
-          <p className="muted">{r.date}</p>
-          <ul>{r.items.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        <Card key={r.version} title={`${r.version} – ${LANG === "en" ? EN_REL[r.title] ?? r.title : r.title}`}>
+          <p className="muted" data-noi18n>{r.date}</p>
+          {LANG !== "en" && <ul>{r.items.map((x, i) => <li key={i}>{x}</li>)}</ul>}
         </Card>
       ))}
     </div>
@@ -228,7 +233,7 @@ export const APP_URL = "https://petergramantik.github.io/myX/";
 /** Sdílení aplikace: systémové sdílení (nebo zkopírování odkazu) a QR kód. */
 function ShareInner() {
   const share = async () => {
-    const data = { title: "myX", text: "myX – logbook pro rebreather, import ze Shearwater Cloud", url: APP_URL };
+    const data = { title: "myX", text: tr("myX – logbook pro rebreather, import ze Shearwater Cloud"), url: APP_URL };
     try {
       if (navigator.share) { await navigator.share(data); return; }
     } catch (e) { if ((e as Error).name === "AbortError") return; }
@@ -343,7 +348,7 @@ function DevSec() {
       <label className="inline dev-sw"><input type="checkbox" checked={IS_DEV} onChange={(e) => goTo(e.target.checked)} /> Dev verze {IS_DEV ? "ON" : "OFF"}</label>
       <p className="note">Dev verze je testovací a může obsahovat chyby. Pracuje na vlastní kopii tvých dat (bez synchronizace). Změny v ní se do běžné verze nepřenesou.</p>
       {IS_DEV && <>
-        <p className="note">Poslední sync z produkce: {copied ? new Date(copied).toLocaleString("cs-CZ") : "–"}</p>
+        <p className="note">Poslední sync z produkce: {copied ? new Date(copied).toLocaleString(LOC) : "–"}</p>
         <button className="btn primary" disabled={busy} onClick={async () => {
           if (!await ask("Sync z produkce: data dev verze se nahradí aktuální kopií dat z běžné (produkční) verze – tvůj log, poznámky, lokality, parťáci, nastavení, Výstroj i logy ostatních. Všechno, co jsi změnil jen v dev verzi, se ztratí. Produkce se jen čte, nic se v ní nezmění.", { ok: "Sync z produkce", danger: true })) return;
           setBusy(true); toast("Kopíruji data z produkce…");

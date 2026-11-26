@@ -1,3 +1,4 @@
+import { DEC, LOC } from "../app/i18n";
 import { gasDisp } from "../app/gas";
 import { ask, askText } from "../app/dialog";
 import { useEffect, useRef, useState } from "react";
@@ -222,7 +223,7 @@ export function Co2Screen() {
     <div className="screen">
       <Co2Panel />
       <Card title="Maximum ppCO₂ v ponorech">
-        <LineChart t={ms.map((_, i) => i + 1)} height={180} xFmt={(v) => { const m = ms[Math.round(v) - 1]; return m ? new Date(m.start * 1000).toLocaleDateString("cs-CZ", { month: "numeric", year: "2-digit" }) : ""; }}
+        <LineChart t={ms.map((_, i) => i + 1)} height={180} xFmt={(v) => { const m = ms[Math.round(v) - 1]; return m ? new Date(m.start * 1000).toLocaleDateString(LOC, { month: "numeric", year: "2-digit" }) : ""; }}
           xTitle={(v) => { const m = ms[v - 1]; return m ? `Ponor ${v} (${fmtDate(m.start)})${x.stOf(m) !== "ok" ? ` – ${STL[x.stOf(m)]}` : ""}` : ""; }}
           series={[{ label: "Max. ppCO₂", color: "#d7c8a0", values: ms.map((m) => (ok(m) ? clip(m.sum.co2Max) : null)), unit: "mbar", width: 2 },
             { label: "Nevěrohodné / porucha", color: "#78909c", values: ms.map((m) => (ok(m) ? null : clip(m.sum.co2Max))), unit: "mbar", width: 1.5, dash: "2 3" },
@@ -365,7 +366,7 @@ function CellPosition({ pos, c, metas, install }: { pos: 1 | 2 | 3; c: ReturnTyp
         return (<>
           {lins.filter((x) => x != null).length > 1 && <LineChart t={xs} height={110} xFmt={(v) => String(Math.round(v))} xTitle={(v) => `Ponor ${v} (${fmtDate(metas[v - 1].start)})`} markers={marks}
             series={[{ label: "Linearita", color: "#ce93d8", values: lin, width: 2 }, { label: "Hranice", color: "#ef5350", values: xs.map(() => c.th.cellLinWarn), dash: "4 3" }]} />}
-          <p className="note">Trend od instalace: {tr.slopePctM != null ? `${tr.slopePctM > 0 ? "+" : ""}${String(tr.slopePctM).replace(".", ",")} % citlivosti za měsíc` : "zatím málo dat (aspoň 5 ponorů za měsíc)"}{tr.linFirst != null && tr.linNow != null ? ` · linearita ${tr.linFirst.toFixed(2).replace(".", ",")} → ${tr.linNow.toFixed(2).replace(".", ",")}` : ""}. Linearita 1 = čidlo měří stejně při nízkém i vysokém pO₂, pokles = začínající current limiting.</p>
+          <p className="note">Trend od instalace: {tr.slopePctM != null ? `${tr.slopePctM > 0 ? "+" : ""}${String(tr.slopePctM).replace(".", DEC)} % citlivosti za měsíc` : "zatím málo dat (aspoň 5 ponorů za měsíc)"}{tr.linFirst != null && tr.linNow != null ? ` · linearita ${tr.linFirst.toFixed(2).replace(".", DEC)} → ${tr.linNow.toFixed(2).replace(".", DEC)}` : ""}. Linearita 1 = čidlo měří stejně při nízkém i vysokém pO₂, pokles = začínající current limiting.</p>
         </>);
       })()}
       <div className="row">

@@ -1,4 +1,5 @@
 // Tlačítko „Stáhnout z počítače“ – stažení nových ponorů ze Shearwater přes Bluetooth (Chrome na Androidu).
+import { LOC } from "../app/i18n";
 import { useRef, useState } from "react";
 import { bleDownload, bleSupported, type BleProgress } from "../app/ble";
 import { downloadPlan, saveDownloaded, toast, type DownloadPlan } from "../app/store";
@@ -12,7 +13,7 @@ export function BleDownload() {
   const [err, setErr] = useState<string | null>(null);
   const stop = useRef(false);
   if (!bleSupported() || st.guest || st.temp) return null;
-  const add = (s: string) => setLog((l) => [...l, `${new Date().toLocaleTimeString("cs-CZ")} ${s}`]);
+  const add = (s: string) => setLog((l) => [...l, `${new Date().toLocaleTimeString(LOC)} ${s}`]);
   const run = async () => {
     setBusy(true); setErr(null); setLog([]); setProg(null);
     let lock: { release: () => Promise<void> } | null = null;

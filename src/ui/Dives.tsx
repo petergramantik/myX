@@ -1,3 +1,4 @@
+import { DEC, LOC } from "../app/i18n";
 import { gasDisp } from "../app/gas";
 import { onboardPress } from "../app/gearSync";
 import { prepSuitOnly } from "../app/model";
@@ -258,7 +259,7 @@ export function DiveScreen({ id }: { id: string }) {
 
 const DOSE_COLOR = { sol: "#4fc3f7", man: "#ffb74d", amb: "#b39ddb", dil: "#cfd8dc" } as const;
 const DOSE_LABEL = { sol: "solenoid (P)", man: "ručně O₂", amb: "ručně O₂ nebo diluent", dil: "diluent" } as const;
-const fmtSp = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+const fmtSp = (v: number) => v.toLocaleString(LOC, { maximumFractionDigits: 2 });
 /** Značky přepnutí setpointu do grafů. */
 function spPins(d: Dive) {
   return setpointChanges(d).map((c) => ({ t: c.t, label: `SP ${fmtSp(c.to)}${c.manual ? "" : "?"}`, color: c.to >= 1 ? "#ffb74d" : c.to < 0.3 ? "#b0bec5" : "#81c784" }));
@@ -502,7 +503,7 @@ function Co2Card({ d, focusT, warns, focus }: { d: Dive; focusT?: number; warns:
     }
     return out;
   }, [wSm]);
-  const wTxt = useMemo(() => wSm.map((v, i) => (s.t[i] > d.h.diveTimeS ? "–" : v != null ? `${v.toLocaleString("cs-CZ")} ×` : wBr[i] != null ? `≈ ${wBr[i]!.toLocaleString("cs-CZ")} × (dopočteno)` : `– (${skip[i] || (s.depth[i] < 3 ? "u hladiny" : "klesání")})`)), [wSm, wBr, skip]);
+  const wTxt = useMemo(() => wSm.map((v, i) => (s.t[i] > d.h.diveTimeS ? "–" : v != null ? `${v.toLocaleString(LOC)} ×` : wBr[i] != null ? `≈ ${wBr[i]!.toLocaleString(LOC)} × (dopočteno)` : `– (${skip[i] || (s.depth[i] < 3 ? "u hladiny" : "klesání")})`)), [wSm, wBr, skip]);
   const ef2 = useMemo(() => effortOf(d, 5, base), [d, base]);
   const co2V = useMemo(() => co2Valid(d), [d]);
   const dens = useMemo(() => gasDensity(d), [d]);
@@ -837,7 +838,7 @@ function LogTab({ id, d }: { id: string; d: Dive | null }) {
           ["Max. CO₂", meta.sum.co2Max != null ? <span className="use">{num(meta.sum.co2Max, 2)} mbar{d && co2BadRanges(d).length ? <small>čidlo?</small> : null}</span> : "–"],
           ["GF / CNS", <Pair l={`${meta.h.gfLo}/${meta.h.gfHi}`} ll="GF" r={`${meta.h.cnsEnd} %`} rl="CNS" />],
           ["Diluent", <UseTile gas="dil" meta={meta} note={note} />], ["O₂", <UseTile gas="o2" meta={meta} note={note} />],
-          ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", ",")} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", ",")} V`} rl="end" />],
+          ["Baterie", <Pair l={`${meta.h.batVStart.toFixed(2).replace(".", DEC)} V`} ll="start" r={`${meta.h.batVEnd.toFixed(2).replace(".", DEC)} V`} rl="end" />],
           ["Scrubber", <span className="use scr-v"><span><span className={scr.cb}>{hm(meta.h.scrubLeftStartMin).replace(" min", "")}</span> → <span className={scr.ca}>{hm(meta.h.scrubLeftEndMin).replace(" min", "")}</span></span><small>{scr.days != null ? <>stáří <span className={scr.cd}>{scr.days} d</span></> : "\u00a0"}</small></span>, scr.cls ? scr.open : undefined],
           ["Dávkování O₂", <Pair l={meta.sum.dose.sol} ll="solenoid" r={meta.sum.dose.man} rl="ručně" />],
           ["Setpoint", <SpTile meta={meta} />],

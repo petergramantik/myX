@@ -1,6 +1,7 @@
 // Před a po ponoru: „Před ponorem“ – lahve (on-board z Výstroje, externí) s tlakem potvrzeným z Výstroje nebo naměřeným,
 // hydratace a kalibrace; „Po ponoru“ – tlaky lahví, které počítač neměří (zavřená on-board, externí), a „jenom oblek“.
 // Tlaky se převezmou do Výstroje přes historii lahve (gearSync).
+import { LOC } from "../app/i18n";
 import { useState } from "react";
 import { gasDisp } from "../app/gas";
 import { HYD_LABEL, gearVol, prepSuitOnly, tankMix, tankVol, uid, type Logbook, type Prep, type PrepTank } from "../app/model";
@@ -16,7 +17,7 @@ const CAL_GASES = ["AIR", "O₂", "kalibrační plyn"];
 /** Úroveň podle tlaku: pod 50 bar červeně, pod 100 bar žlutě. */
 const lvl = (bar?: number | null) => (bar == null ? "" : bar < 50 ? "c-bad" : bar < 100 ? "c-warn" : "");
 const todayIso = () => new Date().toLocaleDateString("sv-SE");
-const fmtAt = (ms: number) => new Date(ms).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+const fmtAt = (ms: number) => new Date(ms).toLocaleString(LOC, { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
 const parseBar = (v: string) => { const n = Math.round(+v.replace(",", ".")); return v.trim() && n >= 0 && n < 400 ? n : undefined; };
 
 function BarInput({ value, onSave, placeholder }: { value?: number; onSave: (v?: number) => void; placeholder?: string }) {
@@ -57,7 +58,7 @@ function laterNote(lb: Logbook, id: string | undefined, diveId?: string): string
   const t1 = (m.start + m.h.diveTimeS) * 1000;
   const e = tankEvents(lb, ownMetas(), id).find((x) => x.at > t1 && x.diveId !== diveId);
   if (!e) return null;
-  const d = new Date(e.at).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+  const d = new Date(e.at).toLocaleDateString(LOC, { day: "numeric", month: "numeric" });
   return `Ve Výstroji se nepřepíše – ${e.kind === "fill" ? `${d} plnění na ${e.bar} bar` : e.kind === "check" ? `${d} kontrola ${e.bar} bar` : `použita v ponoru ${d}`}`;
 }
 

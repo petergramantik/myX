@@ -1,9 +1,13 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.47.2";
+export const APP_VERSION = "1.48-dev.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.48-dev.1", date: "2026-11-26", title: "Anglická verze (dev)", items: [
+    "Angličtina: celá aplikace včetně upozornění, analýz a nápovědy; volba jazyka v Nastavení → Zobrazení (výchozí podle jazyka telefonu). Datum a čísla podle jazyka.",
+    "Hlášky neutrálně (bez humoru) – přepínač v Nastavení → Zobrazení, platí pro všechny jazyky.",
+  ] },
   { version: "1.47.2", date: "2026-11-25", title: "Skutečná spotřeba ze zadaných lahví", items: [
     "Spotřeba O₂ a diluentu počítá i ručně zadané tlaky on-board lahví (zavřená lahev) – Poslední ponor na Přehledu, V kostce, Spotřeba plynu, osobní odhad O₂, srovnání; u tlaku „z logu“ / „zadáno“.",
   ] },

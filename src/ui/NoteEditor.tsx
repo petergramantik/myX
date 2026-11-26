@@ -1,4 +1,5 @@
 // Společný editor logbooku (lokalita, buddy, hodnocení, poznámka, počasí) pro ponor i rozpracovaný ponor.
+import { LOC } from "../app/i18n";
 import { useEffect, useState } from "react";
 import type { DiveNote } from "../app/model";
 import { findBuddyByName, findSiteByName, upsertBuddy, upsertSite } from "../app/store";
@@ -50,7 +51,7 @@ export function NoteEditor({ note, onChange, pos, real, cc, diveId, noPrep }: { 
         <Card title="Počasí na lokalitě">
           <p className="big">{num(w.temp, 1)} °C, {weatherText(w.code)}</p>
           <p className="muted">Vítr {num(w.wind, 1)} m/s (nárazy {num(w.gust, 0)}) · oblačnost {w.cloud} % · tlak {num(w.pressure, 0)} hPa · srážky {num(w.precip, 1)} mm</p>
-          <p className="note">Zaznamenáno {new Date(w.at).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })} · Open-Meteo</p>
+          <p className="note">Zaznamenáno {new Date(w.at).toLocaleString(LOC, { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })} · Open-Meteo</p>
         </Card>
       )}
     </>

@@ -1,3 +1,4 @@
+import { DEC, LOC } from "../app/i18n";
 import { askText } from "../app/dialog";
 import { isCC } from "../core/rig";
 import { useEffect, useRef, useState } from "react";
@@ -56,8 +57,8 @@ function Motto() {
   b.head.forEach((x) => x.reasons.length && lv.push(x.suspect ? "bad" : "warn"));
   const worst = lv.includes("bad") ? "bad" : lv.includes("warn") ? "warn" : "ok";
   return worst === "ok"
-    ? <div className="motto ok" onClick={hide}>Všecko v cajku, jdeme na to!</div>
-    : <div className={"motto " + worst} onClick={hide}>Mám warningy, nevysereme se dnes na to?!</div>;
+    ? <div className="motto ok" onClick={hide}>{st.lb.settings.mottoNeutral ? "Bez upozornění" : "Všecko v cajku, jdeme na to!"}</div>
+    : <div className={"motto " + worst} onClick={hide}>{st.lb.settings.mottoNeutral ? "Jsou aktivní upozornění" : "Mám warningy, nevysereme se dnes na to?!"}</div>;
 }
 
 /** Scrubber u rebreatheru bez časovače v logu (např. pSCR s Peregrine v Gauge módu): ruční datum naplnění a výdrž u počítače. */
@@ -292,7 +293,7 @@ function SurfGfTrend() {
   const vals = ms.map((m) => m.sum.surfGF!).sort((a, b) => a - b);
   return (
     <Card title="SurfGF při vynoření">
-      <LineChart t={ms.map((_, i) => i + 1)} height={140} xFmt={(v) => { const m = ms[Math.round(v) - 1]; return m ? new Date(m.start * 1000).toLocaleDateString("cs-CZ", { month: "numeric", year: "2-digit" }) : ""; }}
+      <LineChart t={ms.map((_, i) => i + 1)} height={140} xFmt={(v) => { const m = ms[Math.round(v) - 1]; return m ? new Date(m.start * 1000).toLocaleDateString(LOC, { month: "numeric", year: "2-digit" }) : ""; }}
         xTitle={(v) => { const m = ms[v - 1]; return m ? `${fmtDate(m.start)} · mělko ${m.sum.shallowMin ?? "?"} min` : ""; }}
         series={[{ label: "SurfGF", color: "#4fc3f7", values: ms.map((m) => m.sum.surfGF!), unit: "%", width: 2 }, { label: "Hranice", color: "#ffb74d", values: ms.map(() => lim), unit: "%", dash: "4 3" }]} />
       <p className="note">Ponory se stropem: medián {vals[vals.length >> 1]} %, nad hranicí {lim} %: {over.length}{over.length ? ` (naposledy ${fmtDate(over[over.length - 1].start)})` : ""}. Hodnota = GF99 z Petrelu v prvním vzorku u hladiny.</p>
@@ -305,7 +306,7 @@ function BatteryMini() {
   const h = b.last?.h;
   return (
     <div className="batmini">
-      <div><span>{h ? compName(h.serial) : "Počítač"}</span><br />{h ? `${h.batVStart.toFixed(2).replace(".", ",")} → ${h.batVEnd.toFixed(2).replace(".", ",")} V` : "–"}</div>
+      <div><span>{h ? compName(h.serial) : "Počítač"}</span><br />{h ? `${h.batVStart.toFixed(2).replace(".", DEC)} → ${h.batVEnd.toFixed(2).replace(".", DEC)} V` : "–"}</div>
       {!b.guest && h && isCC(h) && b.head.map((x) => <div key={x.pos}><span>Hlava {x.pos}</span>{x.cur ? `${num(x.minutes / 60, 1)} h` : "–"}</div>)}
     </div>
   );

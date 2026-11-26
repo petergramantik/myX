@@ -1,5 +1,6 @@
 // Výstroj: moje lahve, sestavy (automatiky s hadicemi), revize a servisy, závady a jejich řešení.
 // Upozornění na termíny jsou jen tady – nepatří mezi upozornění k ponorům.
+import { LOC } from "../app/i18n";
 import { useEffect, useState } from "react";
 import { gasColorOf, gasDisp } from "../app/gas";
 import type { Settings } from "../app/model";
@@ -12,8 +13,8 @@ import { Card, go, num, tab, useStore } from "./common";
 
 const GASES = ["AIR", "O₂", "EAN32", "EAN36", "EAN50", "TMX 21/35", "TMX 18/45", "TMX 15/55", "TMX 10/70", "Argon"];
 const HOSE_TYPES: GearHose["type"][] = ["HP", "LP", "inflátor", "Swagelok"];
-const fmtD = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }) : "–");
-const fmtMs = (ms: number) => new Date(ms).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
+const fmtD = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(LOC, { day: "numeric", month: "numeric", year: "numeric" }) : "–");
+const fmtMs = (ms: number) => new Date(ms).toLocaleDateString(LOC, { day: "numeric", month: "numeric", year: "numeric" });
 const DUE_CLS = { over: "c-bad", soon: "c-warn", ok: "", none: "muted" } as const;
 const lvlBar = (b: number | undefined, low: number | null) => (b == null ? "muted" : b < 50 ? "c-bad" : low != null && b < low ? "c-warn" : "");
 export const tankLabel = (t: GearTank) => t.name || (t.kind === "Dvojče" ? `Dvojče 2×${num(t.vol, 0)} l` : t.kind === "Jiná" ? `${num(t.vol, 1)} l` : t.kind);
@@ -28,9 +29,10 @@ export function gearHealth(tanks: GearTank[], regs: GearReg[]): { ok: number; n:
   for (const r of regs) if (!r.faults.some((f) => !f.fix) && dueState(stageDue(r.s1)) !== "over" && dueState(stageDue(r.s2)) !== "over") ok++;
   return { ok, n: tanks.length + regs.length };
 }
-const HEALTH: [number, string, string][] = [
-  [100, "h100", "Výstroj v cajku, seš dobrej!"], [80, "h80", "Chce to doladit, ale asi jako OK."],
-  [60, "h60", "Začni se starat o své krámy!"], [40, "h40", "Tohle už bude něco stát, dělej!"], [0, "h0", "Prodej to, než se něco stane :("],
+const HEALTH: [number, string, string, string][] = [
+  [100, "h100", "Výstroj v cajku, seš dobrej!", "Výstroj je v pořádku"], [80, "h80", "Chce to doladit, ale asi jako OK.", "Výstroj vyžaduje drobnou údržbu"],
+  [60, "h60", "Začni se starat o své krámy!", "Výstroj vyžaduje údržbu"], [40, "h40", "Tohle už bude něco stát, dělej!", "Výstroj vyžaduje rozsáhlou údržbu"],
+  [0, "h0", "Prodej to, než se něco stane :(", "Výstroj není připravená"],
 ];
 function GearMotto() {
   const st = useStore();
@@ -38,7 +40,8 @@ function GearMotto() {
   const h = gearHealth(Object.values(st.lb.tanks || {}), Object.values(st.lb.regs || {}));
   if (!h.n) return null;
   const pct = (h.ok / h.n) * 100;
-  const [, cls, text] = HEALTH.find(([min]) => pct >= min)!;
+  const [, cls, fun, plain] = HEALTH.find(([min]) => pct >= min)!;
+  const text = st.lb.settings.mottoNeutral ? plain : fun;
   return <div className={"motto gm " + cls}>{text}<small>{h.ok} z {h.n} v pořádku</small></div>;
 }
 

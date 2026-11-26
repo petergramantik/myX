@@ -9,6 +9,7 @@
 - Verze: v `src/app/version.ts` zvýšit `APP_VERSION` a přidat nahoru položku do `RELEASES`. V dev „X.Y-dev.N“ (každé imp zvýší N), při release „X.Y“ (položky RELEASES z dev sloučit do jedné). Drobnosti zvyšují setinu, desetina jen u významných změn.
 - Dev verze: vlastní kopie dat v IndexedDB („dev-myx“, „dev-myx-guest“, zkopírováno z produkce), žádná synchronizace. Změna formátu dat v dev nesmí měnit produkční úložiště.
 - Dekódování logu Shearwater (`src/core/shearwater.ts`) a analýzy (`src/core/analysis.ts`) měň opatrně a doplň test. Do repozitáře nikdy nedávej soubory s daty ponorů (repo je veřejné).
+- Jazyky: čeština je zdrojová (texty v kódu), angličtina přes slovník `src/i18n/en.ts` (překlad nad DOM, `src/app/i18n.ts`). Každý nový nebo změněný český text doplnit do `en.ts` (kontrola: `node tools/i18n-missing.cjs`), nápovědu `Help.tsx` i `HelpEn.tsx`. Angličtina je zdrojem pro další jazyky.
 - Worker (`proxy/worker.js`) – synchronizace (KV `MYX_KV`, secret `MYX_KEY`) a proxy Stran potápěčských. Změnu Workeru musí uživatel vložit do Cloudflare ručně; adresa je v `public/config.js`.
 
 ## Formát logu (Petrel 2, DiveCAN, X-CCR)

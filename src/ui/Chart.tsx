@@ -1,3 +1,4 @@
+import { LOC } from "../app/i18n";
 import { createPortal } from "react-dom";
 // Jednoduché SVG grafy s dotykovým popiskem (bez knihoven).
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
@@ -34,7 +35,7 @@ function ticks(lo: number, hi: number, n = 5): number[] {
 }
 
 /** Hodnota v popisku s desetinnou čárkou. */
-const fmtCs = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : (Math.abs(v) >= 100 ? Math.round(v) : +v.toFixed(d)).toLocaleString("cs-CZ"));
+const fmtCs = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : (Math.abs(v) >= 100 ? Math.round(v) : +v.toFixed(d)).toLocaleString(LOC));
 const fmt = (v: number | null | undefined, d = 2) => (v == null || Number.isNaN(v) ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : +v.toFixed(d) + "");
 export const fmtTime = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}′${String(r % 60).padStart(2, "0")}″`; };
 

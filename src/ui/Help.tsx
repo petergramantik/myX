@@ -1,5 +1,7 @@
 // Nápověda: přehled funkcí aplikace po sekcích (sbalitelné karty).
 import type { ReactNode } from "react";
+import { LANG } from "../app/i18n";
+import { HelpScreenEn } from "./HelpEn";
 
 function H({ title, children, open }: { title: string; children: ReactNode; open?: boolean }) {
   return (
@@ -11,6 +13,7 @@ function H({ title, children, open }: { title: string; children: ReactNode; open
 }
 
 export function HelpScreen() {
+  if (LANG === "en") return <HelpScreenEn />;
   return (
     <div className="screen">
       <p className="muted">myX je logbook pro potápění s rebreatherem. Čte logy z počítačů Shearwater (Petrel 2, Petrel 3) a vyhodnocuje z nich čidla, CO₂, setpoint, plyny i ovládání počítače.</p>
@@ -25,6 +28,7 @@ export function HelpScreen() {
 
       <H title="2. Sdílení">
         <p><b>Sdílet aplikaci:</b> Nastavení → Sdílení – odkaz nebo QR kód.</p>
+        <p><b>Jazyk:</b> Nastavení → Zobrazení → Jazyk (Čeština / English). Výchozí podle jazyka telefonu. „Hlášky neutrálně“ přepne humorné hlášky (Přehled, Výstroj) na věcná oznámení.</p>
         <p><b>Počítače a typ přístroje:</b> myX čte mód každého ponoru z logu (CC, OC, Gauge…) a typ přístroje odvodí sám: CC → eCCR, Gauge → pSCR (OC a Freedive zatím zašedlé). Zobrazují se jen podporované typy (CC s eCCR, Gauge s pSCR); ostatní ponory zůstávají uložené a v seznamu je řádek „Skryto…“. V detailu ponoru řádek „počítač · mód · přístroj“ – klepnutím změníš typ (nabídka podle módu) a zásobní plyn jen pro tento ponor; výchozí pro převládající mód počítače nastavíš v B&L → DB → Databáze (Můj log → Akce, u cizích logů Akce → Přístroj). Bez čidel O₂ (Gauge) se nezobrazují čidla, setpoint, dávky, zátěž, scrubber ani dekomprese; pO₂ je jen vypočtené ze zásobního plynu (u polouzavřeného okruhu horní mez). U pSCR se zadaným zásobním plynem je i odhad pO₂ ve smyčce (?) podle poměru přístroje (výchozí 1:8) – jen výpočet, ne měření. Bez vysílačů tlaku zadáš u ponoru lahev a tlak před a po (u pSCR na to upozorní žlutý rámeček nahoře). Scrubber bez časovače v logu: na Přehledu zadáš datum naplnění a výdrž náplně, myX sečte čas ponorů od naplnění.</p>
         <p><b>Vysílače tlaku (AI):</b> tlaky lahví z bezdrátových vysílačů se použijí, když log nemá tlaky z DiveCAN. Pojmenované vysílače (D… = diluent, O… = kyslík) myX rozpozná sám. U nepojmenovaných (T1/T2) nastavíš v B&L → DB → Databáze u počítače (Akce) tlačítkem „Vysílače“, který je na diluentu – ponory se pak přepočítají.</p>
         <p><b>Hydratace:</b> v „Před a po ponoru“ volba Slabá / Střední / Dobrá – jen informace k ponoru (nic se z ní nepočítá), při případné nehodě může být důležitá.</p>
@@ -100,20 +104,20 @@ export function HelpScreen() {
       </H>
 
       <H title="8. Výstroj">
-        <p><b>Láhve:</b> seznam tvých lahví – typ (S80, S40, 12 l, 3 l, 2,5 l, Dvojče = 2 ocelové lahve 8–18 l jako jedna lahev, Jiná), směs a zbytkový tlak (výrazně, tlak jde přepsat přímo na kartě), revize (poslední, příští – dopočítá se po 5 letech, interval i termín jde změnit), O₂ čisté, poznámka. Celou lahev upravíš (nebo smažeš) rozbalením „Upravit“ na její kartě. Plyn je v barvě plynu jako v grafech (AIR šedě, NX žlutozeleně, TMX hnědě, O₂ světle modře, argon fialově).</p>
-        <p><b>Propojení s ponory:</b> v „Před a po ponoru“ vybereš lahev z Výstroje (předvyplní typ, směs a tlak); tlak „po“ se pak zapíše jako zbytkový tlak lahve. On-board lahev rebreatheru (O₂ / diluent) převezme po každém ponoru tlak na konci z počítače. Když byla lahev zavřená (jen mezitlak), „beze změny“ bez tlaku nebo tlak chybí, tlak se nepřepíše a u lahve se objeví „Ověřit“ – potvrdíš tlačítkem Tlak sedí nebo přepsáním tlaku.</p>
+        <p><b>Láhve:</b> seznam tvých lahví – typ (S80, S40, 12 l, 3 l, 2,5 l, Dvojče = 2 ocelové lahve 8–18 l jako jedna lahev, Jiná), směs a zbytkový tlak (mění se přes Kontrolu), revize (poslední, příští – dopočítá se po 5 letech, interval i termín jde změnit), O₂ čisté, poznámka. Celou lahev upravíš (nebo smažeš) rozbalením „Upravit“ na její kartě. Plyn je v barvě plynu jako v grafech (AIR šedě, NX žlutozeleně, TMX hnědě, O₂ světle modře, argon fialově).</p>
+        <p><b>Propojení s ponory:</b> v „Před a po ponoru“ vybereš lahev z Výstroje (předvyplní typ, směs a tlak); tlak „po“ se pak zapíše jako zbytkový tlak lahve. On-board lahev rebreatheru (O₂ / diluent) převezme po každém ponoru tlak na konci z počítače. Když byla lahev zavřená (jen mezitlak), „beze změny“ bez tlaku nebo tlak chybí, tlak se nepřepíše a u lahve se objeví „Ověřit“ – potvrdíš ho přes Kontrolu.</p>
         <p><b>Přehled Výstroje:</b> lahve jako dlaždice (název, směs, tlak, stav a barva podle plnosti: OK / Doplnit – on-board lahve pod 100 bar, ostatní pod 85 % plnicího tlaku (výchozí 200 bar, u lahve jde zadat vlastní; procenta a výchozí tlak v Nastavení → Výbava) / Prázdná pod 50 bar / Ověřit; revize po termínu nebo do 30 dní jako fialový pruh dole – sytý po termínu, světlý do 30 dní) v sekcích On-board, Stage (S80, S40), Twin, Mono, Argon a Plnění (lahve na přepouštění – účel „Plnění“ u lahve; u nich se hlídá jen ověření a revize). Uvnitř sekce On-board skupiny O₂ a Diluent (diluenty podle plynu), u Stage a Twin podkategorie podle druhu lahve (S80, S40, Dvojče…), Mono, Argon a Plnění bez podkategorií (od největšího objemu); stejný plyn je u sebe, od nejvyššího tlaku; zelený rámeček = lahev v pořádku; stejně i velké panely v Láhvích. Klepnutím detail v sekci Láhve.</p>
         <p><b>Stav výstroje:</b> pruh nahoře ve Výstroji – technická připravenost podle revizí, servisů a závad (lahev bez revize po termínu, tlak se nepočítá; sestava bez otevřené závady a servisu po termínu): 100 % „Výstroj v cajku, seš dobrej!“, od 80 % „Chce to doladit…“, od 60 % „Začni se starat o své krámy!“, od 40 % „Tohle už bude něco stát…“, pod 40 % „Prodej to, než se něco stane :(“. Vypíná se v Nastavení → Zobrazení.</p>
         <p><b>Přidání lahve:</b> jen tlačítkem ＋ Přidat lahev (Přehled i Láhve); on-board lahev rebreatheru zvolíš ve formuláři hned pod druhem lahve – předvyplní 3 l a O₂ nebo poslední diluent, bez názvu dostane RB O2 n / RB DIL n.</p>
         <p><b>Skupiny lahví:</b> v Láhve → Upravit → „Skupiny“ přiřadíš lahev do vlastních skupin (např. RB, Kurzy) – klepnutím na existující skupinu nebo napsáním nové; lahev může být ve více skupinách. Na Přehledu Výstroje přepínač Typ / Skupiny: Skupiny ukáže každou skupinu zvlášť (uvnitř stejné řazení jako u typu), lahev ve více skupinách v každé z nich, ostatní v „Bez skupiny“. ✎ u skupiny: název, pořadí (1 = první panel, stejné pořadí podle abecedy, bez pořadí na konec) a smazání skupiny (lahve zůstanou). Karty v Láhvích mají stejné barvy jako dlaždice (rámeček podle plnosti); skupiny lahve vpravo dole, pod nimi fialový pruh revize – po termínu s dobou prodlení („Revize 3 roky po termínu“, pod rok v měsících).</p>
-        <p><b>On-board lahve rebreatheru:</b> lahve RB O2 1, 2… a RB DIL 1, 2… (číslují se samy; první dvě myX založí z posledního ponoru). Po každém ponoru myX rozpozná, která lahev byla v rebreatheru: diluent podle směsi z logu, pak podle tlaku na začátku ponoru proti zbytkovému tlaku lahve (±15 bar), O₂ jen podle tlaku. Přiřazená lahev převezme tlak na konci ponoru. Když to jednoznačně nejde (zavřená lahev, dotlakovaná, víc lahví s podobným tlakem, nová směs), vybereš lahev v detailu ponoru v „Před a po ponoru“ (řádek „lahev“ pod O₂ / diluentem; „auto“ = rozpoznáno). U lahve s jinou směsí, než je v logu, myX nabídne směs změnit.</p>
+        <p><b>On-board lahve rebreatheru:</b> lahve RB O2 1, 2… a RB DIL 1, 2… (číslují se samy; první dvě myX založí z posledního ponoru). Po každém ponoru myX rozpozná, která lahev byla v rebreatheru: diluent podle směsi z logu, pak podle tlaku na začátku ponoru proti zbytkovému tlaku lahve (±15 bar), O₂ jen podle tlaku. Přiřazená lahev převezme tlak na konci ponoru. Když to jednoznačně nejde (zavřená lahev, dotlakovaná, víc lahví s podobným tlakem, nová směs), vybereš lahev v detailu ponoru v „Před a po ponoru“ („auto“ = rozpoznáno). U lahve s jinou směsí, než je v logu, myX nabídne směs změnit.</p>
         <p><b>Automatiky (sestavy):</b> každá sestava (Rekre 1, Tech 1 L / P, Stage 1…) má 1. a 2. stupeň (model, servis – dopočítá se po 2 letech), hadice (typ HP / LP / inflátor / Swagelok, délka, O₂ čistá), příznak O₂ čistá a historii závad: Zapsat závadu (po posledním ponoru) a řešení Opraveno / Vyměněno.</p>
         <p><b>Termíny:</b> 30 dní předem žlutě, po termínu červeně – jen ve Výstroji, nejsou mezi upozorněními k ponorům.</p>
       </H>
 
       <H title="9. Přehled a nastavení">
         <p><b>Přehled:</b> stav O₂ čidel a CO₂ čidla, scrubber, baterie, nejhlubší ponory, poslední ponor, trend SurfGF při vynoření (ponory se stropem, s hranicí); ⚠ vpravo nahoře shrnuje všechna aktuální varování.</p>
-        <p><b>Nastavení:</b> spotřeba ve stresu pro bailout, SurfGF při vynoření (zapnout / vypnout, hranice), datum náplně scrubberu, prahy upozornění po oblastech, záloha, reset logbooku.</p>
+        <p><b>Nastavení:</b> jazyk, neutrální hlášky, spotřeba ve stresu pro bailout, SurfGF při vynoření (zapnout / vypnout, hranice), datum náplně scrubberu, prahy upozornění po oblastech, záloha, reset logbooku.</p>
         <p>Důležité je neklikat 2× na nadpis „Kde jsem“ na Přehledu.</p>
       </H>
     </div>

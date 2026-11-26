@@ -1,4 +1,5 @@
 // Porovnání dvou současných ponorů (můj vs. buddyho): metriky, rozdíly a stručný závěr z dat.
+import { LOC } from "../app/i18n";
 import { hasDeco, isCC } from "./rig";
 import { co2Valid } from "./effort";
 import type { Dive } from "./shearwater";
@@ -105,7 +106,7 @@ export function diveStats(d: Dive, dev: SpDev = SP_DEV): DiveStats {
 }
 
 export interface DiffRow { key: string; label: string; a: string; b: string; weight: number }
-const f1 = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLocaleString("cs-CZ", { maximumFractionDigits: d, minimumFractionDigits: d > 1 ? d : 0 }));
+const f1 = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLocaleString(LOC, { maximumFractionDigits: d, minimumFractionDigits: d > 1 ? d : 0 }));
 const spTxt = (c: SpChange | null) => (c ? `${tpt(c.t)}, ${f1(c.depth)} m` : "nepřepnuto");
 
 /** Porovnávané veličiny: hodnota (číslo pro výpočet rozdílu), text, měřítko „podstatného“ rozdílu a váha. */
@@ -422,7 +423,7 @@ export function computerDiff(a: Dive, b: Dive, off: number, clockS: number): { l
   const at = (d: Dive, v: (number | null)[], t: number) => { if (t < 0 || t > d.h.diveTimeS) return null; const i = d.s.t.findIndex((x) => x >= t); return i < 0 ? null : v[i]; };
   const pairs = (va: (d: Dive) => (number | null)[]) => { const out: [number, number][] = []; for (let t = 0; t <= a.h.diveTimeS; t += 10) { const x = at(a, va(a), t), y = at(b, va(b), t - off); if (x != null && y != null) out.push([x, y]); } return out; };
   const stat = (p: [number, number][]) => { if (!p.length) return null; const d = p.map(([x, y]) => y - x); const mean = d.reduce((s, v) => s + v, 0) / d.length; const max = Math.max(...d.map(Math.abs)); return { mean, max }; };
-  const nf = (v: number, k = 1) => v.toLocaleString("cs-CZ", { maximumFractionDigits: k });
+  const nf = (v: number, k = 1) => v.toLocaleString(LOC, { maximumFractionDigits: k });
   const out: { level: "ok" | "warn"; text: string }[] = [];
   const dep = stat(pairs((d) => d.s.depth).filter(([x]) => x > 1.5));
   if (dep) out.push(Math.abs(dep.mean) > 0.5 ? { level: "warn", text: `Hloubka: druhý počítač ukazuje v průměru o ${nf(Math.abs(dep.mean))} m ${dep.mean > 0 ? "víc" : "míň"} (max. rozdíl ${nf(dep.max)} m) – možná odchylka tlakového čidla.` } : { level: "ok", text: `Hloubka sedí (průměrný rozdíl ${nf(Math.abs(dep.mean), 2)} m).` });

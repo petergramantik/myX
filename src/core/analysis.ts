@@ -1,4 +1,5 @@
 // Odvozené hodnoty: souhrn ponoru, kalibrace čidel, odhad vstřiků solenoidu, upozornění.
+import { DEC, LOC } from "../app/i18n";
 import { isCC } from "./rig";
 import { computerWarnings, deviatingCell, type CompWarn } from "./compwarn";
 import { co2BadRanges, co2Plausibility, co2Valid, dilVents, effortOf, gasDensity, o2RateWindows, workloadBase, type EffortBase } from "./effort";
@@ -186,7 +187,7 @@ export function spLateDelay(d: Dive, sp: SpChange[], osc = SP_RULES.osc): number
 export function spWarnings(d: Dive, sum: Pick<Summary, "sp">, r: SpRules = SP_RULES): Alert[] {
   const out: Alert[] = [];
   const s = d.s, n = s.t.length;
-  const fmt = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+  const fmt = (v: number) => v.toLocaleString(LOC, { maximumFractionDigits: 2 });
   const down = s.t.find((_, i) => s.depth[i] >= 1.5) ?? 0;
   const startHigh = s.sp[Math.max(0, s.t.findIndex((t) => t >= down))] >= 1.0;
   const allUps = sum.sp.filter((c) => c.to >= 1.0 && c.from < 1.0);
@@ -473,7 +474,7 @@ export interface Thresholds { co2Mbar: number; scrubPct: number; scrubDays: numb
 export const DEFAULT_THRESHOLDS: Thresholds = { co2Mbar: 5, scrubPct: 50, scrubDays: 14, batMarginV: 0.05, spLateMin: 2, spOsc: 3, spDescM: 6, spBelow: 0.15, spAbove: 0.2, po2Lo: 0.4, po2LoMin: 0.3, po2Hypo: 0.21, po2LoWarnS: 30, po2LoBadS: 120, pn2Hot: 3.16, po2HiWarn: 1.4, po2HiBad: 1.6, po2HiWarnS: 60, scrubLeftMin: 90 };
 
 const DAY = 86400;
-const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC" });
+const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString(LOC, { timeZone: "UTC" });
 
 /** Datum náplně scrubberu: nejnovější ponor, kde počítadlo začínalo na plné hodnotě. */
 export function scrubberFill(hs: Header[]): Header | null {
@@ -602,7 +603,7 @@ export function resolutionSteps(d: Dive, from: number, to: number | null, kind: 
   const acts = kind !== "other";
   const inW = (t: number) => t >= from && t <= end;
   const at = (t: number) => { const i = s.t.findIndex((x) => x >= t); return i < 0 ? s.t.length - 1 : i; };
-  const nf = (v: number, k = 2) => v.toLocaleString("cs-CZ", { maximumFractionDigits: k });
+  const nf = (v: number, k = 2) => v.toLocaleString(LOC, { maximumFractionDigits: k });
   let acked = -1;
   const alarmKind = kind === "po2high" || kind === "po2low" || kind === "co2";
   const valAt = (t: number) => { const i = at(t); return kind === "co2" ? `CO₂ ${nf(s.co2[i] ?? 0, 1)} mbar` : `pO₂ ${nf(s.ppo2[i])} bar`; };
@@ -672,7 +673,7 @@ export function batSinceSwap(sorted: Header[]): Header[] {
 /** Text o výměně baterie mezi předchozím a tímto ponorem, jinak null. */
 export function batSwapInfo(prev: Header | undefined, cur: Header): Alert | null {
   if (!prev || !batSwapped(prev, cur)) return null;
-  const pct = (h: Header, v: number, p: number) => `${v.toFixed(2).replace(".", ",")} V${h.batTypeCode !== 3 ? ` / ${p} %` : ""}`;
+  const pct = (h: Header, v: number, p: number) => `${v.toFixed(2).replace(".", DEC)} V${h.batTypeCode !== 3 ? ` / ${p} %` : ""}`;
   return { level: "info", title: "Baterie vyměněna", kind: "battery", text: `${prev.batTypeCode !== cur.batTypeCode ? `${prev.batType} → ${cur.batType}, ` : ""}${pct(prev, prev.batVEnd, prev.batPctEnd)} → ${pct(cur, cur.batVStart, cur.batPctStart)} proti předchozímu ponoru.` };
 }
 
@@ -754,7 +755,7 @@ export function startPo2(d: Dive, th: Thresholds = DEFAULT_THRESHOLDS) {
   else if (belowS >= (th.po2LoWarnS ?? 30) || min < (th.po2LoMin ?? 0.3)) level = "warn";
   return { level, min, belowS, reachS: reach >= 0 ? s.t[reach] : -1, reasons, o2From, o2To };
 }
-const fmtBar = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+const fmtBar = (v: number) => v.toLocaleString(LOC, { maximumFractionDigits: 2 });
 
 /** Index konce úvodní fáze: pO₂ ≥ práh po dobu ≥ 20 s, nejpozději 5 min. */
 function startEnd(d: Dive, lo = 0.4): number {
@@ -782,7 +783,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
   const co2Bad = co2BadRanges(d);
   const co2V = co2Valid(d).filter((x): x is number => x != null), co2VMax = co2V.length ? Math.max(...co2V) : null;
   if (co2VMax != null && co2VMax >= th.co2Mbar) { const cv = co2Valid(d), ci = cv.findIndex((x) => x === co2VMax), ct = d.s.t[Math.max(0, ci)];
-    out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${co2VMax.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} mbar v ${tpt(ct)} (${d.s.depth[Math.max(0, ci)].toLocaleString("cs-CZ", { maximumFractionDigits: 0 })} m).`, blocks: [{ head: "", steps: [], from: ct, to: ct + 60, chart: "co2" }] }); }
+    out.push({ level: "bad", title: "Vysoké CO₂", text: `Maximum ppCO₂ ${co2VMax.toLocaleString(LOC, { maximumFractionDigits: 1 })} mbar v ${tpt(ct)} (${d.s.depth[Math.max(0, ci)].toLocaleString(LOC, { maximumFractionDigits: 0 })} m).`, blocks: [{ head: "", steps: [], from: ct, to: ct + 60, chart: "co2" }] }); }
   if (co2Bad.length) out.push({ level: "warn", title: "Čidlo CO₂ nejspíš chybné", text: `Hodnoty až ${Math.round(Math.max(...co2Bad.map((r) => r.max)))} mbar, celkem ${dur(co2Bad.reduce((x, r) => x + r.to - r.from, 0))} – fyziologicky nemožné. Pravděpodobná příčina: vlhkost / kondenzace na čidle (P) – zkontroluj a vysuš čidlo, případně ho vyměň.${co2Bad[0].from <= 180 ? " Nesmyslné hodnoty už od hladiny na začátku ponoru." : ""} Tyto úseky se do hlášení, souvislostí a srovnání nepočítají; v grafu zůstávají.`, blocks: co2Bad.map((r, k) => ({ head: co2Bad.length > 1 ? `${k + 1}. ${tpt(r.from)}–${tpt(r.to)}` : "", steps: [], from: r.from, to: r.to, chart: "co2" as ChartKey })) });
   // nízké pO₂ na začátku ponoru – podle průběhu (zavřený ventil O₂ = hypoxie)
   // jen počítač s čidly O₂ (CC mód): bez nich je pO₂ v logu jen vypočtené ze zásobního plynu
@@ -815,7 +816,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
       if (before >= 50) out.push({ level: "info", title: `Přechod na externí lahev (${gas})`, text: `V ${tpt(w.start)} (${Math.round(before)} → ${Math.round(settled)} bar), varování ${ackTxt(w)}.` });
       else out.push({ level: "info", title: `Nízký tlak ${gas} – externí lahev`, text: `Varování v ${mmss(w.start)}, ${ackTxt(w)}. Tlak ${Math.round(settled)} bar je mezitlak externí lahve – očekávané.` });
     } else if (settled != null && settled < 3) out.push({ level: "warn", title: `Nízký tlak ${gas} (0 bar)`, text: withSteps(`Varování v ${mmss(w.start)} – tlak spadl k nule a neustálil se na mezitlaku externí lahve. Zdroj odpojený nebo prázdný? ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
-    else out.push({ level: "warn", title: `Nízký tlak ${gas}${settled != null ? ` (${Math.round(settled)} bar)` : ""}`, text: withSteps(`On-board lahev – varování v ${tpt(w.start)} (${d.s.depth[i].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
+    else out.push({ level: "warn", title: `Nízký tlak ${gas}${settled != null ? ` (${Math.round(settled)} bar)` : ""}`, text: withSteps(`On-board lahev – varování v ${tpt(w.start)} (${d.s.depth[i].toLocaleString(LOC, { maximumFractionDigits: 1 })} m), ${ackTxt(w)}.`, resolutionSteps(d, w.start, w.end, "press", th)), blocks: [oneBlock(d, w.start, w.end, "press", resolutionSteps(d, w.start, w.end, "press", th))] });
   }
   const outW = cws.find((w) => w.kind === "cellout"), outA = d.alarms.find((a) => a.label.startsWith("Vyřazené čidlo"));
   if (cc && (outW || outA)) {
@@ -848,7 +849,7 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
   if (ndl.length) out.push({ level: "info", title: `Nízké NDL${ndl.length > 1 ? ` – ${ndl.length}×` : ""}`, text: ndl.map((w) => `${mmss(w.start)} (${ackTxt(w)}${w.how === "ack" ? `, za ${dur(w.end! - w.start)}` : ""})`).join(", ") + "." });
   // baterie Petrelu v tomto ponoru
   const bvs = d.s.bv.filter((v) => v > 0);
-  if (bvs.length && d.h.batWarn > 0) { const bmin = Math.min(...bvs), V = (v: number) => v.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (bvs.length && d.h.batWarn > 0) { const bmin = Math.min(...bvs), V = (v: number) => v.toLocaleString(LOC, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const lim = bmin < d.h.batCrit ? d.h.batCrit : d.h.batWarn, bi = d.s.bv.findIndex((v) => v > 0 && v < lim), bt = d.s.t[Math.max(0, bi)];
     const blk: AlertBlock[] = [{ head: "", steps: [], from: bt, to: bt + 60, chart: "temp" }], when = bi <= 0 || bt <= 30 ? "pod prahem už od začátku ponoru" : `pod práh poprvé v ${tpt(bt)}`;
     if (bmin < d.h.batCrit) out.push({ level: "bad", title: "Kritická baterie", text: `Napětí kleslo na ${V(bmin)} V (kritický práh ${V(d.h.batCrit)} V), ${when}.`, blocks: blk });
@@ -895,14 +896,14 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
       const zl = zs.filter((z) => z.level === lvl && (lvl === "bad" || !zs.some((b) => b.level === "bad" && b.from <= z.to && b.to >= z.from)));
       if (!zl.length) continue;
       const lim = lvl === "bad" ? th.po2HiBad ?? 1.6 : th.po2HiWarn ?? 1.4;
-      const around = (z: { from: number; to: number }) => { if (lvl !== "bad") return ""; const w = zs.find((x) => x.level === "warn" && x.from <= z.to && x.to >= z.from); return w ? ` (nad ${(th.po2HiWarn ?? 1.4).toLocaleString("cs-CZ")} bar ${dur(w.to - w.from)})` : ""; };
-      const blocks: AlertBlock[] = zl.map((z, k) => ({ head: `${zl.length > 1 ? `${k + 1}. ` : ""}${mmss(z.from)}–${mmss(z.to)} (${dur(z.to - z.from)})${around(z)}, max ${z.max.toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} bar, ${d.s.depth[at(z.from)].toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m`, steps: resolutionSteps(d, z.from, z.to, "po2high", th, zl[k + 1]?.from ?? Infinity).filter((x) => !/alarm|vlastní detekce/.test(x)), from: z.from, to: z.to, chart: "po2" }));
-      out.push({ level: lvl, title: "Vysoké pO₂ (bez alarmu počítače)", text: withSteps(`Nad ${lim.toLocaleString("cs-CZ")} bar${lvl === "warn" ? ` déle než ${dur(th.po2HiWarnS ?? 60)} mimo deko zastávky` : ""}: ${zl.map((z) => `${mmss(z.from)}–${mmss(z.to)}`).join(", ")}, celkem ${dur(zl.reduce((x, z) => x + z.to - z.from, 0))}.`, blocks.flatMap((b) => [`${b.head}:`, ...b.steps])), blocks });
+      const around = (z: { from: number; to: number }) => { if (lvl !== "bad") return ""; const w = zs.find((x) => x.level === "warn" && x.from <= z.to && x.to >= z.from); return w ? ` (nad ${(th.po2HiWarn ?? 1.4).toLocaleString(LOC)} bar ${dur(w.to - w.from)})` : ""; };
+      const blocks: AlertBlock[] = zl.map((z, k) => ({ head: `${zl.length > 1 ? `${k + 1}. ` : ""}${mmss(z.from)}–${mmss(z.to)} (${dur(z.to - z.from)})${around(z)}, max ${z.max.toLocaleString(LOC, { maximumFractionDigits: 2 })} bar, ${d.s.depth[at(z.from)].toLocaleString(LOC, { maximumFractionDigits: 1 })} m`, steps: resolutionSteps(d, z.from, z.to, "po2high", th, zl[k + 1]?.from ?? Infinity).filter((x) => !/alarm|vlastní detekce/.test(x)), from: z.from, to: z.to, chart: "po2" }));
+      out.push({ level: lvl, title: "Vysoké pO₂ (bez alarmu počítače)", text: withSteps(`Nad ${lim.toLocaleString(LOC)} bar${lvl === "warn" ? ` déle než ${dur(th.po2HiWarnS ?? 60)} mimo deko zastávky` : ""}: ${zl.map((z) => `${mmss(z.from)}–${mmss(z.to)}`).join(", ")}, celkem ${dur(zl.reduce((x, z) => x + z.to - z.from, 0))}.`, blocks.flatMap((b) => [`${b.head}:`, ...b.steps])), blocks });
     }
   }
   const cs = cc ? cellSpread(d) : null;
   if (cs && cs.kind) {
-    const nf = (x: number, k = 2) => x.toLocaleString("cs-CZ", { maximumFractionDigits: k });
+    const nf = (x: number, k = 2) => x.toLocaleString(LOC, { maximumFractionDigits: k });
     const det = `rozdíl až ${nf(cs.max)} bar (${tpt(cs.at)}), nad 0,3 bar celkem ${dur(cs.min * 60)}`;
     const list = cs.cells.join(" a ");
     if (cs.kind === "wet") out.push({ level: "bad", title: "Podezření na vlhkost na čidlech (zatékání?)", text: `Odchylují se ${cs.cells.length > 1 ? `čidla ${list}` : "víc čidel"} najednou, ${det}; po výstupu se srovnala. Zkontroluj hlavu, čidla a smyčku.` });
@@ -912,8 +913,8 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
   const pl = co2Plausibility(d);
   if (pl && !pl.ok) out.push({ level: "warn", title: "Čidlo CO₂ nejspíš podhodnocuje", text: `Pod 20 m ukazovalo přesnou nulu ${pl.zeroPct} % času (oříznutá nula) – malé hodnoty CO₂ nevidí. Zkontroluj kalibraci; nízké hodnoty ber s rezervou.` });
   const ef = effortOf(d, th.co2Mbar, base);
-  if (ef.densOver62 >= 1) out.push({ level: "info", title: "Velmi hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString("cs-CZ")} g/l, ${Math.round(ef.densOver62)} min nad 6,2 g/l – výrazně vyšší dechová práce a riziko hromadění CO₂.` });
-  else if (ef.densOver52 >= 1) out.push({ level: "info", title: "Hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString("cs-CZ")} g/l, ${Math.round(ef.densOver52)} min nad doporučenými 5,2 g/l.` });
+  if (ef.densOver62 >= 1) out.push({ level: "info", title: "Velmi hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString(LOC)} g/l, ${Math.round(ef.densOver62)} min nad 6,2 g/l – výrazně vyšší dechová práce a riziko hromadění CO₂.` });
+  else if (ef.densOver52 >= 1) out.push({ level: "info", title: "Hustý plyn", text: `Hustota plynu až ${ef.densMax.toLocaleString(LOC)} g/l, ${Math.round(ef.densOver52)} min nad doporučenými 5,2 g/l.` });
   // souvislosti CO₂: jedno hlášení (zvlášť varování a informace), každá epizoda s odkazem do grafu
   for (const lv of ["warn", "info"] as const) {
     const ns = ef.co2Notes.filter((c) => c.level === lv);
@@ -921,9 +922,9 @@ export function diveWarnings(d: Dive, sum: Summary, th: Thresholds, base?: Effor
   }
   // doplňování diluentu (ADV, proplach smyčky / masky): jen výrazně nad osobním mediánem
   { const lim = base?.vents != null ? Math.max(4, Math.ceil(base.vents * 2) + 1) : 5;
-    if (ef.vents >= lim) { const vs = dilVents(d); out.push({ level: "info", title: "Časté doplňování diluentu", text: `${ef.vents}× doplnění diluentu bez klesání (ADV, proplach smyčky nebo masky, ruční přidání)${base?.vents != null ? ` – obvykle ${base.vents.toLocaleString("cs-CZ")}× za ponor` : ""}: ${vs.map((t) => `${tpt(t)} (${d.s.depth[at(t)].toLocaleString("cs-CZ", { maximumFractionDigits: 0 })} m)`).join(", ")}.`, blocks: vs.map((t, k) => ({ head: `${k + 1}. ${tpt(t)}`, steps: [], from: Math.max(0, t - 60), to: t + 60, chart: "effort" as ChartKey })) }); } }
+    if (ef.vents >= lim) { const vs = dilVents(d); out.push({ level: "info", title: "Časté doplňování diluentu", text: `${ef.vents}× doplnění diluentu bez klesání (ADV, proplach smyčky nebo masky, ruční přidání)${base?.vents != null ? ` – obvykle ${base.vents.toLocaleString(LOC)}× za ponor` : ""}: ${vs.map((t) => `${tpt(t)} (${d.s.depth[at(t)].toLocaleString(LOC, { maximumFractionDigits: 0 })} m)`).join(", ")}.`, blocks: vs.map((t, k) => ({ head: `${k + 1}. ${tpt(t)}`, steps: [], from: Math.max(0, t - 60), to: t + 60, chart: "effort" as ChartKey })) }); } }
   // zvýšená zátěž (skutečná námaha)
-  if (cc && ef.high.length) out.push({ level: "info", title: `Zvýšená zátěž${ef.high.length > 1 ? ` – ${ef.high.length}×` : ""}`, text: ef.high.map((h) => `${tpt(h.from)}–${tpt(h.to)} až ${h.max.toLocaleString("cs-CZ")}× obvyklé${h.o2 != null ? `, spotřeba O₂ ${h.o2.toLocaleString("cs-CZ")}×` : ""}${h.co2 ? ", následně nárůst CO₂" : ""}`).join("; ") + ".", blocks: ef.high.map((h) => ({ head: `${tpt(h.from)}–${tpt(h.to)} (${dur(h.to - h.from)}), až ${h.max.toLocaleString("cs-CZ")}×${h.co2 ? ", nárůst CO₂" : ""}`, steps: [], from: h.from, to: h.to, chart: "effort" as ChartKey })) });
+  if (cc && ef.high.length) out.push({ level: "info", title: `Zvýšená zátěž${ef.high.length > 1 ? ` – ${ef.high.length}×` : ""}`, text: ef.high.map((h) => `${tpt(h.from)}–${tpt(h.to)} až ${h.max.toLocaleString(LOC)}× obvyklé${h.o2 != null ? `, spotřeba O₂ ${h.o2.toLocaleString(LOC)}×` : ""}${h.co2 ? ", následně nárůst CO₂" : ""}`).join("; ") + ".", blocks: ef.high.map((h) => ({ head: `${tpt(h.from)}–${tpt(h.to)} (${dur(h.to - h.from)}), až ${h.max.toLocaleString(LOC)}×${h.co2 ? ", nárůst CO₂" : ""}`, steps: [], from: h.from, to: h.to, chart: "effort" as ChartKey })) });
   if (cc) out.push(...spWarnings(d, sum, { ...SP_RULES, lateMin: th.spLateMin ?? 2, lateWarn: !!th.spLateWarn, osc: th.spOsc ?? 3, descM: th.spDescM ?? 6, po2Bad: th.po2HiBad ?? 1.6 }));
   const mv = cc ? [d.s.mv1, d.s.mv2, d.s.mv3] : [];
   mv.forEach((a, k) => {

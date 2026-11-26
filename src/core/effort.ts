@@ -1,4 +1,5 @@
 // Zátěž a dechová práce: odhad metabolické spotřeby O₂, hustota plynu, nadbytečný diluent a souvislosti s CO₂.
+import { LOC } from "../app/i18n";
 import type { Dive } from "./shearwater";
 import { o2Doses, tpt } from "./analysis";
 
@@ -170,10 +171,10 @@ export function effortOf(d: Dive, co2Limit = 5, base?: EffortBase | null): Effor
     const dPeak = dens[pk] ?? 0;
     const why: string[] = [];
     if (wMed && wPeak != null && wPeak > wMed * 1.3) why.push(`při vyšší námaze (spotřeba O₂ ${Math.round((wPeak / wMed) * 100 - 100)} % nad průměrem ponoru)`);
-    if (dPeak > 5.2) why.push(`při vysoké hustotě plynu ${dPeak.toLocaleString("cs-CZ")} g/l (vyšší dechová práce)`);
+    if (dPeak > 5.2) why.push(`při vysoké hustotě plynu ${dPeak.toLocaleString(LOC)} g/l (vyšší dechová práce)`);
     notes.push({
       t: s.t[pk], level: why.length ? "info" : "warn",
-      text: `CO₂ ${(s.co2[pk] ?? 0).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} mbar v ${tpt(s.t[pk])} ` +
+      text: `CO₂ ${(s.co2[pk] ?? 0).toLocaleString(LOC, { maximumFractionDigits: 1 })} mbar v ${tpt(s.t[pk])} ` +
         (why.length ? why.join(" a ") + "." : "bez zvýšené námahy a husté směsi – zkontroluj sorbent a smyčku."),
     });
     i = j + Math.round(120 / dt); // další epizoda nejdřív za 2 min
