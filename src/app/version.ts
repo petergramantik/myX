@@ -1,11 +1,14 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.48-dev.3";
+export const APP_VERSION = "1.48-dev.4";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.48-dev.4", date: "2026-11-28", title: "Nová ikona reLog (dev)", items: [
+    "Nová ikona reLog s potápěčem a profilem ponoru (plocha telefonu, záhlaví, záložka prohlížeče; průhledné pozadí, pro Android adaptivní varianta).",
+  ] },
   { version: "1.48-dev.3", date: "2026-11-28", title: "Nový název reLog, záloha jen při změně (dev)", items: [
-    "Aplikace se jmenuje reLog – nový název a ikona (záhlaví, plocha telefonu, nápověda, sdílení). Data, záloha i synchronizace beze změny.",
+    "Aplikace se jmenuje reLog – nový název a nová ikona (záhlaví, plocha telefonu, záložka prohlížeče), nápověda, sdílení. Data, záloha i synchronizace beze změny.",
     "Připomínka zálohy jen tehdy, když se od poslední zálohy změnila data; v Nastavení → Data řádek „Od poslední zálohy: beze změn / data změněna“.",
   ] },
   { version: "1.48-dev.2", date: "2026-11-26", title: "Úplná záloha, příspěvek, BETA (dev)", items: [
