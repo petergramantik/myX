@@ -1453,6 +1453,7 @@ export const EN: Record<string, string> = {
 };
 /** názvy verzí v „Co je nového“ */
 export const EN_REL: Record<string, string> = {
+"Zjednodušená ikona pro malé zobrazení (dev)": "Simplified icon for small sizes (dev)",
 "Nová ikona reLog (dev)": "New reLog icon (dev)",
 "Nový název reLog, záloha jen při změně (dev)": "New name reLog, backup only on change (dev)",
 "Úplná záloha, příspěvek, BETA (dev)": "Full backup, support, BETA (dev)",
