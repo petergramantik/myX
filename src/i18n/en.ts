@@ -637,11 +637,11 @@ export const EN: Record<string, string> = {
 "Výstroj je v pořádku": "Gear is in order",
 "Chce to doladit, ale asi jako OK.": "Needs some tuning, but kinda OK.",
 "Výstroj vyžaduje drobnou údržbu": "Gear needs minor maintenance",
-"Začni se starat o své krámy!": "Start taking care of your stuff!",
+"Začni se starat o své krámy!": "Start looking after your kit!",
 "Výstroj vyžaduje údržbu": "Gear needs maintenance",
-"Tohle už bude něco stát, dělej!": "This is going to cost you, move it!",
+"Tohle už bude něco stát, dělej!": "Roll up your sleeves – and open your wallet!",
 "Výstroj vyžaduje rozsáhlou údržbu": "Gear needs major maintenance",
-"Prodej to, než se něco stane :(": "Sell it before something happens :(",
+"Prodej to, než se něco stane :(": "Sell it before it bites you :(",
 "Výstroj není připravená": "Gear is not ready",
 "v pořádku": "OK",
 "Přehled": "Overview",
@@ -1453,6 +1453,7 @@ export const EN: Record<string, string> = {
 };
 /** názvy verzí v „Co je nového“ */
 export const EN_REL: Record<string, string> = {
+"Drobnosti před vydáním (dev)": "Small fixes before release (dev)",
 "Zjednodušená ikona pro malé zobrazení (dev)": "Simplified icon for small sizes (dev)",
 "Nová ikona reLog (dev)": "New reLog icon (dev)",
 "Nový název reLog, záloha jen při změně (dev)": "New name reLog, backup only on change (dev)",

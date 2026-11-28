@@ -74,7 +74,7 @@ export function BatteryTiles() {
           return (
             <div key={x.pos} className={"celltile " + lvl} onClick={() => go({ t: "bats", pos: x.pos })}>
               <div className="ct-h"><b>Hlava {x.pos}</b><span className={"dot " + lvl} /></div>
-              {b.head.some((y) => y.role) && <div className="ct-sub">{x.role || "\u00a0"}</div>}
+              {b.head.some((y) => y.role) && <div className="ct-sub">{x.short || "\u00a0"}</div>}
               {x.cur ? <>
                 <div className="ct-v">{num(x.minutes / 60, 1)} <small>h</small></div>
                 <div className="ct-u">pod vodou od výměny</div>
