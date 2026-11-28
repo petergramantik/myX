@@ -1,4 +1,5 @@
 // O₂ čidla: citlivost (mV/bar) z každého ponoru, linearita, rychlost reakce, odhad výměn a kalibrací.
+import { DEC, LOC } from "../app/i18n";
 import { isCC } from "./rig";
 import type { Dive } from "./shearwater";
 import { cellCalibration, injections } from "./analysis";
@@ -103,9 +104,9 @@ export function cellTrend(pts: { t: number; mv: number | null; lin: number | nul
 export function trendReasons(tr: CellTrend): { level: "warn" | "info"; text: string }[] {
   const out: { level: "warn" | "info"; text: string }[] = [];
   if (tr.slopePctM != null && tr.slopePctM <= -2 && tr.monthsToWarn != null && tr.monthsToWarn <= 6)
-    out.push({ level: "warn", text: `Citlivost klesá o ${Math.abs(tr.slopePctM).toString().replace(".", ",")} % za měsíc – pod hranici na vzduchu zhruba za ${tr.monthsToWarn < 1 ? "méně než měsíc" : `${Math.round(tr.monthsToWarn)} měs.`}` });
+    out.push({ level: "warn", text: `Citlivost klesá o ${Math.abs(tr.slopePctM).toString().replace(".", DEC)} % za měsíc – pod hranici na vzduchu zhruba za ${tr.monthsToWarn < 1 ? "méně než měsíc" : `${Math.round(tr.monthsToWarn)} měs.`}` });
   if (tr.linNow != null && tr.linFirst != null && tr.linNow < 0.95 && tr.linFirst - tr.linNow >= 0.03)
-    out.push({ level: "warn", text: `Linearita se zhoršuje: ${tr.linFirst.toFixed(2).replace(".", ",")} → ${tr.linNow.toFixed(2).replace(".", ",")} (začínající current limiting)` });
+    out.push({ level: "warn", text: `Linearita se zhoršuje: ${tr.linFirst.toFixed(2).replace(".", DEC)} → ${tr.linNow.toFixed(2).replace(".", DEC)} (začínající current limiting)` });
   return out;
 }
 
@@ -117,8 +118,8 @@ export function cellStatus(k: number, recent: CellDive[], th: CellThresholds, ag
   const mvb = last?.mvBar[k] ?? null;
   if (mvb != null) {
     const air = mvb * 0.21;
-    if (air < th.cellAirBad) { up("bad"); reasons.push(`Jen ${air.toFixed(1).replace(".", ",")} mV na vzduchu (hranice ${th.cellAirBad} mV)`); }
-    else if (air < th.cellAirWarn) { up("warn"); reasons.push(`${air.toFixed(1).replace(".", ",")} mV na vzduchu – pod ${th.cellAirWarn} mV`); }
+    if (air < th.cellAirBad) { up("bad"); reasons.push(`Jen ${air.toFixed(1).replace(".", DEC)} mV na vzduchu (hranice ${th.cellAirBad} mV)`); }
+    else if (air < th.cellAirWarn) { up("warn"); reasons.push(`${air.toFixed(1).replace(".", DEC)} mV na vzduchu – pod ${th.cellAirWarn} mV`); }
     const refV = ref.map((r) => r.mvBar[k]).filter((x): x is number => x != null);
     const curV = recent.slice(-2).map((r) => r.mvBar[k]).filter((x): x is number => x != null);
     if (refV.length && curV.length) {
@@ -171,7 +172,7 @@ export function cellDiveWarnings(series: { start: number; cells: CellDive }[], i
     const others = cur.mvBar.filter((x, j): x is number => j !== k && x != null);
     const dev = others.length ? (v - others.reduce((a, b) => a + b, 0) / others.length) / (others.reduce((a, b) => a + b, 0) / others.length) : 0;
     const lin = cur.lin[k];
-    const airTxt = air.toLocaleString("cs-CZ", { maximumFractionDigits: 1 });
+    const airTxt = air.toLocaleString(LOC, { maximumFractionDigits: 1 });
     if (drop >= 0.25 || air < th.cellAirBad || (lin != null && lin < th.cellLinWarn))
       out.push({ level: "bad", title: `Problém s čidlem ${k + 1}`, text: [
         drop >= 0.25 ? `Citlivost prudce klesla o ${Math.round(drop * 100)} %` : "",

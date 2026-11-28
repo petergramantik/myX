@@ -1,3 +1,4 @@
+import { LOC } from "../app/i18n";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getState, subscribe, type State } from "../app/store";
 import { norm } from "../app/model";
@@ -76,10 +77,10 @@ export function useBackLayer(active: boolean, close: () => void) {
 }
 
 // ---------- formátování
-export const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString("cs-CZ", { timeZone: "UTC", day: "numeric", month: "numeric", year: "numeric" });
-export const fmtDateTime = (ts: number) => new Date(ts * 1000).toLocaleString("cs-CZ", { timeZone: "UTC", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+export const fmtDate = (ts: number) => new Date(ts * 1000).toLocaleDateString(LOC, { timeZone: "UTC", day: "numeric", month: "numeric", year: "numeric" });
+export const fmtDateTime = (ts: number) => new Date(ts * 1000).toLocaleString(LOC, { timeZone: "UTC", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
 export const fmtMin = (s: number) => `${Math.round(s / 60)} min`;
-export const num = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLocaleString("cs-CZ", { maximumFractionDigits: d }));
+export const num = (v: number | null | undefined, d = 1) => (v == null ? "–" : v.toLocaleString(LOC, { maximumFractionDigits: d }));
 
 export function Card({ title, children, right, id, onTitle }: { title?: string; children: React.ReactNode; right?: React.ReactNode; id?: string; onTitle?: () => void }) {
   return (

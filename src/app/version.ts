@@ -1,9 +1,17 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.47.2";
+export const APP_VERSION = "1.48";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.48", date: "2026-11-28", title: "reLog: nový název, angličtina, úplná záloha", items: [
+    "Aplikace se jmenuje reLog – nový název a nová ikona (plocha telefonu, záhlaví, záložka prohlížeče; pro malé velikosti zjednodušená). Data i synchronizace beze změny.",
+    "Angličtina: celá aplikace včetně upozornění, analýz a nápovědy; volba jazyka v Nastavení → Zobrazení (výchozí podle jazyka telefonu). Datum a čísla podle jazyka.",
+    "Hlášky neutrálně (bez humoru) – přepínač v Nastavení → Zobrazení, platí pro všechny jazyky.",
+    "Úplná záloha všech dat (ponory včetně čísla z Cloudu, logbook, Výstroj, logy ostatních, původní soubor Cloudu, nastavení zařízení) – Stáhnout nebo Sdílet zálohu…; připomínka na Přehledu (týdně / měsíčně / vypnuto) jen když se data od poslední zálohy změnila.",
+    "Podpořit vývoj (Buy me a coffee) v Nastavení; anonymní počítadlo spuštění podle země (jen pro vlastníka).",
+    "Štítek BETA v záhlaví; Přehled: u baterie Hlava 2 jen „HUD“.",
+  ] },
   { version: "1.47.2", date: "2026-11-25", title: "Skutečná spotřeba ze zadaných lahví", items: [
     "Spotřeba O₂ a diluentu počítá i ručně zadané tlaky on-board lahví (zavřená lahev) – Poslední ponor na Přehledu, V kostce, Spotřeba plynu, osobní odhad O₂, srovnání; u tlaku „z logu“ / „zadáno“.",
   ] },

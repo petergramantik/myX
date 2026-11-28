@@ -1,4 +1,5 @@
 // Stav aplikace: ponory, logbook, poloha, synchronizace přes Worker.
+import { APP_VERSION } from "./version";
 import { ask, askText, choose } from "./dialog";
 import { mergeDives, segGroups } from "../core/segments";
 import { writeSqlite } from "../core/sqlitew";
@@ -494,7 +495,7 @@ async function addRaws(raws: RawDive[], cnums: Map<string, number> = new Map()):
 }
 
 /**
- * Převezme lokalitu, buddy a poznámku zapsané v Shearwater Cloud – jen tam, kde v myX u ponoru ještě nic není.
+ * Převezme lokalitu, buddy a poznámku zapsané v Shearwater Cloud – jen tam, kde v reLogu u ponoru ještě nic není.
  * Lokality a buddy se párují podle jména, chybějící se založí.
  */
 export function applyCloud(lb0: Logbook, cloud: Map<string, CloudDetail>, ids: Set<string>): Logbook {
@@ -705,7 +706,7 @@ export async function applySuggestion(diveId: string, kind: "site" | "buddy", na
 }
 
 // ---------- sdílení vybraných ponorů (malý export ve formátu Shearwater Cloud)
-/** Tabulka myX v sdíleném souboru: moje lokalita a parťáci u ponoru (jen u mých ponorů). */
+/** Tabulka reLog v sdíleném souboru: moje lokalita a parťáci u ponoru (jen u mých ponorů). */
 const MYX_TABLE = "myx_dive";
 /** Vytvoří .db jen s vybranými ponory (vlastní nebo z otevřeného cizího logu). ids = id záznamů včetně částí spojených ponorů. */
 export async function exportDives(ids: string[]): Promise<{ name: string; data: Uint8Array; count: number }> {
@@ -743,10 +744,10 @@ export async function exportDives(ids: string[]): Promise<{ name: string; data: 
     { name: MYX_TABLE, sql: `CREATE TABLE ${MYX_TABLE} (DiveId TEXT, Site TEXT, Buddies TEXT)`, rows: myxRows },
   ];
   const day = Number.isFinite(first) ? new Date(first * 1000).toISOString().slice(0, 10) : "ponor";
-  const name = `myX_${(model || "Petrel").replace(/\s+/g, "")}_${day}${logRows.length > 1 ? `_${logRows.length}` : ""}.db`;
+  const name = `reLog_${(model || "Petrel").replace(/\s+/g, "")}_${day}${logRows.length > 1 ? `_${logRows.length}` : ""}.db`;
   return { name, data: writeSqlite(tables), count: logRows.length };
 }
-/** Je soubor sdílení vybraných ponorů z myX (ne celý export)? */
+/** Je soubor sdílení vybraných ponorů z reLogu (ne celý export)? */
 const isMyxShare = (buf: Uint8Array) => { try { return new SqliteFile(buf).tables().has(MYX_TABLE); } catch { return false; } };
 /** Moje lokalita a parťáci ze sdíleného souboru – doplní se jako údaje „z Cloudu“, kde Cloud nic nemá. */
 function readMyx(buf: Uint8Array): Map<string, CloudDetail> {
@@ -754,7 +755,7 @@ function readMyx(buf: Uint8Array): Map<string, CloudDetail> {
   try { for (const r of new SqliteFile(buf).rows(MYX_TABLE)) { const id = String(r["DiveId"] ?? ""); if (id) out.set(id, { site: String(r["Site"] || ""), buddies: String(r["Buddies"] || "").split(",").map((x) => x.trim()).filter(Boolean), notes: "" }); } } catch { /* */ }
   return out;
 }
-/** Cloud údaje doplněné o údaje z myX (Cloud má přednost). */
+/** Cloud údaje doplněné o údaje z reLogu (Cloud má přednost). */
 function cloudPlus(buf: Uint8Array): Map<string, CloudDetail> {
   if (!buf.length) return new Map(); // ponory stažené z počítače – bez údajů z Cloudu
   const c = readCloudDetails(buf);
@@ -1524,21 +1525,49 @@ export async function resetAll(): Promise<void> {
 }
 
 // ---------- záloha do souboru
-export async function exportBackup(): Promise<Blob> {
+/** Místní nastavení zařízení do zálohy (jazyk, řazení, zobrazení…); klíč synchronizace se nezálohuje. */
+const LOCAL_SKIP = new Set(["myx.key", "myx-hit", "myx-lastbak", "myx-bakprint"]);
+function localPrefs(): Record<string, string> {
+  const out: Record<string, string> = {};
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (/^myx[-.]/.test(k) && !LOCAL_SKIP.has(k)) out[k] = localStorage.getItem(k)!; } } catch { /* bez úložiště */ }
+  return out;
+}
+const b64 = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+/** Záloha všech uživatelských dat: ponory (i číslo z Cloudu, název souboru, výrobce), původní soubor Cloudu, logbook (lokality, parťáci, poznámky, Výstroj, čidla, baterie, nastavení), logy ostatních a místní nastavení. */
+export async function exportBackup(withGuests = true): Promise<Blob> {
   const raws = await db.getAll<RawDive>("raw");
-  const b64 = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
-  const data = { app: "myX", v: 1, lb: st.lb, dives: raws.map((r) => ({ id: r.id, num: r.num, start: r.start, blob: b64(r.blob) })) };
-  return new Blob([JSON.stringify(data)], { type: "application/json" });
+  const guest = withGuests ? { raw: await db.dump("raw", db.GUEST), kv: await db.dump("kv", db.GUEST) } : undefined;
+  const data = { app: "myX", v: 2, at: Date.now(), ver: APP_VERSION, lb: st.lb, dives: raws.map((r) => ({ id: r.id, num: r.num, start: r.start, vendor: r.vendor, fn: r.fn, cnum: r.cnum, blob: b64(r.blob) })), orig: await db.get("kv", "orig"), guest, local: localPrefs() };
+  return new Blob([JSON.stringify(data, (_k, x) => (x instanceof Uint8Array ? { __u8: b64(x) } : x))], { type: "application/json" });
+}
+/** Otisk zálohovaných dat (ponory, logbook, logy ostatních) – pro zjištění, zda se od poslední zálohy něco změnilo.
+ *  Místní nastavení zobrazení (řazení, rozbalení karet) se nepočítá. */
+export async function dataPrint(): Promise<string> {
+  const g = { raw: (await db.dump("raw", db.GUEST)).map((r) => r.k), kv: await db.dump("kv", db.GUEST) };
+  const txt = JSON.stringify({ lb: st.lb, dives: st.metas.map((m) => m.id).sort(), g }, (_k, x) => (x instanceof Uint8Array ? x.length : x));
+  return hash53(txt);
+}
+/** cyrb53 – rychlý nekryptografický hash řetězce. */
+export function hash53(str: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 export async function importBackup(file: File): Promise<number> {
-  const j = JSON.parse(await file.text());
-  if (j.app !== "myX") throw new Error("Není to záloha myX");
+  const j = JSON.parse(await file.text(), (_k, x) => (x && typeof x === "object" && typeof x.__u8 === "string" && Object.keys(x).length === 1 ? unb64(x.__u8) : x));
+  if (j.app !== "myX" && j.app !== "reLog") throw new Error("Není to záloha reLogu");
   const have = new Set(st.metas.map((m) => m.id));
   const added: Meta[] = [];
   for (const d of j.dives) {
     if (have.has(d.id)) continue;
     const bin = Uint8Array.from(atob(d.blob), (c) => c.charCodeAt(0));
     const raw: RawDive = { id: d.id, num: d.num, start: d.start, blob: bin };
+    if (d.vendor) raw.vendor = d.vendor;
+    if (d.fn) raw.fn = d.fn;
+    if (d.cnum != null) raw.cnum = d.cnum;
     await db.put("raw", raw);
     const m = await metaOf(raw);
     await db.put("meta", m);
@@ -1546,6 +1575,8 @@ export async function importBackup(file: File): Promise<number> {
     pendingUpload.add(d.id);
   }
   set({ metas: sortMetas([...st.metas, ...added]) });
+  // původní soubor Shearwater Cloud (pro sdílení celého logu) – jen když v telefonu žádný není
+  if (j.orig?.data instanceof Uint8Array && !(await db.get("kv", "orig"))) await db.put("kv", j.orig, "orig");
   // obnovené položky mají přednost i před dřívějším smazáním (např. po resetu logbooku)
   const now = Date.now(), b = j.lb as Logbook, del = { ...st.lb.deleted };
   for (const k of ["sites", "buddies", "notes", "drafts", "aliases", "computers"] as const) {
@@ -1553,6 +1584,23 @@ export async function importBackup(file: File): Promise<number> {
     for (const [id, v] of Object.entries(m)) { if (del[id]) { delete del[id]; m[id] = { ...v, updated: now }; } }
   }
   await saveLb(mergeLogbooks({ ...st.lb, deleted: del }, { ...b, deleted: {} }));
+  // logy ostatních: doplnit chybějící (souhrny se přepočtou při otevření)
+  let gAdded = 0;
+  for (const store of ["raw", "kv"] as const) for (const r of j.guest?.[store] || []) {
+    let v = r.v;
+    if (store === "kv" && v && typeof v === "object" && Array.isArray(v.metas)) v = { ...v, metas: v.metas.map((m: Record<string, unknown>) => ({ ...m, v: 0 })) };
+    if (store === "kv" && r.k === "logs" && Array.isArray(v)) {
+      // seznam cizích logů: sloučit podle id
+      const have = await guestLogs(), ids = new Set(have.map((l) => l.id));
+      const add = (v as GuestLog[]).filter((l) => !ids.has(l.id));
+      if (add.length) { await db.put("kv", [...have, ...add], "logs", db.GUEST); gAdded += add.length; }
+      continue;
+    }
+    if (await db.putIfMissing(store, r.k, v, db.GUEST)) gAdded++;
+  }
+  // místní nastavení zařízení: jen chybějící
+  try { for (const [k, v] of Object.entries((j.local || {}) as Record<string, string>)) if (localStorage.getItem(k) == null && !LOCAL_SKIP.has(k)) localStorage.setItem(k, v); } catch { /* bez úložiště */ }
+  if (gAdded) { guestIndex = null; guestRaw = null; set({ guestRev: st.guestRev + 1 }); }
   return added.length;
 }
 

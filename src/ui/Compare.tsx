@@ -1,4 +1,5 @@
 // Porovnání mého ponoru s ponorem buddyho z cizího logu: grafy přes sebe, tabulka rozdílů a závěr.
+import { LOC } from "../app/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dive } from "../core/shearwater";
 import { pressGaps, setpointChanges } from "../core/analysis";
@@ -25,7 +26,7 @@ export function BuddyDivesCard({ meta }: { meta: Meta }) {
     <Card title={list.length > 1 ? "Ponory ostatních" : "Ponor z cizího logu"} right={list.length > 1 ? <a onClick={() => go({ t: "cmp", id: meta.id, other: list.map((x) => x.meta.id).join(",") })}>Srovnat všechny ›</a> : undefined}>
       {list.map((x) => (
         <div key={x.meta.id} className="buddy-dive">
-          <span><b>{x.owner || x.log.model || "Cizí log"}</b> · začátek {fmtDateTime(x.meta.start).split(" ").pop()} · {Math.round(x.meta.h.diveTimeS / 60)} min · {x.meta.h.maxDepth.toLocaleString("cs-CZ")} m</span>
+          <span><b>{x.owner || x.log.model || "Cizí log"}</b> · začátek {fmtDateTime(x.meta.start).split(" ").pop()} · {Math.round(x.meta.h.diveTimeS / 60)} min · {x.meta.h.maxDepth.toLocaleString(LOC)} m</span>
           <div className="row">
             <button className="btn small primary" onClick={() => go({ t: "cmp", id: meta.id, other: x.meta.id })}>Porovnat</button>
             <button className="btn small" onClick={async () => { await openBuddyDive(x.log, meta.id, x.meta.id); go({ t: "dive", id: x.meta.id }); }}>Otevřít</button>
@@ -95,7 +96,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
   const ser = (pick: (d: Dive) => (number | null)[], label: string, unit: string, dash?: string, width = 2) =>
     D.map((d, k) => { const v = pick(d); return { label: `${label}${label ? " – " : ""}${N[k]}`, color: C[k], values: T.map((x) => at(d, v, x - offs[k])), unit, dash, width }; });
   const inertCum = (d: Dive) => { let acc = 0; return d.s.t.map((_, i) => { const P = (d.h.surfP || 1013) / 1000 + d.s.depth[i] * 0.0981; acc += Math.max(0, P - Math.min(d.s.ppo2[i], P)) * (d.h.rateS || 5) / 60; return Math.round(acc * 10) / 10; }); };
-  const pins = D.flatMap((d, k) => setpointChanges(d).map((c) => ({ t: c.t + offs[k], label: `SP ${c.to.toLocaleString("cs-CZ")}`, color: C[k] })));
+  const pins = D.flatMap((d, k) => setpointChanges(d).map((c) => ({ t: c.t + offs[k], label: `SP ${c.to.toLocaleString(LOC)}`, color: C[k] })));
   const rows = multiRows(S);
   const sections = D.length === 2 ? conclusionSections(N[0], N[1], S[0], S[1], deeperWindow(D[0], D[1], offs[1])) : groupSections(N, S);
   const clockInfo = all.slice(1).map((_, k) => {
@@ -112,7 +113,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
     let me = st0.lb.settings.myName;
     if (!me && !st0.guest) { me = (await askText("Tvoje jméno ve sdíleném srovnání (místo „Já“):", ""))?.trim() || undefined; if (me) await saveSettings({ myName: me }); }
     const nm = N.map((n) => (n === "Já" && me ? me : n));
-    await shareHtml(compareHtml(el, title, `${fmtDateTime(all[0].h.start)} · ${nm.join(", ")}`, st0.guest ? undefined : me), `myX_srovnani_${day}.html`, title);
+    await shareHtml(compareHtml(el, title, `${fmtDateTime(all[0].h.start)} · ${nm.join(", ")}`, st0.guest ? undefined : me), `reLog_srovnani_${day}.html`, title);
   };
   return (
     <div className="screen" ref={rootRef}>
@@ -129,7 +130,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
           <label key={i} className="chip" style={{ borderColor: PAL[i % PAL.length], opacity: off.has(i) ? 0.45 : 1 }}>
             <input type="checkbox" checked={!off.has(i)} disabled={!off.has(i) && sel.length <= 2}
               onChange={() => { const n = new Set(off); n.has(i) ? n.delete(i) : n.add(i); setOff(n); }} /> <span style={{ color: PAL[i % PAL.length] }}>●</span> {names[i]}
-            {i > 0 && <small className="muted"> start {((startOf(i) - startOf(0)) / 60) >= 0 ? "+" : ""}{(Math.round((startOf(i) - startOf(0)) / 6) / 10).toLocaleString("cs-CZ")} min</small>}
+            {i > 0 && <small className="muted"> start {((startOf(i) - startOf(0)) / 60) >= 0 ? "+" : ""}{(Math.round((startOf(i) - startOf(0)) / 6) / 10).toLocaleString(LOC)} min</small>}
           </label>
         ))}</div>
       </section>
@@ -191,7 +192,7 @@ function GasCompare({ D, N, C, S, mine, mineId }: { D: Dive[]; N: string[]; C: s
     cur[h] = { ...(cur[h] || {}), [g]: x > 0 ? x : undefined };
     saveSettings({ cylOf: cur });
   };
-  const n1 = (v: number) => v.toLocaleString("cs-CZ", { maximumFractionDigits: 1 });
+  const n1 = (v: number) => v.toLocaleString(LOC, { maximumFractionDigits: 1 });
   const cell = (k: number, g: "o2" | "dil") => {
     const bar = g === "o2" ? S[k].o2Bar : S[k].dilBar, vol = volOf(k, g);
     const r = k === mine ? real(g) : null, min = D[k].h.diveTimeS / 60;
@@ -280,7 +281,7 @@ function CommonList({ who }: { who?: string }) {
   useEffect(() => () => { cmMemo.y = leaveY; }, []);
   useEffect(() => { if (rows && cmMemo.y) requestAnimationFrame(() => window.scrollTo(0, cmMemo.y)); }, [rows]);
   if (rows == null) return <p className="muted">Hledám…</p>;
-  if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log ostatních v Databázi (nebo ho nasdílej do myX přes WhatsApp / Quick Share).</p>;
+  if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log ostatních v Databázi (nebo ho nasdílej do reLogu přes WhatsApp / Quick Share).</p>;
   const ymd = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
   const dateOk = (r: Common) => { const d = ymd(r.m.start); return (!year || d.startsWith(year)) && (!month || d.slice(5, 7) === month) && (!day || d === day); };
   const has = (r: Common, who: string[]) => who.every((w) => r.with.some((x) => x.who === w));

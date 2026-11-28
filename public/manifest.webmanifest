@@ -1,12 +1,12 @@
 {
-  "name": "myX – potápěčský logbook",
-  "short_name": "myX",
-  "description": "Logbook ponorů s X-CCR a Shearwater Petrel 2/3",
+  "name": "reLog – potápěčský logbook",
+  "short_name": "reLog",
+  "description": "Logbook ponorů s rebreatherem – Shearwater Petrel 2/3",
   "lang": "cs",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0b1626",
+  "background_color": "#01121F",
   "theme_color": "#0b1626",
   "share_target": {
     "action": "./share-target",
@@ -76,12 +76,6 @@
       "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/myx-logbook.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
       "purpose": "any"
     },
     {

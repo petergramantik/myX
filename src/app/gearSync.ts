@@ -2,13 +2,14 @@
 // (tlak před a po z „Před a po ponoru“, u on-board lahví z logu). Starší ponor tak přepíše tlak jen tehdy, když lahev
 // později nebyla použita ani kontrolována; oprava nebo smazání ponoru se promítne samo. Chybějící tlak po ponoru → „Ověřit“.
 // On-board lahve rebreatheru (RB O2 n / RB DIL n) se po ponoru rozpoznají podle směsi diluentu z logu a tlaku na začátku.
+import { LOC } from "./i18n";
 import { tankMix, uid, type GearTank, type Logbook, type Meta } from "./model";
 
 /** Pod touto hodnotou počítač měří jen mezitlak (lahev zavřená). */
 const CLOSED = 20;
 /** Tolerance tlaku při rozpoznání lahve (teplota, přesnost snímače). */
 export const RB_TOL = 15;
-const dd = (sec: number) => new Date(sec * 1000).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+const dd = (sec: number) => new Date(sec * 1000).toLocaleDateString(LOC, { day: "numeric", month: "numeric" });
 export type RbRole = "o2" | "dil";
 export const RB_PREFIX: Record<RbRole, string> = { o2: "RB O2", dil: "RB DIL" };
 

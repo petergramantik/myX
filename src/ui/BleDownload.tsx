@@ -1,4 +1,5 @@
 // Tlačítko „Stáhnout z počítače“ – stažení nových ponorů ze Shearwater přes Bluetooth (Chrome na Androidu).
+import { LOC } from "../app/i18n";
 import { useRef, useState } from "react";
 import { bleDownload, bleSupported, type BleProgress } from "../app/ble";
 import { downloadPlan, saveDownloaded, toast, type DownloadPlan } from "../app/store";
@@ -12,7 +13,7 @@ export function BleDownload() {
   const [err, setErr] = useState<string | null>(null);
   const stop = useRef(false);
   if (!bleSupported() || st.guest || st.temp) return null;
-  const add = (s: string) => setLog((l) => [...l, `${new Date().toLocaleTimeString("cs-CZ")} ${s}`]);
+  const add = (s: string) => setLog((l) => [...l, `${new Date().toLocaleTimeString(LOC)} ${s}`]);
   const run = async () => {
     setBusy(true); setErr(null); setLog([]); setProg(null);
     let lock: { release: () => Promise<void> } | null = null;
@@ -36,7 +37,7 @@ export function BleDownload() {
     <div className="ble">
       {busy ? <button className="btn danger" disabled={stop.current} onClick={() => { stop.current = true; setProg({ phase: "Dokončuji ponor, pak skončím…" }); }}>{stop.current ? "Dokončuji ponor…" : "Ukončit stahování"}</button>
         : <button className="btn primary" onClick={run}>Stáhnout z počítače (Bluetooth)</button>}
-      {!busy && !err && !log.length && <p className="note">Na Petrelu otevři Upload log (Bluetooth), pak klepni a vyber počítač. Petrel 2 přes prohlížeč nejde – použij aplikaci <a href="https://github.com/petergramantik/myX/releases" target="_blank" rel="noreferrer">myX Petrel</a> a na konci vyber Sdílet → myX (nebo soubor načti tlačítkem Importovat).</p>}
+      {!busy && !err && !log.length && <p className="note">Na Petrelu otevři Upload log (Bluetooth), pak klepni a vyber počítač. Petrel 2 přes prohlížeč nejde – použij aplikaci <a href="https://github.com/petergramantik/myX/releases" target="_blank" rel="noreferrer">myX Petrel</a> a na konci vyber Sdílet → reLog (nebo soubor načti tlačítkem Importovat).</p>}
       {busy && prog && <p className="muted small">{prog.phase}{prog.of ? ` ${prog.dive}/${prog.of}` : ""}{prog.bytes ? ` · ${Math.round(prog.bytes / 1024)} kB` : ""}</p>}
       {err && <p className="c-bad small">{err}</p>}
       {log.length > 0 && !busy && (

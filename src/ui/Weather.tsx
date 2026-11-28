@@ -1,8 +1,9 @@
+import { LOC } from "../app/i18n";
 import { useEffect, useState } from "react";
 import { loadWeather, weatherText, type Weather } from "../app/weather";
 import { Card, num } from "./common";
 
-const day = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" });
+const day = (d: string) => new Date(d + "T12:00:00").toLocaleDateString(LOC, { weekday: "short", day: "numeric", month: "numeric" });
 
 export function WeatherCard({ lat, lon }: { lat: number; lon: number }) {
   const [w, setW] = useState<Weather | null>(null);

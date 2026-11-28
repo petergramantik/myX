@@ -1,4 +1,5 @@
 // Baterie: Petrel (z logu) a baterie v hlavě rebreatheru (ruční evidence, počet a typ podle modelu u počítače).
+import { DEC } from "../app/i18n";
 import { isCC } from "../core/rig";
 import { ask, askText } from "../app/dialog";
 import { useState } from "react";
@@ -64,7 +65,7 @@ export function BatteryTiles() {
         <div className={"celltile " + pLvl} onClick={() => go({ t: "bats" })}>
           <div className="ct-h"><b>{compName(h.serial)}</b><span className={"dot " + pLvl} /></div>
           {b.head.some((x) => x.role) && <div className="ct-sub">počítač</div>}
-          <div className="ct-v">{h.batVStart.toFixed(2).replace(".", ",")} <small>V</small></div>
+          <div className="ct-v">{h.batVStart.toFixed(2).replace(".", DEC)} <small>V</small></div>
           <div className="ct-u">na začátku ponoru</div>
           <div className={"ct-l " + pLvl}>{pLvl === "ok" ? "V pořádku" : pLvl === "warn" ? "Varování" : "Vyměnit"}</div>
         </div>
@@ -73,7 +74,7 @@ export function BatteryTiles() {
           return (
             <div key={x.pos} className={"celltile " + lvl} onClick={() => go({ t: "bats", pos: x.pos })}>
               <div className="ct-h"><b>Hlava {x.pos}</b><span className={"dot " + lvl} /></div>
-              {b.head.some((y) => y.role) && <div className="ct-sub">{x.role || "\u00a0"}</div>}
+              {b.head.some((y) => y.role) && <div className="ct-sub">{x.short || "\u00a0"}</div>}
               {x.cur ? <>
                 <div className="ct-v">{num(x.minutes / 60, 1)} <small>h</small></div>
                 <div className="ct-u">pod vodou od výměny</div>
@@ -118,7 +119,7 @@ function BatPanel({ b }: { b: ReturnType<typeof useBatteries> }) {
           <div className={"pcell ptile " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>
             <div className="pcell-h"><b className={"c-" + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{compName(h.serial)}</b><span className={"pill " + (bad ? "bad" : b.petrelAlerts.length ? "warn" : "ok")}>{bad ? "Vyměnit" : b.petrelAlerts.length ? "Varování" : "V pořádku"}</span></div>
             <div className="kvline"><span>Typ</span><b>{h.batType}</b><span>Trend</span><b>{trend > 0.005 ? "↗" : trend < -0.005 ? "↘" : "→"} {trend >= 0 ? "+" : ""}{Math.round(trend * 1000)} mV</b></div>
-            <small>{h.batVStart.toFixed(2).replace(".", ",")} → {h.batVEnd.toFixed(2).replace(".", ",")} V v posledním ponoru · {pp.est ? `odhad z napětí ${pp.pct} % (NiMH procenta Petrel neukládá)` : `${pp.pct} % podle Petrelu`}</small>
+            <small>{h.batVStart.toFixed(2).replace(".", DEC)} → {h.batVEnd.toFixed(2).replace(".", DEC)} V v posledním ponoru · {pp.est ? `odhad z napětí ${pp.pct} % (NiMH procenta Petrel neukládá)` : `${pp.pct} % podle Petrelu`}</small>
             {b.petrelAlerts.length ? b.petrelAlerts.map((a, i) => <div key={i} className={"reason " + a.level}>{a.text}</div>) : <div className="reason ok">✓ v pořádku{b.swapped ? " · výměna baterie zadaná ručně, platí do dalšího ponoru" : ""}</div>}
             {!b.guest && (b.petrelAlerts.length > 0 || b.swapped) && <button className="btn small" onClick={() => setBatSwap(h.serial, !b.swapped)}>{b.swapped ? "Zrušit „Baterii jsem vyměnil“" : "Baterii jsem vyměnil"}</button>}
           </div>

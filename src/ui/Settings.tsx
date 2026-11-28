@@ -1,3 +1,7 @@
+import { appUrl } from "../app/appurl";
+import type { Settings } from "../app/model";
+import { changedSinceBackup, doBackup, fetchStats, lastBackup } from "../app/backup";
+import { LANG, LANGS, LOC, setLang, tr, type Lang } from "../app/i18n";
 import { ask, askText, choose } from "../app/dialog";
 import { AliasCard } from "./Sites";
 import { useEffect, useRef, useState } from "react";
@@ -7,6 +11,7 @@ import { OwnerPicker } from "./Owner";
 import { ME, closeGuest, compLabel, deleteGuest, guestRawIndex, logName, ownerName, setComputerOwner, setPrimaryComputer, askSameOwner, adoptGuestAsOwn, ownComputers, removeOwnComputer, exportBackup, guestLogs, guestIndexLoad, importAny, importBackup, nearestPair, openGuest, ownMetas, saveSettings, syncNow, toast, wipeLocal, resetAll, type GuestLog } from "../app/store";
 import { setWorker, syncKey, workerUrl } from "../app/config";
 import { APP_VERSION, RELEASES } from "../app/version";
+import { EN_REL } from "../i18n/en";
 import { IS_DEV, copyProdToDev, devCopiedAt } from "../app/db";
 import { lastExport } from "../app/store";
 import { shareDb, shareDives } from "./share";
@@ -28,6 +33,8 @@ export function SettingsScreen() {
   return (
     <div className="screen">
       <Sec title="Zobrazení">
+        <label>Jazyk / Language<select data-noi18n value={LANG} onChange={(e) => setLang(e.target.value as Lang)}>{LANGS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>
+        <label className="check"><input type="checkbox" checked={!!st.lb.settings.mottoNeutral} onChange={(e) => saveSettings({ mottoNeutral: e.target.checked })} /> Hlášky neutrálně (bez humoru)</label>
         <label className="check"><input type="checkbox" checked={st.lb.settings.motto !== false} onChange={(e) => saveSettings({ motto: e.target.checked })} /> Hláška nad scrubberem („Všecko v cajku…“ / „Mám warningy…“)</label>
         <label className="check"><input type="checkbox" checked={st.lb.settings.gearMotto !== false} onChange={(e) => saveSettings({ gearMotto: e.target.checked })} /> Pruh stavu výstroje nahoře ve Výstroji („Výstroj v cajku…“ podle revizí, servisů a závad)</label>
       </Sec>
@@ -105,11 +112,7 @@ export function SettingsScreen() {
       <Sec title="Data">
         <div className="col">
           <ImportButton />
-          <button className="btn" onClick={async () => {
-            const b = await exportBackup();
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(b); a.download = `myx-zaloha-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-          }}>Stáhnout zálohu</button>
+          <BackupBox />
           <button className="btn" onClick={() => fileRef.current?.click()}>Obnovit ze zálohy</button>
           <input ref={fileRef} type="file" hidden onChange={async (e) => {
             const f = e.target.files?.[0]; e.target.value = "";
@@ -120,12 +123,19 @@ export function SettingsScreen() {
             if (!await ask("Opravdu? Před resetem se stáhne záloha do souboru.")) return;
             const b = await exportBackup();
             const a = document.createElement("a");
-            a.href = URL.createObjectURL(b); a.download = `myx-pred-resetem-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+            a.href = URL.createObjectURL(b); a.download = `relog-pred-resetem-${new Date().toISOString().slice(0, 10)}.json`; a.click();
             await resetAll(); toast("Logbook resetován");
           }}>Reset logbooku</button>
           <button className="btn danger" onClick={async () => { if (await ask("Smazat všechna data v tomto telefonu?")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
         </div>
       </Sec>
+
+      <Sec title="Podpořit vývoj">
+        <p className="note">reLog je zdarma a vzniká ve volném čase. Pokud ti pomáhá, můžeš vývoj podpořit dobrovolným příspěvkem.</p>
+        <a className="btn primary" href="https://buymeacoffee.com/petergramantik" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
+      </Sec>
+
+      {syncKey() && <StatsSec />}
 
       <Sec title="O aplikaci" open>
         <KV rows={[["Verze", <a onClick={() => go({ t: "about" })}>{APP_VERSION} – co je nového ›</a>], ["Ponorů v telefonu", st.metas.length]]} />
@@ -136,7 +146,7 @@ export function SettingsScreen() {
 
       <Sec title="Synchronizace">
         <p className="note">Vývojářská funkce: synchronizace a záloha přes vlastní Cloudflare Worker.</p>
-        <p className={"sync " + st.sync.state}>{st.sync.msg || "–"}{st.sync.at ? ` (${new Date(st.sync.at).toLocaleTimeString("cs-CZ")})` : ""}</p>
+        <p className={"sync " + st.sync.state}>{st.sync.msg || "–"}{st.sync.at ? ` (${new Date(st.sync.at).toLocaleTimeString(LOC)})` : ""}</p>
         <label>Adresa Workeru<input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://myx-sync.….workers.dev" /></label>
         <label>Klíč<input value={key} type="password" onChange={(e) => setKey(e.target.value)} /></label>
         <div className="row">
@@ -162,7 +172,7 @@ export function MyLogCard() {
   const from = all.length ? Math.min(...all.map((m) => m.start)) : 0, to = all.length ? Math.max(...all.map((m) => m.start)) : 0;
   const share = async () => {
     const k = await choose("Sdílet můj log", [
-      { key: "all", label: `Vše (${all.length} ponorů)`, note: "všechny ponory z myX včetně stažených přes Bluetooth, s lokalitami a parťáky", primary: true },
+      { key: "all", label: `Vše (${all.length} ponorů)`, note: "všechny ponory z reLogu včetně stažených přes Bluetooth, s lokalitami a parťáky", primary: true },
       { key: "pick", label: "Vybrat ponory", note: "seznam ponorů ve výběru" },
     ]);
     if (k === "all") await shareDives(all);
@@ -194,7 +204,7 @@ export function MyLogCard() {
       <div className="row">
         <button className="btn primary" disabled={!all.length} onClick={share}>Sdílet můj log</button>
       </div>
-      {last && <p className="note"><a onClick={() => shareDb(last.data, last.name, "Můj log")}>Poslat původní export Cloudu</a> (pro Shearwater Cloud; import {new Date(last.at).toLocaleDateString("cs-CZ")}, {last.count} ponorů)</p>}
+      {last && <p className="note"><a onClick={() => shareDb(last.data, last.name, "Můj log")}>Poslat původní export Cloudu</a> (pro Shearwater Cloud; import {new Date(last.at).toLocaleDateString(LOC)}, {last.count} ponorů)</p>}
       <p className="note">Další svůj počítač přidáš u jeho logu níže volbou „To je můj počítač“, nebo při prvním importu.</p>
     </section>
   );
@@ -213,22 +223,25 @@ function Sec({ title, children, open }: { title: string; children: React.ReactNo
 export function AboutScreen() {
   return (
     <div className="screen">
+      {LANG === "en" && <p className="note">Detailed release notes are in Czech (switch the language in Settings → Display).</p>}
       {RELEASES.map((r) => (
-        <Card key={r.version} title={`${r.version} – ${r.title}`}>
-          <p className="muted">{r.date}</p>
-          <ul>{r.items.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        <Card key={r.version} title={`${r.version} – ${LANG === "en" ? EN_REL[r.title] ?? r.title : r.title}`}>
+          <p className="muted" data-noi18n>{r.date}</p>
+          {LANG !== "en" && <ul>{r.items.map((x, i) => <li key={i}>{x}</li>)}</ul>}
         </Card>
       ))}
     </div>
   );
 }
 
-export const APP_URL = "https://petergramantik.github.io/myX/";
+export const APP_URL = appUrl();
+/** public/qr.svg kóduje tuto adresu – po přesunu na jinou doménu vygenerovat znovu. */
+const QR_URL = "https://petergramantik.github.io/myX/";
 
 /** Sdílení aplikace: systémové sdílení (nebo zkopírování odkazu) a QR kód. */
 function ShareInner() {
   const share = async () => {
-    const data = { title: "myX", text: "myX – logbook pro rebreather, import ze Shearwater Cloud", url: APP_URL };
+    const data = { title: "reLog", text: tr("reLog – logbook pro rebreather, import ze Shearwater Cloud"), url: APP_URL };
     try {
       if (navigator.share) { await navigator.share(data); return; }
     } catch (e) { if ((e as Error).name === "AbortError") return; }
@@ -238,7 +251,7 @@ function ShareInner() {
   return (
     <>
       <button className="btn primary" onClick={share}>Sdílet aplikaci</button>
-      <img className="qr" src="qr.svg" alt={"QR kód: " + APP_URL} width={180} height={180} />
+      {APP_URL === QR_URL && <img className="qr" src="qr.svg" alt={"QR kód: " + APP_URL} width={180} height={180} />}
       <p className="center small"><a href={APP_URL}>{APP_URL.replace("https://", "")}</a></p>
       <p className="note">Každý má svá data jen ve svém zařízení. Svůj log pošleš parťákovi v záložce DB → Sdílet můj log.</p>
     </>
@@ -282,7 +295,7 @@ export function GuestCard() {
       <Card title="Logy ostatních">
         <input ref={ref} type="file" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Načíst log"}</button>
-        <p className="note">Export ze Shearwater Cloudu parťáka. Jde ho poslat i přes WhatsApp nebo Quick Share → myX. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům. Víc počítačů jednoho člověka spojíš tak, že jim přiřadíš stejného majitele.</p>
+        <p className="note">Export ze Shearwater Cloudu parťáka. Jde ho poslat i přes WhatsApp nebo Quick Share → reLog. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům. Víc počítačů jednoho člověka spojíš tak, že jim přiřadíš stejného majitele.</p>
         {!groups.length && <p className="muted">Zatím žádné logy ostatních.</p>}
       </Card>
       {groups.map((g) => {
@@ -331,6 +344,47 @@ export function GuestCard() {
 }
 
 
+/** Záloha: interval připomínky, poslední záloha, zálohovat teď (uložit / sdílet). */
+function BackupBox() {
+  const st = useStore();
+  const [last, setLast] = useState(lastBackup());
+  const [changed, setChanged] = useState<boolean | null>(null);
+  useEffect(() => { let on = true; changedSinceBackup().then((c) => on && setChanged(c)); return () => { on = false; }; }, [st.lb, st.metas.length, st.guestRev, last]);
+  const go2 = async (how: "share" | "save") => { try { if (await doBackup(how)) { setLast(lastBackup()); toast("Záloha vytvořena"); } } catch (e) { toast((e as Error).message); } };
+  return (<>
+    <p className="note">Záloha obsahuje všechna tvoje data: ponory, lokality, parťáky, poznámky, Výstroj, čidla, baterie, nastavení i logy ostatních. Obnova ze zálohy data sloučí – nic nepřepíše.</p>
+    <KV rows={[["Poslední záloha", last ? new Date(last).toLocaleDateString(LOC) : "zatím žádná"], ...(last && changed != null ? [["Od poslední zálohy", changed ? "data změněna" : "beze změn"] as [string, string]] : [])]} />
+    <p className="note">Připomínka na Přehledu se ukáže jen tehdy, když uplynul zvolený interval a data se od poslední zálohy změnila.</p>
+    <label>Připomínat zálohu<select value={st.lb.settings.backupEvery || "month"} onChange={(e) => saveSettings({ backupEvery: e.target.value as Settings["backupEvery"] })}>
+      <option value="week">každý týden</option><option value="month">každý měsíc</option><option value="off">vypnuto</option>
+    </select></label>
+    <div className="row"><button className="btn" onClick={() => go2("save")}>Stáhnout zálohu</button><button className="btn" onClick={() => go2("share")}>Sdílet zálohu…</button></div>
+  </>);
+}
+
+/** Anonymní počítadlo spuštění – jen pro vlastníka (s klíčem synchronizace). */
+function StatsSec() {
+  const [d, setD] = useState<Record<string, Record<string, number>> | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => { fetchStats().then(setD).catch((e) => setErr((e as Error).message)); }, []);
+  const days = d ? Object.keys(d).sort().reverse() : [];
+  const sum = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0);
+  const byCc: Record<string, number> = {};
+  for (const x of days) for (const [cc, n] of Object.entries(d![x])) byCc[cc] = (byCc[cc] || 0) + n;
+  const total = Object.values(byCc).reduce((a, b) => a + b, 0);
+  return (
+    <Sec title="Přístupy">
+      {err ? <p className="c-warn small">{err}</p> : !d ? <p className="muted small">Načítám…</p> : !days.length ? <p className="muted small">Zatím žádné přístupy.</p> : <>
+        <p>Celkem <b>{total}</b> spuštění · posledních 7 dní <b>{days.slice(0, 7).reduce((a, x) => a + sum(d![x]), 0)}</b></p>
+        <table className="stats-t"><tbody>{Object.entries(byCc).sort((a, b) => b[1] - a[1]).map(([cc, n]) => <tr key={cc}><td data-noi18n>{cc}</td><td>{n}</td></tr>)}</tbody></table>
+        <h3 className="subh">Po dnech</h3>
+        <table className="stats-t"><tbody>{days.slice(0, 14).map((x) => <tr key={x}><td data-noi18n>{new Date(x).toLocaleDateString(LOC)}</td><td data-noi18n>{Object.entries(d![x]).map(([cc, n]) => `${cc} ${n}`).join(" · ")}</td><td>{sum(d![x])}</td></tr>)}</tbody></table>
+      </>}
+      <p className="note">Anonymní počet spuštění produkční verze (každé zařízení nejvýš jednou denně) podle země. Neukládá se IP adresa ani žádný identifikátor. Vidíš jen ty – karta se ukáže jen s klíčem synchronizace.</p>
+    </Sec>
+  );
+}
+
 /** Přepnutí mezi běžnou (produkční) a dev verzí. Dev verze běží na …/dev/, bez synchronizace, na vlastní kopii dat. */
 function DevSec() {
   const [copied, setCopied] = useState(0);
@@ -343,7 +397,7 @@ function DevSec() {
       <label className="inline dev-sw"><input type="checkbox" checked={IS_DEV} onChange={(e) => goTo(e.target.checked)} /> Dev verze {IS_DEV ? "ON" : "OFF"}</label>
       <p className="note">Dev verze je testovací a může obsahovat chyby. Pracuje na vlastní kopii tvých dat (bez synchronizace). Změny v ní se do běžné verze nepřenesou.</p>
       {IS_DEV && <>
-        <p className="note">Poslední sync z produkce: {copied ? new Date(copied).toLocaleString("cs-CZ") : "–"}</p>
+        <p className="note">Poslední sync z produkce: {copied ? new Date(copied).toLocaleString(LOC) : "–"}</p>
         <button className="btn primary" disabled={busy} onClick={async () => {
           if (!await ask("Sync z produkce: data dev verze se nahradí aktuální kopií dat z běžné (produkční) verze – tvůj log, poznámky, lokality, parťáci, nastavení, Výstroj i logy ostatních. Všechno, co jsi změnil jen v dev verzi, se ztratí. Produkce se jen čte, nic se v ní nezmění.", { ok: "Sync z produkce", danger: true })) return;
           setBusy(true); toast("Kopíruji data z produkce…");

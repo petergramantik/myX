@@ -11,11 +11,13 @@
 //   PUT  /dive/<id>       ← surová data, hlavičky X-Num, X-Start
 //   GET  /sp/lok/<id>     → stránka lokality ze stranypotapecske.cz (původní bajty)
 //   GET  /sp/list         → přehled lokalit ze stranypotapecske.cz (původní bajty)
+//   POST /hit             → anonymní počítadlo spuštění (bez klíče): +1 pro dnešní den a zemi z Cloudflare; nic dalšího se neukládá
+//   GET  /stats           → součty spuštění { days: { "2026-11-26": { "CZ": 3 } } } (s klíčem)
 
 const SP = "https://stranypotapecske.cz/lokality/";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, PUT, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, X-Myx-Key, X-Num, X-Start",
 };
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -46,9 +48,31 @@ export default {
     if (m) return proxySp(`${SP}lokaldet.asp?lok=${m[1]}`, ctx);
     if (p === "/sp/list") return proxySp(`${SP}default.asp${url.search}`, ctx);
 
+    // Anonymní počítadlo – veřejné, bez klíče; ukládá jen součet za den a zemi (žádná IP ani ID)
+    if (p === "/hit" && request.method === "POST") {
+      if (!env.MYX_KV) return json({ ok: false }, 500);
+      const cc = /^[A-Z]{2}$/.test(request.cf?.country || "") ? request.cf.country : "XX";
+      const k = `hit:${new Date().toISOString().slice(0, 10)}:${cc}`;
+      ctx.waitUntil((async () => { const n = +((await env.MYX_KV.get(k)) || 0); await env.MYX_KV.put(k, String(n + 1), { expirationTtl: 60 * 60 * 24 * 800 }); })());
+      return json({ ok: true });
+    }
+
     if (!env.MYX_KV || !env.MYX_KEY) return json({ error: "Worker nemá nastavené MYX_KV nebo MYX_KEY" }, 500);
     if (request.headers.get("X-Myx-Key") !== env.MYX_KEY) return json({ error: "Špatný klíč" }, 401);
 
+    if (p === "/stats" && request.method === "GET") {
+      const days = {};
+      let cursor;
+      do {
+        const l = await env.MYX_KV.list({ prefix: "hit:", cursor });
+        for (const k of l.keys) {
+          const [, d, cc] = k.name.split(":");
+          (days[d] ??= {})[cc] = +((await env.MYX_KV.get(k.name)) || 0);
+        }
+        cursor = l.list_complete ? undefined : l.cursor;
+      } while (cursor);
+      return json({ days });
+    }
     if (p === "/sync" && request.method === "GET") {
       const doc = (await env.MYX_KV.get("lb", "json")) || { lb: null, ver: 0 };
       const dives = [];

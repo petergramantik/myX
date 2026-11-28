@@ -1,7 +1,7 @@
 // Testy jádra bez soukromých dat: syntetický záznam ponoru a sloučení logbooků.
 import { decodeDive } from "../src/core/shearwater";
 import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpointChanges, o2Doses, spWarnings, SP_RULES, DEFAULT_THRESHOLDS } from "../src/core/analysis";
-import { applyCloud } from "../src/app/store";
+import { applyCloud, hash53 } from "../src/app/store";
 import { diveStats, diffRows, conclusion, conclusionSections, groupConclusion, multiRows } from "../src/core/compare";
 import { gasDensity } from "../src/core/effort";
 import { mergeLogbooks, emptyLogbook, aliasKey } from "../src/app/model";
@@ -621,6 +621,16 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
     ok(a1 === 210 && a2 === 205 && c2 && lb4.tanks.s.bar === 140 && !lb4.tanks.s.check && G.tankEvents(lb4, [old, nw], "s").length === 5, `Lahve: historie (${a1}, ${a2}+ověřit, ${lb4.tanks.s.bar})`);
     ok(M.prepSuitOnly({ id: "x", role: "bo", name: "S40", gas: "AIR", suit: true, suitOnly: true }) && M.prepSuitOnly({ id: "y", role: "other", name: "Jiná", gas: "Argon" }) && !M.prepSuitOnly({ id: "z", role: "bo", name: "S40", gas: "AIR", suit: true }), "Oblek: jenom oblek, argon");
   }
+  // i18n: přesná shoda, mezery okolo, vzor s překladem částí
+  {
+    const I = await import("../src/app/i18n");
+    I.loadDict({ "Ponor": "Dive", "Výměna": "Replaced", "na vzduchu": "in air" }, { "Ponor {0} ({1})": "Dive {0} ({1})", "{0} mV {1}": "{0} mV {1}" });
+    ok(I.tr("Ponor") === "Dive" && I.tr(" Výměna ") === " Replaced " && I.tr("Ponor 12 (Výměna)") === "Dive 12 (Replaced)" && I.tr("8,5 mV na vzduchu") === "8,5 mV in air" && I.tr("neznámé") === "neznámé" && I.tr("42") === "42", "i18n: překlad textů a vzorů");
+    const E = await import("../src/i18n/en");
+    const bad = Object.entries(E.EN_PAT).filter(([k, v]) => (k.match(/\{\d+\}/g) || []).sort().join() !== (v.match(/\{\d+\}/g) || []).sort().join());
+    ok(!bad.length && Object.keys(E.EN).length > 1300, `i18n: anglický slovník (${Object.keys(E.EN).length} textů, ${Object.keys(E.EN_PAT).length} vzorů)`);
+    I.loadDict({}, {});
+  }
   // trend čidla
   const C = await import("../src/core/cells");
   const D = 86400000, pts = [0, 10, 20, 30, 40, 50].map((d, i) => ({ t: d * D, mv: 50 - i * 2, lin: [1, 0.99, 0.98, 0.93, 0.92, 0.9][i] }));
@@ -629,6 +639,12 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   // štítky nových upozornění
   const T = await import("../src/core/tags");
   ok(T.tagCat("Bailout by nestačil") === "BO" && T.tagCat("SurfGF nad hranicí") === "GF", "Štítky BO a GF");
+}
+
+// otisk dat pro připomínku zálohy: stejný vstup = stejný otisk, změna = jiný
+{
+  const a = JSON.stringify({ lb: { sites: { x: { name: "Lom" } } }, dives: ["1", "2"] });
+  ok(hash53(a) === hash53(a) && hash53(a) !== hash53(a.replace("Lom", "Lomy")) && hash53(a) !== hash53(a.replace('"2"', '"3"')), "Otisk zálohy pozná změnu");
 }
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }
