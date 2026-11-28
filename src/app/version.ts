@@ -1,34 +1,16 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.48-dev.7";
+export const APP_VERSION = "1.48";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
-  { version: "1.48-dev.7", date: "2026-11-28", title: "Úplnější záloha (dev)", items: [
-    "Záloha nově obsahuje i číslo ponoru ze Shearwater Cloudu (spojené ponory), model počítače a původní soubor Cloudu pro sdílení celého logu.",
-  ] },
-  { version: "1.48-dev.6", date: "2026-11-28", title: "Drobnosti před vydáním (dev)", items: [
-    "Přehled: u baterie Hlava 2 jen „HUD“.",
-    "Angličtina: přirozenější hlášky stavu výstroje.",
-  ] },
-  { version: "1.48-dev.5", date: "2026-11-28", title: "Zjednodušená ikona pro malé zobrazení (dev)", items: [
-    "Malé ikony (záhlaví, záložka prohlížeče, do 96 px) zjednodušené: „rL“ s budíkem a profilem ponoru.",
-  ] },
-  { version: "1.48-dev.4", date: "2026-11-28", title: "Nová ikona reLog (dev)", items: [
-    "Nová ikona reLog s potápěčem a profilem ponoru (plocha telefonu, záhlaví, záložka prohlížeče; průhledné pozadí, pro Android adaptivní varianta).",
-  ] },
-  { version: "1.48-dev.3", date: "2026-11-28", title: "Nový název reLog, záloha jen při změně (dev)", items: [
-    "Aplikace se jmenuje reLog – nový název a nová ikona (záhlaví, plocha telefonu, záložka prohlížeče), nápověda, sdílení. Data, záloha i synchronizace beze změny.",
-    "Připomínka zálohy jen tehdy, když se od poslední zálohy změnila data; v Nastavení → Data řádek „Od poslední zálohy: beze změn / data změněna“.",
-  ] },
-  { version: "1.48-dev.2", date: "2026-11-26", title: "Úplná záloha, příspěvek, BETA (dev)", items: [
-    "Úplná záloha (i logy ostatních a nastavení zařízení), Sdílet zálohu…, připomínka zálohy na Přehledu (týdně / měsíčně / vypnuto).",
-    "Podpořit vývoj (Buy me a coffee) v Nastavení; anonymní počítadlo spuštění podle země (jen pro vlastníka).",
-    "Štítek BETA v záhlaví produkce; adresa aplikace bez natvrdo zapsané domény (příprava na vlastní doménu).",
-  ] },
-  { version: "1.48-dev.1", date: "2026-11-26", title: "Anglická verze (dev)", items: [
+  { version: "1.48", date: "2026-11-28", title: "reLog: nový název, angličtina, úplná záloha", items: [
+    "Aplikace se jmenuje reLog – nový název a nová ikona (plocha telefonu, záhlaví, záložka prohlížeče; pro malé velikosti zjednodušená). Data i synchronizace beze změny.",
     "Angličtina: celá aplikace včetně upozornění, analýz a nápovědy; volba jazyka v Nastavení → Zobrazení (výchozí podle jazyka telefonu). Datum a čísla podle jazyka.",
     "Hlášky neutrálně (bez humoru) – přepínač v Nastavení → Zobrazení, platí pro všechny jazyky.",
+    "Úplná záloha všech dat (ponory včetně čísla z Cloudu, logbook, Výstroj, logy ostatních, původní soubor Cloudu, nastavení zařízení) – Stáhnout nebo Sdílet zálohu…; připomínka na Přehledu (týdně / měsíčně / vypnuto) jen když se data od poslední zálohy změnila.",
+    "Podpořit vývoj (Buy me a coffee) v Nastavení; anonymní počítadlo spuštění podle země (jen pro vlastníka).",
+    "Štítek BETA v záhlaví; Přehled: u baterie Hlava 2 jen „HUD“.",
   ] },
   { version: "1.47.2", date: "2026-11-25", title: "Skutečná spotřeba ze zadaných lahví", items: [
     "Spotřeba O₂ a diluentu počítá i ručně zadané tlaky on-board lahví (zavřená lahev) – Poslední ponor na Přehledu, V kostce, Spotřeba plynu, osobní odhad O₂, srovnání; u tlaku „z logu“ / „zadáno“.",

@@ -1453,14 +1453,8 @@ export const EN: Record<string, string> = {
 };
 /** názvy verzí v „Co je nového“ */
 export const EN_REL: Record<string, string> = {
-"Úplnější záloha (dev)": "More complete backup (dev)",
-"Drobnosti před vydáním (dev)": "Small fixes before release (dev)",
-"Zjednodušená ikona pro malé zobrazení (dev)": "Simplified icon for small sizes (dev)",
-"Nová ikona reLog (dev)": "New reLog icon (dev)",
-"Nový název reLog, záloha jen při změně (dev)": "New name reLog, backup only on change (dev)",
-"Úplná záloha, příspěvek, BETA (dev)": "Full backup, support, BETA (dev)",
+"reLog: nový název, angličtina, úplná záloha": "reLog: new name, English, full backup",
 "Úplná záloha, příspěvek, BETA": "Full backup, support, BETA",
-"Anglická verze (dev)": "English version (dev)",
 "Anglická verze": "English version",
 "Skutečná spotřeba ze zadaných lahví": "Actual gas use from entered cylinders",
 "Spotřeba plynu za Před a po ponoru": "Gas use after Before and after the dive",
