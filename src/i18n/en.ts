@@ -1453,7 +1453,7 @@ export const EN: Record<string, string> = {
 };
 /** názvy verzí v „Co je nového“ */
 export const EN_REL: Record<string, string> = {
-"Ikona pro Android bez rámečku (dev)": "Android icon without frame (dev)",
+"Ikona pro Android bez rámečku": "Android icon without frame",
 "reLog: nový název, angličtina, úplná záloha": "reLog: new name, English, full backup",
 "Úplná záloha, příspěvek, BETA": "Full backup, support, BETA",
 "Anglická verze": "English version",
