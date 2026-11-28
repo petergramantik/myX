@@ -1,6 +1,6 @@
 import { appUrl } from "../app/appurl";
 import type { Settings } from "../app/model";
-import { doBackup, fetchStats, lastBackup } from "../app/backup";
+import { changedSinceBackup, doBackup, fetchStats, lastBackup } from "../app/backup";
 import { LANG, LANGS, LOC, setLang, tr, type Lang } from "../app/i18n";
 import { ask, askText, choose } from "../app/dialog";
 import { AliasCard } from "./Sites";
@@ -123,7 +123,7 @@ export function SettingsScreen() {
             if (!await ask("Opravdu? Před resetem se stáhne záloha do souboru.")) return;
             const b = await exportBackup();
             const a = document.createElement("a");
-            a.href = URL.createObjectURL(b); a.download = `myx-pred-resetem-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+            a.href = URL.createObjectURL(b); a.download = `relog-pred-resetem-${new Date().toISOString().slice(0, 10)}.json`; a.click();
             await resetAll(); toast("Logbook resetován");
           }}>Reset logbooku</button>
           <button className="btn danger" onClick={async () => { if (await ask("Smazat všechna data v tomto telefonu?")) { await wipeLocal(); toast("Smazáno"); } }}>Smazat data v telefonu</button>
@@ -131,7 +131,7 @@ export function SettingsScreen() {
       </Sec>
 
       <Sec title="Podpořit vývoj">
-        <p className="note">myX je zdarma a vzniká ve volném čase. Pokud ti pomáhá, můžeš vývoj podpořit dobrovolným příspěvkem.</p>
+        <p className="note">reLog je zdarma a vzniká ve volném čase. Pokud ti pomáhá, můžeš vývoj podpořit dobrovolným příspěvkem.</p>
         <a className="btn primary" href="https://buymeacoffee.com/petergramantik" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
       </Sec>
 
@@ -172,7 +172,7 @@ export function MyLogCard() {
   const from = all.length ? Math.min(...all.map((m) => m.start)) : 0, to = all.length ? Math.max(...all.map((m) => m.start)) : 0;
   const share = async () => {
     const k = await choose("Sdílet můj log", [
-      { key: "all", label: `Vše (${all.length} ponorů)`, note: "všechny ponory z myX včetně stažených přes Bluetooth, s lokalitami a parťáky", primary: true },
+      { key: "all", label: `Vše (${all.length} ponorů)`, note: "všechny ponory z reLogu včetně stažených přes Bluetooth, s lokalitami a parťáky", primary: true },
       { key: "pick", label: "Vybrat ponory", note: "seznam ponorů ve výběru" },
     ]);
     if (k === "all") await shareDives(all);
@@ -241,7 +241,7 @@ const QR_URL = "https://petergramantik.github.io/myX/";
 /** Sdílení aplikace: systémové sdílení (nebo zkopírování odkazu) a QR kód. */
 function ShareInner() {
   const share = async () => {
-    const data = { title: "myX", text: tr("myX – logbook pro rebreather, import ze Shearwater Cloud"), url: APP_URL };
+    const data = { title: "reLog", text: tr("reLog – logbook pro rebreather, import ze Shearwater Cloud"), url: APP_URL };
     try {
       if (navigator.share) { await navigator.share(data); return; }
     } catch (e) { if ((e as Error).name === "AbortError") return; }
@@ -295,7 +295,7 @@ export function GuestCard() {
       <Card title="Logy ostatních">
         <input ref={ref} type="file" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <button className="btn primary" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Načítám…" : "Načíst log"}</button>
-        <p className="note">Export ze Shearwater Cloudu parťáka. Jde ho poslat i přes WhatsApp nebo Quick Share → myX. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům. Víc počítačů jednoho člověka spojíš tak, že jim přiřadíš stejného majitele.</p>
+        <p className="note">Export ze Shearwater Cloudu parťáka. Jde ho poslat i přes WhatsApp nebo Quick Share → reLog. Logy se ukládají zvlášť, jsou jen pro čtení, nesynchronizují se a s tvými ponory se nikdy nekombinují. Log ze tvého počítače se pozná a přidá k tvým ponorům. Víc počítačů jednoho člověka spojíš tak, že jim přiřadíš stejného majitele.</p>
         {!groups.length && <p className="muted">Zatím žádné logy ostatních.</p>}
       </Card>
       {groups.map((g) => {
@@ -348,10 +348,13 @@ export function GuestCard() {
 function BackupBox() {
   const st = useStore();
   const [last, setLast] = useState(lastBackup());
+  const [changed, setChanged] = useState<boolean | null>(null);
+  useEffect(() => { let on = true; changedSinceBackup().then((c) => on && setChanged(c)); return () => { on = false; }; }, [st.lb, st.metas.length, st.guestRev, last]);
   const go2 = async (how: "share" | "save") => { try { if (await doBackup(how)) { setLast(lastBackup()); toast("Záloha vytvořena"); } } catch (e) { toast((e as Error).message); } };
   return (<>
     <p className="note">Záloha obsahuje všechna tvoje data: ponory, lokality, parťáky, poznámky, Výstroj, čidla, baterie, nastavení i logy ostatních. Obnova ze zálohy data sloučí – nic nepřepíše.</p>
-    <KV rows={[["Poslední záloha", last ? new Date(last).toLocaleDateString(LOC) : "zatím žádná"]]} />
+    <KV rows={[["Poslední záloha", last ? new Date(last).toLocaleDateString(LOC) : "zatím žádná"], ...(last && changed != null ? [["Od poslední zálohy", changed ? "data změněna" : "beze změn"] as [string, string]] : [])]} />
+    <p className="note">Připomínka na Přehledu se ukáže jen tehdy, když uplynul zvolený interval a data se od poslední zálohy změnila.</p>
     <label>Připomínat zálohu<select value={st.lb.settings.backupEvery || "month"} onChange={(e) => saveSettings({ backupEvery: e.target.value as Settings["backupEvery"] })}>
       <option value="week">každý týden</option><option value="month">každý měsíc</option><option value="off">vypnuto</option>
     </select></label>

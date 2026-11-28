@@ -200,7 +200,7 @@ function GearHome() {
           {k === "onboard" && unassigned.map((g) => (
             <div key={g} className="reason warn link" onClick={() => go({ t: "dive", id: last!.id })}>Ponor {fmtMs(last!.start * 1000)}: nepřiřazená lahev {g === "o2" ? "O₂" : "diluentu"} ({rbMatch(st.lb, last!, g).why}) – vyber ji v detailu ponoru v „Před a po ponoru“ ›</div>
           ))}
-          {k === "onboard" && <p className="note">Po ponoru myX rozpozná lahev v rebreatheru (diluent podle směsi, pak tlaku ±{RB_TOL} bar; O₂ podle tlaku) a převezme tlak na konci. Zavřená lahev se nepřepíše – „Ověřit“.</p>}
+          {k === "onboard" && <p className="note">Po ponoru reLog rozpozná lahev v rebreatheru (diluent podle směsi, pak tlaku ±{RB_TOL} bar; O₂ podle tlaku) a převezme tlak na konci. Zavřená lahev se nepřepíše – „Ověřit“.</p>}
         </section>
       );
     })}

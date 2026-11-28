@@ -53,11 +53,11 @@ export function compareHtml(screen: HTMLElement, title: string, when: string, me
   });
   c.querySelectorAll(".cmpb-h").forEach((e) => ((e as HTMLElement).style.position = "static"));
   c.classList.remove("from-left", "from-right");
-  const link = `<a href="${APP_URL}">myX</a>`;
+  const link = `<a href="${APP_URL}">reLog</a>`;
   const en = LANG === "en";
   return `<!DOCTYPE html>
 <html lang="${en ? "en" : "cs"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)} – ${en ? "dive comparison" : "srovnání ponorů"} (myX)</title>
+<title>${esc(title)} – ${en ? "dive comparison" : "srovnání ponorů"} (reLog)</title>
 <style>${cssFor(wrapOf(c))}
 body{max-width:760px;margin:0 auto;padding:0 0 24px}.share-top{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px}
 .share-top b{font-size:16px}.share-foot{text-align:center;color:var(--muted);font-size:13px;padding:18px 14px 6px}.share-foot a,.share-top a{color:var(--accent);font-weight:700}</style></head>
@@ -72,7 +72,7 @@ export async function shareHtml(html: string, name: string, title: string) {
   const f = new File([html], name, { type: "text/html" });
   try {
     if (!navigator.canShare?.({ files: [f] })) throw new Error("prohlížeč neumí sdílet soubory");
-    await navigator.share({ files: [f], title, text: tr(`${title} – srovnání ponorů z myX`) });
+    await navigator.share({ files: [f], title, text: tr(`${title} – srovnání ponorů z reLogu`) });
   } catch (e) {
     if ((e as Error).name === "AbortError") return;
     if (await choose(`Sdílení se nepovedlo (${(e as Error).message}). Uložit stránku do telefonu?`, [{ key: "save", label: "Uložit .html", primary: true }])) {

@@ -878,7 +878,7 @@ function PscrPrompt({ id, meta, note }: { id: string; meta: Meta; note?: DiveNot
   return (
     <div className="alert warn pscr-prompt">
       <b>Zadej {missing.join(" a ")}</b>
-      <small>U pSCR bez čidel z toho myX počítá spotřebu a odhad pO₂ ve smyčce. Plyn platí pro tento ponor (výchozí nastavíš u počítače).</small>
+      <small>U pSCR bez čidel z toho reLog počítá spotřebu a odhad pO₂ ve smyčce. Plyn platí pro tento ponor (výchozí nastavíš u počítače).</small>
       <div className="ext-row">
         <input inputMode="decimal" defaultValue={ri.supplyO2 ?? ""} placeholder="O₂ %" onBlur={(ev) => { const v = parseN(ev.target.value); if (v !== ri.supplyO2) setDiveRig(meta.h.serial, meta.id, { supplyO2: v ? Math.min(100, Math.max(5, Math.round(v))) : null }); }} /><span>% O₂</span>
       </div>

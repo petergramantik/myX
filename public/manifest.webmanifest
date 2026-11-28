@@ -1,7 +1,7 @@
 {
-  "name": "myX – potápěčský logbook",
-  "short_name": "myX",
-  "description": "Logbook ponorů s X-CCR a Shearwater Petrel 2/3",
+  "name": "reLog – potápěčský logbook",
+  "short_name": "reLog",
+  "description": "Logbook ponorů s rebreatherem – Shearwater Petrel 2/3",
   "lang": "cs",
   "start_url": "./",
   "scope": "./",

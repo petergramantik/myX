@@ -113,7 +113,7 @@ export function CompareScreen({ id, other }: { id: string; other: string }) {
     let me = st0.lb.settings.myName;
     if (!me && !st0.guest) { me = (await askText("Tvoje jméno ve sdíleném srovnání (místo „Já“):", ""))?.trim() || undefined; if (me) await saveSettings({ myName: me }); }
     const nm = N.map((n) => (n === "Já" && me ? me : n));
-    await shareHtml(compareHtml(el, title, `${fmtDateTime(all[0].h.start)} · ${nm.join(", ")}`, st0.guest ? undefined : me), `myX_srovnani_${day}.html`, title);
+    await shareHtml(compareHtml(el, title, `${fmtDateTime(all[0].h.start)} · ${nm.join(", ")}`, st0.guest ? undefined : me), `reLog_srovnani_${day}.html`, title);
   };
   return (
     <div className="screen" ref={rootRef}>
@@ -281,7 +281,7 @@ function CommonList({ who }: { who?: string }) {
   useEffect(() => () => { cmMemo.y = leaveY; }, []);
   useEffect(() => { if (rows && cmMemo.y) requestAnimationFrame(() => window.scrollTo(0, cmMemo.y)); }, [rows]);
   if (rows == null) return <p className="muted">Hledám…</p>;
-  if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log ostatních v Databázi (nebo ho nasdílej do myX přes WhatsApp / Quick Share).</p>;
+  if (!rows.length) return <p className="muted">Zatím žádné společné ponory. Načti log ostatních v Databázi (nebo ho nasdílej do reLogu přes WhatsApp / Quick Share).</p>;
   const ymd = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
   const dateOk = (r: Common) => { const d = ymd(r.m.start); return (!year || d.startsWith(year)) && (!month || d.slice(5, 7) === month) && (!day || d === day); };
   const has = (r: Common, who: string[]) => who.every((w) => r.with.some((x) => x.who === w));

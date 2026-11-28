@@ -1,7 +1,7 @@
 // Testy jádra bez soukromých dat: syntetický záznam ponoru a sloučení logbooků.
 import { decodeDive } from "../src/core/shearwater";
 import { summarize, injections, alerts, realStops, gasLabel, pressureUse, setpointChanges, o2Doses, spWarnings, SP_RULES, DEFAULT_THRESHOLDS } from "../src/core/analysis";
-import { applyCloud } from "../src/app/store";
+import { applyCloud, hash53 } from "../src/app/store";
 import { diveStats, diffRows, conclusion, conclusionSections, groupConclusion, multiRows } from "../src/core/compare";
 import { gasDensity } from "../src/core/effort";
 import { mergeLogbooks, emptyLogbook, aliasKey } from "../src/app/model";
@@ -639,6 +639,12 @@ ok(gasLabel("21/0").label === "AIR" && gasLabel("21/35").label === "TMX 21/35" &
   // štítky nových upozornění
   const T = await import("../src/core/tags");
   ok(T.tagCat("Bailout by nestačil") === "BO" && T.tagCat("SurfGF nad hranicí") === "GF", "Štítky BO a GF");
+}
+
+// otisk dat pro připomínku zálohy: stejný vstup = stejný otisk, změna = jiný
+{
+  const a = JSON.stringify({ lb: { sites: { x: { name: "Lom" } } }, dives: ["1", "2"] });
+  ok(hash53(a) === hash53(a) && hash53(a) !== hash53(a.replace("Lom", "Lomy")) && hash53(a) !== hash53(a.replace('"2"', '"3"')), "Otisk zálohy pozná změnu");
 }
 
 if (fails) { console.error(`${fails} testů selhalo`); process.exit(1); }

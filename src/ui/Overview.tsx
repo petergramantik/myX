@@ -1,4 +1,4 @@
-import { backupDue, doBackup, lastBackup } from "../app/backup";
+import { backupDue, changedSinceBackup, doBackup, lastBackup } from "../app/backup";
 import { DEC, LOC } from "../app/i18n";
 import { askText } from "../app/dialog";
 import { isCC } from "../core/rig";
@@ -45,8 +45,11 @@ let mottoHidden = false; // schová se do příštího spuštění aplikace
 /** Připomínka pravidelné zálohy (Nastavení → Data). */
 function BackupBar() {
   const st = useStore();
-  const [, force] = useState(0);
-  if (!backupDue(st.lb.settings, st.metas.length)) return null;
+  const [rev, force] = useState(0);
+  const [changed, setChanged] = useState(false);
+  const due = backupDue(st.lb.settings, st.metas.length);
+  useEffect(() => { let on = true; if (due) changedSinceBackup().then((c) => on && setChanged(c)); else setChanged(false); return () => { on = false; }; }, [due, st.lb, st.metas.length, st.guestRev, rev]);
+  if (!due || !changed) return null;
   const run = async (how: "share" | "save") => { try { if (await doBackup(how)) { toast("Záloha vytvořena"); force((x) => x + 1); } } catch (e) { toast((e as Error).message); } };
   return (
     <div className="bak-bar">

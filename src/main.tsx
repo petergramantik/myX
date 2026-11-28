@@ -178,7 +178,7 @@ function App() {
     <div className="app">
       <DialogHost />
       <header className="top">
-        {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo" role="img" aria-label="myX" dangerouslySetInnerHTML={{ __html: LOGO_SVG }} />}
+        {!isTab(s) ? <button className="back" onClick={back} aria-label="Zpět">‹</button> : <span className="logo" role="img" aria-label="reLog" dangerouslySetInnerHTML={{ __html: LOGO_SVG }} />}
         {IS_DEV ? <span className="dev-badge" title="Dev verze – testovací, vlastní kopie dat, bez synchronizace">DEV</span> : <span className="dev-badge beta-badge" title="Testovací verze">BETA</span>}
         {s.t === "home" || s.t === "dives" && !s.site && !s.buddy || s.t === "sites" || s.t === "buddies" ? <LogSwitch label={screenName(s, st)} /> : <h1>{title(s, st)}</h1>}
         <button className="warnbtn none helpbtn" onClick={() => (s.t === "help" ? back() : go({ t: "help" }))} aria-label="Nápověda">?</button>
