@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.48";
+export const APP_VERSION = "1.48.1";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.48.1", date: "2026-11-28", title: "Ikona pro Android bez rámečku", items: [
+    "Android: ikona na ploše vyplní celý tvar launcheru (bez vnitřního rámečku), „reLog“ je větší a čitelnější.",
+  ] },
   { version: "1.48", date: "2026-11-28", title: "reLog: nový název, angličtina, úplná záloha", items: [
     "Aplikace se jmenuje reLog – nový název a nová ikona (plocha telefonu, záhlaví, záložka prohlížeče; pro malé velikosti zjednodušená). Data i synchronizace beze změny.",
     "Angličtina: celá aplikace včetně upozornění, analýz a nápovědy; volba jazyka v Nastavení → Zobrazení (výchozí podle jazyka telefonu). Datum a čísla podle jazyka.",
