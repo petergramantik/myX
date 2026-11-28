@@ -1534,11 +1534,11 @@ function localPrefs(): Record<string, string> {
 }
 const b64 = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
 const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-/** Záloha všech uživatelských dat: ponory, logbook (lokality, parťáci, poznámky, Výstroj, čidla, baterie, nastavení), logy ostatních a místní nastavení. */
+/** Záloha všech uživatelských dat: ponory (i číslo z Cloudu, název souboru, výrobce), původní soubor Cloudu, logbook (lokality, parťáci, poznámky, Výstroj, čidla, baterie, nastavení), logy ostatních a místní nastavení. */
 export async function exportBackup(withGuests = true): Promise<Blob> {
   const raws = await db.getAll<RawDive>("raw");
   const guest = withGuests ? { raw: await db.dump("raw", db.GUEST), kv: await db.dump("kv", db.GUEST) } : undefined;
-  const data = { app: "myX", v: 2, at: Date.now(), ver: APP_VERSION, lb: st.lb, dives: raws.map((r) => ({ id: r.id, num: r.num, start: r.start, blob: b64(r.blob) })), guest, local: localPrefs() };
+  const data = { app: "myX", v: 2, at: Date.now(), ver: APP_VERSION, lb: st.lb, dives: raws.map((r) => ({ id: r.id, num: r.num, start: r.start, vendor: r.vendor, fn: r.fn, cnum: r.cnum, blob: b64(r.blob) })), orig: await db.get("kv", "orig"), guest, local: localPrefs() };
   return new Blob([JSON.stringify(data, (_k, x) => (x instanceof Uint8Array ? { __u8: b64(x) } : x))], { type: "application/json" });
 }
 /** Otisk zálohovaných dat (ponory, logbook, logy ostatních) – pro zjištění, zda se od poslední zálohy něco změnilo.
@@ -1565,6 +1565,9 @@ export async function importBackup(file: File): Promise<number> {
     if (have.has(d.id)) continue;
     const bin = Uint8Array.from(atob(d.blob), (c) => c.charCodeAt(0));
     const raw: RawDive = { id: d.id, num: d.num, start: d.start, blob: bin };
+    if (d.vendor) raw.vendor = d.vendor;
+    if (d.fn) raw.fn = d.fn;
+    if (d.cnum != null) raw.cnum = d.cnum;
     await db.put("raw", raw);
     const m = await metaOf(raw);
     await db.put("meta", m);
@@ -1572,6 +1575,8 @@ export async function importBackup(file: File): Promise<number> {
     pendingUpload.add(d.id);
   }
   set({ metas: sortMetas([...st.metas, ...added]) });
+  // původní soubor Shearwater Cloud (pro sdílení celého logu) – jen když v telefonu žádný není
+  if (j.orig?.data instanceof Uint8Array && !(await db.get("kv", "orig"))) await db.put("kv", j.orig, "orig");
   // obnovené položky mají přednost i před dřívějším smazáním (např. po resetu logbooku)
   const now = Date.now(), b = j.lb as Logbook, del = { ...st.lb.deleted };
   for (const k of ["sites", "buddies", "notes", "drafts", "aliases", "computers"] as const) {

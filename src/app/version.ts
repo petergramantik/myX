@@ -1,9 +1,12 @@
 // Verze aplikace a „Co je nového“. Drobnosti zvyšují setinu (1.0 → 1.0.1), větší změny desetinu (1.0 → 1.1).
-export const APP_VERSION = "1.48-dev.6";
+export const APP_VERSION = "1.48-dev.7";
 
 export interface Release { version: string; date: string; title: string; items: string[] }
 
 export const RELEASES: Release[] = [
+  { version: "1.48-dev.7", date: "2026-11-28", title: "Úplnější záloha (dev)", items: [
+    "Záloha nově obsahuje i číslo ponoru ze Shearwater Cloudu (spojené ponory), model počítače a původní soubor Cloudu pro sdílení celého logu.",
+  ] },
   { version: "1.48-dev.6", date: "2026-11-28", title: "Drobnosti před vydáním (dev)", items: [
     "Přehled: u baterie Hlava 2 jen „HUD“.",
     "Angličtina: přirozenější hlášky stavu výstroje.",
